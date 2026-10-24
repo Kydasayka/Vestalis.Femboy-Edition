@@ -49,6 +49,17 @@
                     <!-- Content -->
                     <rxui:RoutedViewHost Router="{Binding Router}">
 
+                        <!--
+                            Pages slide in horizontally while the previous one fades out, so
+                            switching screens reads as paging instead of an instant swap.
+                        -->
+                        <rxui:RoutedViewHost.PageTransition>
+                            <CompositePageTransition>
+                                <CrossFade Duration="0:0:0.2" />
+                                <PageSlide Duration="0:0:0.34" Orientation="Horizontal" />
+                            </CompositePageTransition>
+                        </rxui:RoutedViewHost.PageTransition>
+
                         <rxui:RoutedViewHost.DefaultContent>
                             <TextBlock Text="Route not found"
                                        Foreground="White"

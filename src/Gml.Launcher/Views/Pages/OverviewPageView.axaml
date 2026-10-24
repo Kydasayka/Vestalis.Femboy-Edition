@@ -1,4 +1,4 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -53,7 +53,10 @@
                 <!-- News -->
                 <Grid RowDefinitions="Auto, 0, *" VerticalAlignment="Stretch" Grid.Row="2" Grid.Column="2">
                     <TextBlock Classes="HeadlineText" Text="{x:Static lang:Resources.News}"/>
-                    <ScrollViewer Grid.Row="2" CornerRadius="10" ClipToBounds="True">
+                    <ScrollViewer components:SmoothScroll.IsEnabled="True" Grid.Row="2"
+                                                   Padding="0,0,6,0"
+                                                   CornerRadius="10"
+                                                   ClipToBounds="True">
                         <ItemsControl ItemsSource="{Binding News}">
                             <ItemsControl.DataTemplates>
                                 <DataTemplate x:DataType="news:NewsReadDto">

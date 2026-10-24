@@ -24,6 +24,24 @@
 
     <SolidColorBrush x:Key="BadgeBorder">#20FFFFFF</SolidColorBrush>
 
+    <!--
+        Surfaces and accents shared by the sci-fi cards, toggles and list rows. They are derived
+        from the palette above (frame background, form border, primary accent) so every page looks
+        like one product instead of having its own colour scheme.
+    -->
+    <SolidColorBrush x:Key="CardBackgroundColor">#CC111111</SolidColorBrush>
+    <SolidColorBrush x:Key="CardBackgroundHoverColor">#F21A1A1A</SolidColorBrush>
+    <SolidColorBrush x:Key="CardBorderColor">#FF2E2E2E</SolidColorBrush>
+    <SolidColorBrush x:Key="CardBorderHoverColor">#99FF00FF</SolidColorBrush>
+    <SolidColorBrush x:Key="CardGlowColor">#33FF00FF</SolidColorBrush>
+    <SolidColorBrush x:Key="AccentSoftColor">#33FF00FF</SolidColorBrush>
+    <SolidColorBrush x:Key="AccentBorderColor">#55FF00FF</SolidColorBrush>
+    <SolidColorBrush x:Key="MutedSurfaceColor">#66141414</SolidColorBrush>
+
+    <SolidColorBrush x:Key="ToggleTrackColor">#FF141414</SolidColorBrush>
+    <SolidColorBrush x:Key="ToggleTrackCheckedColor">#33FF00FF</SolidColorBrush>
+    <SolidColorBrush x:Key="ToggleThumbColor">#FF5A5A5A</SolidColorBrush>
+
     <LinearGradientBrush x:Key="ProfileLinearGradient" StartPoint="0%, 0%" EndPoint="0%, 100%" Opacity=".3">
         <LinearGradientBrush.GradientStops>
             <GradientStop Offset="0" Color="Transparent" />

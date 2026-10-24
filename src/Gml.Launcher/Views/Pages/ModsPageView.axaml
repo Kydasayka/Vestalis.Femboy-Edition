@@ -144,9 +144,10 @@
                             </StackPanel>
                         </components:StackFrameBorder>
 
-                        <ScrollViewer IsVisible="{Binding !ModsListIsEmpty}"
-                                      VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled">
+                        <ScrollViewer components:SmoothScroll.IsEnabled="True" IsVisible="{Binding !ModsListIsEmpty}"
+                                                       Padding="0,0,8,0"
+                                                       VerticalScrollBarVisibility="Auto"
+                                                       HorizontalScrollBarVisibility="Disabled">
                             <ItemsControl x:Name="ModsListControl"
                                           ItemsSource="{Binding ProfileOptionalMods}">
                                 <ItemsControl.DataTemplates>

@@ -29,10 +29,11 @@
                 </Grid>
 
                 <!-- RAM and JVM arguments -->
-                <ScrollViewer Grid.Row="2"
-                              Grid.Column="0"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer components:SmoothScroll.IsEnabled="True" Grid.Row="2"
+                                               Grid.Column="0"
+                                               Padding="0,0,6,0"
+                                               VerticalScrollBarVisibility="Auto"
+                                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Spacing="20">
                         <components:StackFrameBorder Spacing="10"
                                                       VerticalAlignment="Top">
@@ -111,10 +112,11 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <ScrollViewer Grid.Row="2"
-                              Grid.Column="2"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer components:SmoothScroll.IsEnabled="True" Grid.Row="2"
+                                               Grid.Column="2"
+                                               Padding="0,0,6,0"
+                                               VerticalScrollBarVisibility="Auto"
+                                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Spacing="20">
 
                     <!-- Game Window Size -->

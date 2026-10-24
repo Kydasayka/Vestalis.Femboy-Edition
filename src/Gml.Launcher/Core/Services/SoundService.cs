@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Selection;
 using Avalonia.Interactivity;
 using Avalonia.Platform;
+using Gml.Launcher.Views.Components;
 
 namespace Gml.Launcher.Core.Services;
 
@@ -25,6 +27,10 @@ public static class SoundService
     private const uint SndNoDefault = 0x0002;
     private const uint SndMemory = 0x0004;
 
+    // A single user action can surface as several routed events (a combo box click also changes
+    // the selection), so anything inside this window is treated as the same action.
+    private const int MinIntervalMs = 70;
+
     private static readonly object SyncRoot = new();
 
     // PlaySound(SND_MEMORY | SND_ASYNC) keeps reading the buffer after the call returns, so the
@@ -39,6 +45,7 @@ public static class SoundService
 
     private static volatile bool _isEnabled = true;
     private static bool _isInstalled;
+    private static long _lastPlaybackMs = -MinIntervalMs;
 
     /// <summary>Gets or sets whether interface sounds are played.</summary>
     public static bool IsEnabled
@@ -58,6 +65,7 @@ public static class SoundService
         _isInstalled = true;
 
         Button.ClickEvent.AddClassHandler<Button>(OnButtonClick);
+        GmlButton.ClickEvent.AddClassHandler<GmlButton>(OnGmlButtonClick);
         ComboBox.SelectionChangedEvent.AddClassHandler<ComboBox>(OnSelectionChanged);
         ListBox.SelectionChangedEvent.AddClassHandler<ListBox>(OnSelectionChanged);
     }
@@ -87,6 +95,14 @@ public static class SoundService
             PlayClick();
     }
 
+    private static void OnGmlButtonClick(GmlButton button, RoutedEventArgs args)
+    {
+        if (!ReferenceEquals(args.Source, button))
+            return;
+
+        PlayClick();
+    }
+
     private static void OnSelectionChanged(object? sender, SelectionChangedEventArgs args)
     {
         if (args.AddedItems is { Count: > 0 })
@@ -109,6 +125,13 @@ public static class SoundService
     {
         if (!_isEnabled || !OperatingSystem.IsWindows())
             return;
+
+        var now = Environment.TickCount64;
+
+        if (now - Interlocked.Read(ref _lastPlaybackMs) < MinIntervalMs)
+            return;
+
+        Interlocked.Exchange(ref _lastPlaybackMs, now);
 
         try
         {

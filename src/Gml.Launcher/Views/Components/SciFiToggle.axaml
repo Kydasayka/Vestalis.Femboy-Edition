@@ -12,7 +12,7 @@
 
     <!--
         Sci-fi toggle: a glowing track with a thumb that slides between the off and on states.
-        Used for feature switches across the launcher (settings and the optional mods list).
+        Colours come from Assets/Styles/Colors.axaml so the switch matches the rest of the UI.
     -->
     <Style Selector="CheckBox.SciFiToggle">
         <Setter Property="Cursor" Value="Hand" />
@@ -26,8 +26,8 @@
                             Width="48"
                             Height="26"
                             CornerRadius="13"
-                            Background="#FF14181E"
-                            BorderBrush="#FF2E333C"
+                            Background="{DynamicResource ToggleTrackColor}"
+                            BorderBrush="{DynamicResource CardBorderColor}"
                             BorderThickness="1"
                             VerticalAlignment="Center">
                         <Border.Transitions>
@@ -42,7 +42,7 @@
                                 Width="18"
                                 Height="18"
                                 CornerRadius="9"
-                                Background="#FF6A7280"
+                                Background="{DynamicResource ToggleThumbColor}"
                                 HorizontalAlignment="Left"
                                 VerticalAlignment="Center"
                                 Margin="3,0,0,0">
@@ -72,23 +72,23 @@
 
     <Style Selector="CheckBox.SciFiToggle:pointerover /template/ Border#PART_Track">
         <Setter Property="BorderBrush" Value="{DynamicResource PrimaryColorHover}" />
-        <Setter Property="BoxShadow" Value="0 0 10 0 #3300FFFF" />
+        <Setter Property="BoxShadow" Value="0 0 10 0 #33FF00FF" />
     </Style>
 
     <Style Selector="CheckBox.SciFiToggle:checked /template/ Border#PART_Track">
-        <Setter Property="Background" Value="#FF1B0430" />
+        <Setter Property="Background" Value="{DynamicResource ToggleTrackCheckedColor}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PrimaryColor}" />
-        <Setter Property="BoxShadow" Value="0 0 14 0 #6600FFFF" />
+        <Setter Property="BoxShadow" Value="0 0 14 0 #66FF00FF" />
     </Style>
 
     <Style Selector="CheckBox.SciFiToggle:checked /template/ Border#PART_Thumb">
         <Setter Property="Background" Value="{DynamicResource PrimaryColor}" />
         <Setter Property="Margin" Value="25,0,0,0" />
-        <Setter Property="BoxShadow" Value="0 0 10 1 #CC00FFFF" />
+        <Setter Property="BoxShadow" Value="0 0 10 1 #CCFF00FF" />
     </Style>
 
     <Style Selector="CheckBox.SciFiToggle:pressed /template/ Border#PART_Thumb">
-        <Setter Property="BoxShadow" Value="0 0 12 2 #AA00FFFF" />
+        <Setter Property="BoxShadow" Value="0 0 12 2 #AAFF00FF" />
     </Style>
 
     <Style Selector="CheckBox.SciFiToggle:disabled">

@@ -107,31 +107,15 @@
     </Style>
 
     <!--
-        Sci-fi page entrance. Pages are recreated by the view locator on every navigation, so the
-        animation runs each time the user switches between screens.
+        Card / list-row surface. It reuses the frame palette, so cards look like the panels around
+        them; the accent colour only shows up on hover and on interactive elements.
     -->
-    <Style Selector="UserControl.Page">
-        <Style.Animations>
-            <Animation Duration="0:0:0.42" IterationCount="1" Easing="CubicEaseOut">
-                <KeyFrame Cue="0%">
-                    <Setter Property="Opacity" Value="0" />
-                    <Setter Property="Margin" Value="0,16,0,0" />
-                </KeyFrame>
-                <KeyFrame Cue="100%">
-                    <Setter Property="Opacity" Value="1" />
-                    <Setter Property="Margin" Value="0" />
-                </KeyFrame>
-            </Animation>
-        </Style.Animations>
-    </Style>
-
-    <!-- Card with a soft neon glow that follows the pointer. -->
     <Style Selector="Border.SciFiCard">
-        <Setter Property="Background" Value="#B010141A" />
-        <Setter Property="BorderBrush" Value="#FF262B33" />
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardBorderColor}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="16" />
-        <Setter Property="Padding" Value="16,14" />
+        <Setter Property="Padding" Value="16,12" />
         <Setter Property="Transitions">
             <Transitions>
                 <BrushTransition Property="Background" Duration="0:0:0.18" />
@@ -140,7 +124,7 @@
             </Transitions>
         </Setter>
         <Style.Animations>
-            <Animation Duration="0:0:0.35" IterationCount="1" Easing="CubicEaseOut">
+            <Animation Duration="0:0:0.26" IterationCount="1" Easing="CubicEaseOut">
                 <KeyFrame Cue="0%">
                     <Setter Property="Opacity" Value="0" />
                 </KeyFrame>
@@ -152,29 +136,38 @@
     </Style>
 
     <Style Selector="Border.SciFiCard:pointerover">
-        <Setter Property="Background" Value="#E0151B23" />
-        <Setter Property="BorderBrush" Value="#9916F0FF" />
-        <Setter Property="BoxShadow" Value="0 0 18 0 #3316F0FF" />
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundHoverColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardBorderHoverColor}" />
+        <Setter Property="BoxShadow" Value="0 0 18 0 #33FF00FF" />
     </Style>
 
-    <!-- Compact counter tile used on the mods page. -->
-    <Style Selector="Border.SciFiStat">
-        <Setter Property="Background" Value="#66141820" />
-        <Setter Property="BorderBrush" Value="#332E333C" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="12" />
-        <Setter Property="Padding" Value="12,10" />
-    </Style>
-
-    <!-- Icon tile that sits on the left side of a mod card. -->
+    <!-- Icon tile that sits on the left side of a card. -->
     <Style Selector="Border.SciFiIcon">
         <Setter Property="Width" Value="40" />
         <Setter Property="Height" Value="40" />
         <Setter Property="CornerRadius" Value="12" />
-        <Setter Property="Background" Value="#3316F0FF" />
-        <Setter Property="BorderBrush" Value="#5516F0FF" />
+        <Setter Property="Background" Value="{DynamicResource AccentSoftColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderColor}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BoxShadowsTransition Property="BoxShadow" Duration="0:0:0.18" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="Border.SciFiCard:pointerover Border.SciFiIcon">
+        <Setter Property="BoxShadow" Value="0 0 12 0 #55FF00FF" />
+    </Style>
+
+    <!-- Compact counter tile used on the mods page. -->
+    <Style Selector="Border.SciFiStat">
+        <Setter Property="Background" Value="{DynamicResource MutedSurfaceColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FormBorderColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Padding" Value="12,10" />
     </Style>
 
     <!-- Smooth colour fades for every button, including the ones nested in custom templates. -->
