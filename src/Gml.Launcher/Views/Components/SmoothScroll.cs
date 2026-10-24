@@ -11,7 +11,7 @@ namespace Gml.Launcher.Views.Components;
 /// <summary>
 /// Eased wheel scrolling for a regular <see cref="ScrollViewer"/>.
 /// <para>
-/// Every wheel notch starts a short animation towards the target offset instead of jumping there,
+/// Every wheel notch starts a short glide towards the target offset instead of jumping there,
 /// which keeps long lists (mods, settings, news) from feeling jerky. It is an attached property
 /// rather than a subclass on purpose: Avalonia resolves the control theme by the exact type, so a
 /// derived viewer would fall back to the plain content template and lose scrolling altogether.
@@ -23,10 +23,8 @@ public sealed class SmoothScroll
     {
     }
 
-    // Pixels per wheel notch and the share of the remaining distance covered per frame.
+    // Pixels per wheel notch.
     private const double WheelStep = 120;
-    private const double EasingFactor = 0.24;
-    private const double StopThreshold = 0.4;
 
     private static readonly ConditionalWeakTable<ScrollViewer, Scroller> Scrollers = new();
 
@@ -72,9 +70,20 @@ public sealed class SmoothScroll
 
     private sealed class Scroller
     {
+        // Time constant of the glide: how fast the offset catches up with the pending target. The
+        // step is derived from the real elapsed time, so a dropped frame does not slow the motion
+        // down and a fast frame does not overshoot - that is what keeps the scroll even.
+        private const double TimeConstantSeconds = 0.055;
+
+        // Below this distance the remaining movement is invisible, so the glide snaps and stops.
+        private const double StopThreshold = 0.5;
+
         private readonly ScrollViewer _viewer;
         private readonly DispatcherTimer _timer;
+        private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+
         private double _targetOffset;
+        private long _lastTickMs;
 
         public Scroller(ScrollViewer viewer)
         {
@@ -100,7 +109,7 @@ public sealed class SmoothScroll
                 RoutingStrategies.Tunnel,
                 handledEventsToo: true);
 
-            // Any press (including the one that starts dragging the scrollbar) stops the easing, so
+            // Any press (including the one that starts dragging the scrollbar) stops the glide, so
             // the animation never fights with the pointer.
             _viewer.AddHandler(
                 InputElement.PointerPressedEvent,
@@ -127,13 +136,16 @@ public sealed class SmoothScroll
 
             e.Handled = true;
 
-            // Notches that arrive while the animation is running add up on the pending target, so
-            // fast wheel turns keep their momentum instead of restarting the animation.
+            // Notches that arrive while the glide is running add up on the pending target, so fast
+            // wheel turns keep their momentum instead of restarting the animation.
             var origin = _timer.IsEnabled ? _targetOffset : _viewer.Offset.Y;
             _targetOffset = Math.Clamp(origin - e.Delta.Y * WheelStep, 0, maxOffset);
 
             if (!_timer.IsEnabled)
+            {
+                _lastTickMs = _clock.ElapsedMilliseconds;
                 _timer.Start();
+            }
         }
 
         private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -143,7 +155,12 @@ public sealed class SmoothScroll
 
         private void OnAnimationTick(object? sender, EventArgs e)
         {
-            var distance = _targetOffset - _viewer.Offset.Y;
+            var now = _clock.ElapsedMilliseconds;
+            var elapsedMs = Math.Max(1, now - _lastTickMs);
+            _lastTickMs = now;
+
+            var offset = _viewer.Offset.Y;
+            var distance = _targetOffset - offset;
 
             if (Math.Abs(distance) <= StopThreshold)
             {
@@ -152,7 +169,12 @@ public sealed class SmoothScroll
                 return;
             }
 
-            _viewer.Offset = new Vector(_viewer.Offset.X, _viewer.Offset.Y + distance * EasingFactor);
+            // Exponential approach, frame-rate independent: the share of the remaining distance
+            // covered in this frame depends on how long the frame actually took.
+            var alpha = 1 - Math.Exp(-elapsedMs / 1000.0 / TimeConstantSeconds);
+            var step = distance * alpha;
+
+            _viewer.Offset = new Vector(_viewer.Offset.X, offset + step);
         }
     }
 }

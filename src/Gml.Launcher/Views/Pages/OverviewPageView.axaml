@@ -54,9 +54,11 @@
                 <Grid RowDefinitions="Auto, 0, *" VerticalAlignment="Stretch" Grid.Row="2" Grid.Column="2">
                     <TextBlock Classes="HeadlineText" Text="{x:Static lang:Resources.News}"/>
                     <ScrollViewer components:SmoothScroll.IsEnabled="True" Grid.Row="2"
-                                                   Padding="0,0,6,0"
+                                                   Padding="0,0,8,0"
                                                    CornerRadius="10"
-                                                   ClipToBounds="True">
+                                                   ClipToBounds="True"
+                                                   VerticalScrollBarVisibility="Auto"
+                                                   HorizontalScrollBarVisibility="Disabled">
                         <ItemsControl ItemsSource="{Binding News}">
                             <ItemsControl.DataTemplates>
                                 <DataTemplate x:DataType="news:NewsReadDto">
@@ -72,7 +74,8 @@
                 </Grid>
 
                 <!-- Server Info -->
-                <components:ServerInfo Grid.Column="0"
+                <components:ServerInfo x:Name="ProfileHost"
+                                       Grid.Column="0"
                                        Grid.Row="2"
                                        Classes.Animated="{Binding ListViewModel.HasSelectedItem}"
                                        PlayCommand="{Binding PlayCommand}"
@@ -89,7 +92,29 @@
                                        CreateDate="{Binding ListViewModel.SelectedProfile.CreateDate, FallbackValue={x:Null}}"
                                        Status="{x:Static lang:Resources.Available}"
                                        VerticalAlignment="Center"
-                                       HorizontalAlignment="Left" />
+                                       HorizontalAlignment="Left">
+
+                    <!-- Switching the profile slides the new one in, so the change reads as a switch. -->
+                    <components:ServerInfo.RenderTransform>
+                        <TranslateTransform Y="0">
+                            <TranslateTransform.Transitions>
+                                <Transitions>
+                                    <DoubleTransition Property="Y"
+                                                      Duration="0:0:0.26"
+                                                      Easing="CubicEaseOut" />
+                                </Transitions>
+                            </TranslateTransform.Transitions>
+                        </TranslateTransform>
+                    </components:ServerInfo.RenderTransform>
+
+                    <components:ServerInfo.Transitions>
+                        <Transitions>
+                            <DoubleTransition Property="Opacity"
+                                              Duration="0:0:0.24"
+                                              Easing="CubicEaseOut" />
+                        </Transitions>
+                    </components:ServerInfo.Transitions>
+                </components:ServerInfo>
 
                 <!-- Footer -->
                 <Grid Grid.Row="4"

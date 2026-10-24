@@ -61,7 +61,7 @@
         <Setter Property="BorderBrush" Value="{DynamicResource PrimaryColor}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Background" Value="#FF1B0E1B" />
-        <Setter Property="BoxShadow" Value="0 0 12 0 #4400FFFF" />
+        <Setter Property="BoxShadow" Value="0 0 12 0 #44FF00FF" />
     </Style>
 
     <Style Selector="StackPanel.MarginBottom">

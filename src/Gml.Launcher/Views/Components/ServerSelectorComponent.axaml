@@ -5,6 +5,59 @@
              x:DataType="vm:MainWindowViewModel"
              x:Class="Gml.Launcher.Views.Components.ServerSelectorComponent">
 
+    <UserControl.Resources>
+        <!--
+            Drop-down row: same rounded, dark surface as the cards, with the accent showing up on
+            hover and on the current server instead of the default list selection colours.
+        -->
+        <ControlTheme x:Key="ServerSelectorItem" TargetType="ComboBoxItem">
+            <Setter Property="Padding" Value="12,9" />
+            <Setter Property="Margin" Value="0,1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource ContentColor}" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="PART_Row"
+                            Background="Transparent"
+                            BorderBrush="Transparent"
+                            BorderThickness="1"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}"
+                            RenderTransform="translateX(0px)">
+                        <Border.Transitions>
+                            <Transitions>
+                                <BrushTransition Property="Background" Duration="0:0:0.15" />
+                                <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" />
+                            </Transitions>
+                        </Border.Transitions>
+
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalContentAlignment="Stretch"
+                                          VerticalContentAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#PART_Row">
+                <Setter Property="Background" Value="{DynamicResource CardBackgroundHoverColor}" />
+                <Setter Property="RenderTransform" Value="translateX(3px)" />
+            </Style>
+
+            <Style Selector="^:selected /template/ Border#PART_Row">
+                <Setter Property="Background" Value="{DynamicResource AccentSoftColor}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderColor}" />
+            </Style>
+
+            <Style Selector="^:selected">
+                <Setter Property="Foreground" Value="{DynamicResource HeadlineColor}" />
+            </Style>
+        </ControlTheme>
+    </UserControl.Resources>
+
     <UserControl.Styles>
         <Style Selector="ComboBox.ServerSelector">
             <Setter Property="Height" Value="42" />
@@ -29,12 +82,42 @@
             <Setter Property="Background" Value="{DynamicResource FormBackgroundHoverColor}" />
             <Setter Property="BorderBrush" Value="{DynamicResource FormBorderHoverColor}" />
         </Style>
+
+        <!-- The popup itself: a floating sci-fi panel instead of the default grey box. -->
+        <Style Selector="ComboBox.ServerSelector /template/ Popup#PART_Popup">
+            <!-- Keep the wider panel inside the window by lining its right edge up with the button. -->
+            <Setter Property="Placement" Value="BottomEdgeAlignedRight" />
+        </Style>
+
+        <Style Selector="ComboBox.ServerSelector /template/ Border#PopupBorder">
+            <Setter Property="Background" Value="{DynamicResource FrameBackgroundColor}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderColor}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="16" />
+            <Setter Property="Padding" Value="6" />
+            <Setter Property="MinWidth" Value="190" />
+            <Setter Property="BoxShadow" Value="0 10 30 0 #99000000" />
+
+            <!-- Fades in every time the list is opened. Avalonia 11 has no animator for
+                 RenderTransform, so the reveal is a pure fade. -->
+            <Style.Animations>
+                <Animation Duration="0:0:0.16" IterationCount="1" Easing="CubicEaseOut">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="1" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
     </UserControl.Styles>
 
     <ComboBox Classes="ComboBoxStyle ServerSelector"
               ItemsSource="{Binding Servers}"
               SelectedItem="{Binding SelectedServer, Mode=TwoWay}"
               IsEnabled="{Binding !IsServerSwitchInProgress}"
+              ItemContainerTheme="{DynamicResource ServerSelectorItem}"
               ToolTip.Tip="Выбор сервера">
         <ComboBox.ItemTemplate>
             <DataTemplate x:DataType="models:GmlServer">

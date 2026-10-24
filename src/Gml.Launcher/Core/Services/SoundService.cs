@@ -27,9 +27,13 @@ public static class SoundService
     private const uint SndNoDefault = 0x0002;
     private const uint SndMemory = 0x0004;
 
+    // Never interrupt a sound that is still playing: cutting a short sample in half is what makes
+    // rapid clicking sound glitchy, so a new request is simply dropped while the old one finishes.
+    private const uint SndNoStop = 0x0010;
+
     // A single user action can surface as several routed events (a combo box click also changes
     // the selection), so anything inside this window is treated as the same action.
-    private const int MinIntervalMs = 70;
+    private const int MinIntervalMs = 50;
 
     private static readonly object SyncRoot = new();
 
@@ -140,7 +144,7 @@ public static class SoundService
             if (buffer == IntPtr.Zero)
                 return;
 
-            PlaySound(buffer, IntPtr.Zero, SndAsync | SndMemory | SndNoDefault);
+            PlaySound(buffer, IntPtr.Zero, SndAsync | SndMemory | SndNoDefault | SndNoStop);
         }
         catch (Exception exception)
         {
