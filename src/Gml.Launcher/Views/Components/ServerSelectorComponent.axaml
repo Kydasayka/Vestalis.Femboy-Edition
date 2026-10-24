@@ -1,0 +1,53 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Gml.Launcher.ViewModels"
+             xmlns:models="clr-namespace:Gml.Launcher.Models"
+             x:DataType="vm:MainWindowViewModel"
+             x:Class="Gml.Launcher.Views.Components.ServerSelectorComponent">
+
+    <UserControl.Styles>
+        <Style Selector="ComboBox.ServerSelector">
+            <Setter Property="Height" Value="42" />
+            <Setter Property="MinWidth" Value="118" />
+            <Setter Property="Padding" Value="14,0,8,0" />
+            <Setter Property="CornerRadius" Value="50" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <Style Selector="ComboBox.ServerSelector /template/ ContentPresenter">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.15" />
+                    <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <Style Selector="ComboBox.ServerSelector:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource FormBackgroundHoverColor}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FormBorderHoverColor}" />
+        </Style>
+    </UserControl.Styles>
+
+    <ComboBox Classes="ComboBoxStyle ServerSelector"
+              ItemsSource="{Binding Servers}"
+              SelectedItem="{Binding SelectedServer, Mode=TwoWay}"
+              IsEnabled="{Binding !IsServerSwitchInProgress}"
+              ToolTip.Tip="Выбор сервера">
+        <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="models:GmlServer">
+                <StackPanel Orientation="Horizontal"
+                            Spacing="10">
+                    <Svg Path="/Assets/Images/server.svg"
+                         Width="18"
+                         Height="18"
+                         VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Name}"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+            </DataTemplate>
+        </ComboBox.ItemTemplate>
+    </ComboBox>
+</UserControl>

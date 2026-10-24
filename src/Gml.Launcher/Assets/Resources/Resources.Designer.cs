@@ -755,5 +755,68 @@ namespace Gml.Launcher.Assets.Resources {
                 return ResourceManager.GetString("WindowSize", resourceCulture);
             }
         }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Interface sounds.
+        /// </summary>
+        public static string InterfaceSounds {
+            get {
+                return ResourceManager.GetString("InterfaceSounds", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Clicks, toggles and other interface feedback.
+        /// </summary>
+        public static string InterfaceSoundsDescription {
+            get {
+                return ResourceManager.GetString("InterfaceSoundsDescription", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Search.
+        /// </summary>
+        public static string ModsSearchTitle {
+            get {
+                return ResourceManager.GetString("ModsSearchTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Search mods...
+        /// </summary>
+        public static string ModsSearchPlaceholder {
+            get {
+                return ResourceManager.GetString("ModsSearchPlaceholder", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Enabled.
+        /// </summary>
+        public static string ModsEnabled {
+            get {
+                return ResourceManager.GetString("ModsEnabled", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Total.
+        /// </summary>
+        public static string ModsTotal {
+            get {
+                return ResourceManager.GetString("ModsTotal", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Nothing found. Try another query..
+        /// </summary>
+        public static string ModsNoSearchResults {
+            get {
+                return ResourceManager.GetString("ModsNoSearchResults", resourceCulture);
+            }
+        }
     }
 }

@@ -351,4 +351,25 @@ To exit offline mode, make sure that the server is available, and then restart t
   <data name="TwoFactorDescription" xml:space="preserve">
     <value>Please enter the verification code from your authentication app.</value>
   </data>
+  <data name="InterfaceSounds" xml:space="preserve">
+    <value>Interface sounds</value>
+  </data>
+  <data name="InterfaceSoundsDescription" xml:space="preserve">
+    <value>Clicks, toggles and other interface feedback.</value>
+  </data>
+  <data name="ModsSearchTitle" xml:space="preserve">
+    <value>Search</value>
+  </data>
+  <data name="ModsSearchPlaceholder" xml:space="preserve">
+    <value>Search mods...</value>
+  </data>
+  <data name="ModsEnabled" xml:space="preserve">
+    <value>Enabled</value>
+  </data>
+  <data name="ModsTotal" xml:space="preserve">
+    <value>Total</value>
+  </data>
+  <data name="ModsNoSearchResults" xml:space="preserve">
+    <value>Nothing found. Try another query.</value>
+  </data>
 </root>

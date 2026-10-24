@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reactive.Concurrency;
+using System.Reactive.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia.Threading;
@@ -30,14 +31,20 @@ namespace Gml.Launcher.ViewModels.Pages;
 public class ModsPageViewModel : PageViewModelBase
 {
     private readonly ProfileReadDto _profile;
-    private readonly ILauncherUser _user;
+    private ILauncherUser _user;
     private readonly IGmlClientManager _gmlManager;
     private readonly ISystemService _systemService;
+    private readonly IAutoLoginService _autoLoginService;
     private readonly string _modsDirectory;
+    private readonly List<ExternalModReadDto> _allMods = [];
     private ResponseMessage<ProfileReadInfoDto?>? _profileInfo;
     [Reactive] public ConcurrentDictionary<string, ModsDetailsInfoDto> OptionalModsDetails { get; set; } = [];
     [Reactive] public ObservableCollection<ExternalModReadDto> ProfileOptionalMods { get; set; } = [];
     [Reactive] public bool ModsListIsEmpty { get; set; }
+    [Reactive] public bool IsSearchEmpty { get; set; }
+    [Reactive] public string SearchText { get; set; } = string.Empty;
+    [Reactive] public int TotalMods { get; set; }
+    [Reactive] public int EnabledMods { get; set; }
     [Reactive] public ICommand ChangeOptionalModState { get; set; }
 
     public ModsPageViewModel(IScreen screen,
@@ -51,8 +58,14 @@ public class ModsPageViewModel : PageViewModelBase
         _user = user;
         _gmlManager = gmlManager;
         _systemService = systemService;
+        _autoLoginService = Locator.Current.GetService<IAutoLoginService>()
+                            ?? throw new ServiceNotFoundException(typeof(IAutoLoginService));
 
         ChangeOptionalModState = ReactiveCommand.Create<ExternalModReadDto>(ChangeModState);
+
+        this.WhenAnyValue(x => x.SearchText)
+            .Throttle(TimeSpan.FromMilliseconds(150), RxApp.MainThreadScheduler)
+            .Subscribe(_ => ApplyFilter());
 
         RxApp.MainThreadScheduler.Schedule(LoadData);
     }
@@ -77,6 +90,7 @@ public class ModsPageViewModel : PageViewModelBase
 
             if (isFullLoaded && _gmlManager.ToggleOptionalMod(file, mod.IsSelected))
             {
+                UpdateCounters();
                 // ShowSuccess(SystemConstants.Success,
                 //     mod.IsSelected
                 //         ? LocalizationService.GetString(SystemConstants.ModEnabled)
@@ -93,7 +107,12 @@ public class ModsPageViewModel : PageViewModelBase
 
     private void LoadData()
     {
-        _ = ExecuteFromNewThread(async () =>
+        _ = LoadDataAsync(true);
+    }
+
+    private Task LoadDataAsync(bool canRecover)
+    {
+        return ExecuteFromNewThread(async () =>
         {
             try
             {
@@ -107,8 +126,11 @@ public class ModsPageViewModel : PageViewModelBase
                     OptionalModsDetails = new ConcurrentDictionary<string, ModsDetailsInfoDto>(
                         optionalModsInfo.Data?.ToDictionary(mod => mod.Key, mod => mod) ?? []
                     );
-                    ProfileOptionalMods = new ObservableCollection<ExternalModReadDto>(models);
-                    ModsListIsEmpty = ProfileOptionalMods.Count == 0;
+
+                    _allMods.Clear();
+                    _allMods.AddRange(models);
+                    ApplyFilter();
+                    UpdateCounters();
                 });
 
                 _profileInfo = await _gmlManager.GetProfileInfo(new ProfileCreateInfoDto
@@ -122,12 +144,51 @@ public class ModsPageViewModel : PageViewModelBase
                     UserUuid = _user.Uuid
                 });
             }
+            catch (UnauthorizedAccessException exception)
+            {
+                SentrySdk.CaptureException(exception);
+
+                if (!canRecover)
+                    return;
+
+                var result = await _autoLoginService.TrySignInAsync();
+
+                if (!result.IsAuthenticated || result.User is null)
+                    return;
+
+                _user = result.User;
+                await LoadDataAsync(false);
+            }
             catch (Exception exception)
             {
                 SentrySdk.CaptureException(exception);
             }
         });
+    }
 
+    private void ApplyFilter()
+    {
+        var query = SearchText?.Trim() ?? string.Empty;
+
+        var filtered = string.IsNullOrEmpty(query)
+            ? _allMods.ToList()
+            : _allMods.Where(mod => Matches(mod, query)).ToList();
+
+        ProfileOptionalMods = new ObservableCollection<ExternalModReadDto>(filtered);
+        ModsListIsEmpty = _allMods.Count == 0;
+        IsSearchEmpty = _allMods.Count > 0 && filtered.Count == 0;
+    }
+
+    private static bool Matches(ExternalModReadDto mod, string query)
+    {
+        return mod.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+               || (mod.Description?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private void UpdateCounters()
+    {
+        TotalMods = _allMods.Count;
+        EnabledMods = _allMods.Count(mod => mod.IsSelected);
     }
 
     private ICollection<string> GetEnabledMods(string modsDirectory)

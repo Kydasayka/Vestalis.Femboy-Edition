@@ -43,7 +43,7 @@ public class SettingsPageViewModel : PageViewModelBase
         _settingsService = settingsService;
         _gmlManager = gmlManager;
 
-        this.WhenAnyValue(
+        var settingsChanged = this.WhenAnyValue(
                 x => x.XmsRamValue,
                 x => x.XmxRamValue,
                 x => x.WindowWidth,
@@ -51,6 +51,17 @@ public class SettingsPageViewModel : PageViewModelBase
                 x => x.FullScreen,
                 x => x.SelectedLanguage,
                 x => x.CustomJvmArguments)
+            .Select(settings => (settings.Item1, settings.Item2, settings.Item3,
+                settings.Item4, settings.Item5, settings.Item6, settings.Item7, InterfaceSounds));
+
+        // Toggling the sound switch alone does not touch the values above, so it is merged in
+        // separately to keep the whole settings object in sync.
+        var soundsChanged = this.WhenAnyValue(x => x.InterfaceSounds)
+            .Select(interfaceSounds => (XmsRamValue, XmxRamValue, WindowWidth, WindowHeight,
+                FullScreen, SelectedLanguage, CustomJvmArguments, interfaceSounds));
+
+        settingsChanged
+            .Merge(soundsChanged)
             .Where(ValidateParams)
             .Throttle(TimeSpan.FromMilliseconds(400), RxApp.TaskpoolScheduler)
             .ObserveOn(RxApp.TaskpoolScheduler)
@@ -70,7 +81,8 @@ public class SettingsPageViewModel : PageViewModelBase
 
     private bool ValidateParams(
         (double xmsRamValue, double xmxRamValue, string width, string height,
-            bool isFullScreen, Language? selectedLanguage, string? customJvmArguments) update)
+            bool isFullScreen, Language? selectedLanguage, string? customJvmArguments,
+            bool interfaceSounds) update)
     {
         if (update.xmsRamValue < MinXmsRamMb ||
             update.xmxRamValue < MinXmxRamMb ||
@@ -90,6 +102,7 @@ public class SettingsPageViewModel : PageViewModelBase
     }
 
     [Reactive] public bool FullScreen { get; set; }
+    [Reactive] public bool InterfaceSounds { get; set; } = true;
     [Reactive] public string CustomJvmArguments { get; set; } = string.Empty;
     [Reactive] public double MinJvmRamValue { get; set; } = MinXmsRamMb;
     [Reactive] public double MinXmxRamValue { get; set; } = MinXmxRamMb;
@@ -207,6 +220,8 @@ public class SettingsPageViewModel : PageViewModelBase
         WindowWidth = settings.GameWidth.ToString(CultureInfo.InvariantCulture);
         WindowHeight = settings.GameHeight.ToString(CultureInfo.InvariantCulture);
         FullScreen = settings.FullScreen;
+        InterfaceSounds = settings.InterfaceSounds;
+        SoundService.IsEnabled = settings.InterfaceSounds;
         CustomJvmArguments = settings.CustomJvmArguments ?? string.Empty;
         SelectedLanguage = AvailableLanguages.FirstOrDefault(c => c.Culture.Name == settings.LanguageCode);
         InstallationFolder = _gmlManager.InstallationDirectory;
@@ -242,10 +257,13 @@ public class SettingsPageViewModel : PageViewModelBase
 
     private async void SaveSettings(
         (double xmsRamValue, double xmxRamValue, string width, string height,
-            bool isFullScreen, Language? selectedLanguage, string? customJvmArguments) update)
+            bool isFullScreen, Language? selectedLanguage, string? customJvmArguments,
+            bool interfaceSounds) update)
     {
         try
         {
+            SoundService.IsEnabled = update.interfaceSounds;
+
             var newSettings = new SettingsInfo(
                 int.Parse(update.width, CultureInfo.InvariantCulture),
                 int.Parse(update.height, CultureInfo.InvariantCulture),
@@ -255,7 +273,8 @@ public class SettingsPageViewModel : PageViewModelBase
                 update.selectedLanguage?.Culture.Name,
                 update.customJvmArguments,
                 Convert.ToInt32(update.xmsRamValue),
-                Convert.ToInt32(update.xmxRamValue));
+                Convert.ToInt32(update.xmxRamValue),
+                update.interfaceSounds);
 
             await _settingsService.UpdateSettingsAsync(newSettings);
         }

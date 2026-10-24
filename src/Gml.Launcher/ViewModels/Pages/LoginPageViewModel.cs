@@ -13,6 +13,7 @@ using Gml.Client.Models;
 using Gml.Launcher.Assets;
 using Gml.Launcher.Core.Exceptions;
 using Gml.Launcher.Core.Services;
+using Gml.Launcher.Models;
 using Gml.Launcher.ViewModels.Base;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
@@ -29,8 +30,10 @@ public class LoginPageViewModel : PageViewModelBase
     private readonly IBackendChecker _backendChecker;
     private readonly IStorageService _storageService;
     private readonly ISystemService _systemService;
+    private readonly IAutoLoginService _autoLoginService;
     private ObservableCollection<string> _errorList = [];
     private bool _isProcessing;
+    private bool _isAutoLoginRunning;
 
     internal LoginPageViewModel(IScreen screen,
         IObservable<bool> onClosed,
@@ -38,7 +41,8 @@ public class LoginPageViewModel : PageViewModelBase
         IStorageService? storageService = null,
         ISystemService? systemService = null,
         IBackendChecker? backendChecker = null,
-        ILocalizationService? localizationService = null) : base(screen, localizationService)
+        ILocalizationService? localizationService = null,
+        IAutoLoginService? autoLoginService = null) : base(screen, localizationService)
     {
         _screen = (MainWindowViewModel)screen;
         _onClosed = onClosed;
@@ -58,6 +62,10 @@ public class LoginPageViewModel : PageViewModelBase
         _backendChecker = backendChecker
                           ?? Locator.Current.GetService<IBackendChecker>()
                           ?? throw new ServiceNotFoundException(typeof(IBackendChecker));
+
+        _autoLoginService = autoLoginService
+                            ?? Locator.Current.GetService<IAutoLoginService>()
+                            ?? throw new ServiceNotFoundException(typeof(IAutoLoginService));
 
 
         _screen.OnClosed.Subscribe(DisposeConnections);
@@ -109,6 +117,89 @@ public class LoginPageViewModel : PageViewModelBase
         {
             _screen.Router.Navigate.Execute(new OverviewPageViewModel(_screen, authUser, _onClosed));
             await _gmlClientManager.OpenServerConnection(authUser);
+            return;
+        }
+
+        await TryAutoLoginAsync();
+    }
+
+    private async Task TryAutoLoginAsync()
+    {
+        if (_isAutoLoginRunning)
+            return;
+
+        var savedLogin = await GetSavedLoginSafeAsync();
+
+        if (savedLogin is null)
+            return;
+
+        _isAutoLoginRunning = true;
+        IsProcessing = true;
+
+        // Keep the previous credentials on screen in case the silent sign-in fails
+        // or the backend asks for a 2FA code.
+        Login = savedLogin.Login;
+        Password = savedLogin.Password;
+
+        try
+        {
+            var result = await _autoLoginService.TrySignInAsync();
+
+            if (result.IsAuthenticated && result.User is not null)
+            {
+                Debug.WriteLine("[AutoLogin] Session restored successfully");
+                _screen.Router.Navigate.Execute(new OverviewPageViewModel(_screen, result.User, _onClosed));
+                return;
+            }
+
+            if (result.RequiresTwoFactor)
+            {
+                Debug.WriteLine("[AutoLogin] 2FA required to restore session");
+                Is2FaVisible = true;
+                TwoFactorCode = string.Empty;
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(result.Message))
+                Errors = new ObservableCollection<string> { result.Message };
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"[AutoLogin] Unexpected error: {exception}");
+            SentrySdk.CaptureException(exception);
+        }
+        finally
+        {
+            _isAutoLoginRunning = false;
+            IsProcessing = false;
+        }
+    }
+
+    private async Task<SavedLogin?> GetSavedLoginSafeAsync()
+    {
+        try
+        {
+            return await _autoLoginService.GetSavedLoginAsync();
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"[AutoLogin] Failed to read saved credentials: {exception}");
+            SentrySdk.CaptureException(exception);
+
+            return null;
+        }
+    }
+
+    private async Task RememberCredentialsAsync()
+    {
+        try
+        {
+            await _autoLoginService.SaveCredentialsAsync(Login, Password);
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"[AutoLogin] Failed to remember credentials: {exception}");
+            SentrySdk.CaptureException(exception);
         }
     }
 
@@ -146,6 +237,7 @@ public class LoginPageViewModel : PageViewModelBase
 
                 Debug.WriteLine("Authentication successful, no 2FA required");
                 await _storageService.SetAsync(StorageConstants.User, authInfo.User);
+                await RememberCredentialsAsync();
                 _screen.Router.Navigate.Execute(new OverviewPageViewModel(_screen, authInfo.User, _onClosed));
                 return;
             }
@@ -205,6 +297,7 @@ public class LoginPageViewModel : PageViewModelBase
             {
                 Debug.WriteLine("2FA verification successful");
                 await _storageService.SetAsync(StorageConstants.User, authInfo.User);
+                await RememberCredentialsAsync();
                 Is2FaVisible = false; // Скрываем окно 2FA
                 _screen.Router.Navigate.Execute(new OverviewPageViewModel(_screen, authInfo.User, _onClosed));
                 return;

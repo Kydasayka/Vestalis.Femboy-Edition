@@ -1,0 +1,99 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Design.PreviewWith>
+        <Border Background="{DynamicResource BackgroundColor}" Padding="40">
+            <StackPanel Spacing="20">
+                <CheckBox Classes="SciFiToggle" Content="Interface sounds" IsChecked="True" />
+                <CheckBox Classes="SciFiToggle" Content="Full screen" />
+            </StackPanel>
+        </Border>
+    </Design.PreviewWith>
+
+    <!--
+        Sci-fi toggle: a glowing track with a thumb that slides between the off and on states.
+        Used for feature switches across the launcher (settings and the optional mods list).
+    -->
+    <Style Selector="CheckBox.SciFiToggle">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="{DynamicResource ContentColor}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid ColumnDefinitions="Auto,*" Background="Transparent">
+                    <Border Name="PART_Track"
+                            Width="48"
+                            Height="26"
+                            CornerRadius="13"
+                            Background="#FF14181E"
+                            BorderBrush="#FF2E333C"
+                            BorderThickness="1"
+                            VerticalAlignment="Center">
+                        <Border.Transitions>
+                            <Transitions>
+                                <BrushTransition Property="Background" Duration="0:0:0.18" />
+                                <BrushTransition Property="BorderBrush" Duration="0:0:0.18" />
+                                <BoxShadowsTransition Property="BoxShadow" Duration="0:0:0.18" />
+                            </Transitions>
+                        </Border.Transitions>
+
+                        <Border Name="PART_Thumb"
+                                Width="18"
+                                Height="18"
+                                CornerRadius="9"
+                                Background="#FF6A7280"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Margin="3,0,0,0">
+                            <Border.Transitions>
+                                <Transitions>
+                                    <ThicknessTransition Property="Margin"
+                                                         Duration="0:0:0.18"
+                                                         Easing="CubicEaseOut" />
+                                    <BrushTransition Property="Background" Duration="0:0:0.18" />
+                                    <BoxShadowsTransition Property="BoxShadow" Duration="0:0:0.18" />
+                                </Transitions>
+                            </Border.Transitions>
+                        </Border>
+                    </Border>
+
+                    <ContentPresenter Grid.Column="1"
+                                      Margin="12,0,0,0"
+                                      VerticalAlignment="Center"
+                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Foreground="{TemplateBinding Foreground}" />
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+
+    <Style Selector="CheckBox.SciFiToggle:pointerover /template/ Border#PART_Track">
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryColorHover}" />
+        <Setter Property="BoxShadow" Value="0 0 10 0 #3300FFFF" />
+    </Style>
+
+    <Style Selector="CheckBox.SciFiToggle:checked /template/ Border#PART_Track">
+        <Setter Property="Background" Value="#FF1B0430" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryColor}" />
+        <Setter Property="BoxShadow" Value="0 0 14 0 #6600FFFF" />
+    </Style>
+
+    <Style Selector="CheckBox.SciFiToggle:checked /template/ Border#PART_Thumb">
+        <Setter Property="Background" Value="{DynamicResource PrimaryColor}" />
+        <Setter Property="Margin" Value="25,0,0,0" />
+        <Setter Property="BoxShadow" Value="0 0 10 1 #CC00FFFF" />
+    </Style>
+
+    <Style Selector="CheckBox.SciFiToggle:pressed /template/ Border#PART_Thumb">
+        <Setter Property="BoxShadow" Value="0 0 12 2 #AA00FFFF" />
+    </Style>
+
+    <Style Selector="CheckBox.SciFiToggle:disabled">
+        <Setter Property="Opacity" Value="0.45" />
+        <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+
+</Styles>

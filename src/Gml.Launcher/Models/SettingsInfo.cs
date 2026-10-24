@@ -16,7 +16,8 @@ public record SettingsInfo
         string? languageCode,
         string? customJvmArguments = null,
         int? xmsRamValueMb = null,
-        int? xmxRamValueMb = null)
+        int? xmxRamValueMb = null,
+        bool interfaceSounds = true)
     {
         GameHeight = gameHeight;
         GameWidth = gameWidth;
@@ -27,6 +28,7 @@ public record SettingsInfo
         CustomJvmArguments = customJvmArguments ?? string.Empty;
         XmsRamValueMb = xmsRamValueMb;
         XmxRamValueMb = xmxRamValueMb;
+        InterfaceSounds = interfaceSounds;
     }
 
     public int GameWidth { get; set; }
@@ -44,6 +46,9 @@ public record SettingsInfo
 
     /// <summary>Maximum Java heap size (-Xmx), in megabytes.</summary>
     public int? XmxRamValueMb { get; set; }
+
+    /// <summary>Whether the launcher plays its interface sounds.</summary>
+    public bool InterfaceSounds { get; set; } = true;
 
     public static SettingsInfo Default =>
         new SettingsInfo(900, 600, false, false, 8192, CultureInfo.CurrentUICulture.Name,

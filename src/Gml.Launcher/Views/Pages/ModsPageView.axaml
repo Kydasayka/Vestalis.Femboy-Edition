@@ -8,17 +8,18 @@
              xmlns:converters="clr-namespace:Gml.Launcher.Core.Converters"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="Gml.Launcher.Views.Pages.ModsPageView"
-             x:DataType="vm:ModsPageViewModel">
+             x:DataType="vm:ModsPageViewModel"
+             Classes="Page">
     <Grid>
         <!-- Background -->
         <components:BackgroundComponent Classes="Image" Source="/Assets/Images/background.jpg" />
         <Rectangle Fill="{DynamicResource BackgroundOverlay}" />
 
         <Border Padding="20">
-            <Grid RowDefinitions="Auto, 30, *">
+            <Grid RowDefinitions="Auto, 24, *">
 
                 <!-- Navigation -->
-                <Grid Grid.ColumnSpan="3" Grid.Row="0">
+                <Grid Grid.Row="0">
                     <components:GmlButton Classes="TextIcon Additional"
                                           Padding="15, 0, 20 ,0"
                                           IconPath="/Assets/Images/back.svg"
@@ -27,75 +28,146 @@
                                           Command="{Binding GoBackCommand}" />
                 </Grid>
 
+                <Grid Grid.Row="2" ColumnDefinitions="320, 20, *">
 
-                <Grid Grid.Row="2" ColumnDefinitions="300, 20, *">
-                    <components:StackFrameBorder Grid.Column="0"
-                                                 Spacing="10"
-                                                 VerticalAlignment="Top">
-                        <StackPanel Orientation="Horizontal"
-                                    Margin="0, 0, 0, 10"
-                                    Spacing="10">
-                            <Svg Path="/Assets/Images/folder.svg"
-                                 Width="28"
-                                 Height="28" />
-                            <TextBlock Text="{x:Static lang:Resources.ModsList}"
-                                       Classes="HeadlineText"
-                                       Margin="0"
-                                       VerticalAlignment="Center" />
-                        </StackPanel>
-
-                        <TextBlock Text="{x:Static lang:Resources.ModsListDescription}"
-                                   TextWrapping="Wrap"
-                                   Margin="38, 0, 0, 0"
-                                   LineHeight="25"
-                                   Classes="FormText" />
-
-
-                    </components:StackFrameBorder>
-
-                    <components:StackFrameBorder Grid.Column="2"
-                                                 Spacing="10"
-                                                 VerticalAlignment="Top"
-                                                 IsVisible="{Binding ModsListIsEmpty}">
-
-                        <StackPanel Spacing="10">
-
+                    <!-- Profile card: description and live counters -->
+                    <StackPanel Grid.Column="0"
+                                Spacing="16"
+                                VerticalAlignment="Top">
+                        <components:StackFrameBorder Spacing="10"
+                                                     VerticalAlignment="Top">
                             <StackPanel Orientation="Horizontal"
-                                        HorizontalAlignment="Left"
+                                        Margin="0, 0, 0, 10"
                                         Spacing="10">
-                                <Svg Path="/Assets/Images/folder.svg" Width="48"/>
-                                <TextBlock Classes="HeadlineText"
-                                           Margin="0, 5, 0, 0"
-                                           VerticalAlignment="Center"
-                                           Text="{x:Static lang:Resources.Empty}" />
+                                <Svg Path="/Assets/Images/folder.svg"
+                                     Width="28"
+                                     Height="28" />
+                                <TextBlock Text="{x:Static lang:Resources.ModsList}"
+                                           Classes="HeadlineText"
+                                           Margin="0"
+                                           VerticalAlignment="Center" />
                             </StackPanel>
 
-                            <TextBlock Classes="FormText"
+                            <TextBlock Text="{x:Static lang:Resources.ModsListDescription}"
                                        TextWrapping="Wrap"
-                                       Text="{x:Static lang:Resources.ModsEmpty}" />
-                        </StackPanel>
-                    </components:StackFrameBorder>
+                                       Margin="38, 0, 0, 0"
+                                       LineHeight="25"
+                                       Classes="FormText" />
 
-                    <ScrollViewer Grid.Column="2">
-                        <ItemsControl x:Name="ModsListControl"
-                                      ItemsSource="{Binding ProfileOptionalMods}">
-                            <ItemsControl.DataTemplates>
-                                <DataTemplate x:DataType="vm:ExternalModReadDto">
+                            <Border Classes="Separator" Margin="0, 5" />
 
-                                    <components:StackFrameBorder Margin="0, 0, 0, 10"
-                                                                 Spacing="10"
-                                                                 VerticalAlignment="Top">
-                                        <Grid ColumnDefinitions="Auto, 20, *">
-                                            <CheckBox CommandParameter="{Binding .}"
-                                                Command="{Binding ((vm:ModsPageViewModel)DataContext).ChangeOptionalModState, ElementName=ModsListControl}" IsChecked="{Binding IsSelected}" Classes="FormCheckBox" />
+                            <Grid ColumnDefinitions="*, 10, *">
+                                <Border Classes="SciFiStat">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="{Binding EnabledMods}"
+                                                   FontSize="26"
+                                                   FontWeight="Bold"
+                                                   Foreground="{DynamicResource PrimaryColor}" />
+                                        <TextBlock Text="{x:Static lang:Resources.ModsEnabled}"
+                                                   Classes="FormText"
+                                                   Margin="0"
+                                                   FontSize="11" />
+                                    </StackPanel>
+                                </Border>
 
+                                <Border Grid.Column="2"
+                                        Classes="SciFiStat">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="{Binding TotalMods}"
+                                                   FontSize="26"
+                                                   FontWeight="Bold"
+                                                   Foreground="{DynamicResource HeadlineColor}" />
+                                        <TextBlock Text="{x:Static lang:Resources.ModsTotal}"
+                                                   Classes="FormText"
+                                                   Margin="0"
+                                                   FontSize="11" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </components:StackFrameBorder>
 
-                                            <StackPanel Grid.Column="2">
-                                                <StackPanel VerticalAlignment="Center"
-                                                            Spacing="3">
+                        <!-- Search -->
+                        <components:StackFrameBorder Spacing="10"
+                                                     VerticalAlignment="Top">
+                            <TextBlock Text="{x:Static lang:Resources.ModsSearchTitle}"
+                                       Classes="FormText"
+                                       Margin="0"
+                                       FontSize="13" />
+                            <TextBox Classes="FormBox"
+                                     Text="{Binding SearchText, Mode=TwoWay}"
+                                     Watermark="{x:Static lang:Resources.ModsSearchPlaceholder}" />
+                        </components:StackFrameBorder>
+                    </StackPanel>
+
+                    <!-- Mods -->
+                    <Grid Grid.Column="2">
+
+                        <!-- No optional mods at all -->
+                        <components:StackFrameBorder VerticalAlignment="Top"
+                                                     Spacing="10"
+                                                     IsVisible="{Binding ModsListIsEmpty}">
+                            <StackPanel Spacing="10">
+                                <StackPanel Orientation="Horizontal"
+                                            HorizontalAlignment="Left"
+                                            Spacing="10">
+                                    <Svg Path="/Assets/Images/folder.svg" Width="48" />
+                                    <TextBlock Classes="HeadlineText"
+                                               Margin="0, 5, 0, 0"
+                                               VerticalAlignment="Center"
+                                               Text="{x:Static lang:Resources.Empty}" />
+                                </StackPanel>
+
+                                <TextBlock Classes="FormText"
+                                           TextWrapping="Wrap"
+                                           Text="{x:Static lang:Resources.ModsEmpty}" />
+                            </StackPanel>
+                        </components:StackFrameBorder>
+
+                        <!-- Nothing matches the search query -->
+                        <components:StackFrameBorder VerticalAlignment="Top"
+                                                     Spacing="10"
+                                                     IsVisible="{Binding IsSearchEmpty}">
+                            <StackPanel Spacing="10">
+                                <StackPanel Orientation="Horizontal"
+                                            HorizontalAlignment="Left"
+                                            Spacing="10">
+                                    <Svg Path="/Assets/Images/document.svg" Width="42" />
+                                    <TextBlock Classes="HeadlineText"
+                                               Margin="0, 5, 0, 0"
+                                               VerticalAlignment="Center"
+                                               Text="{x:Static lang:Resources.Empty}" />
+                                </StackPanel>
+
+                                <TextBlock Classes="FormText"
+                                           TextWrapping="Wrap"
+                                           Text="{x:Static lang:Resources.ModsNoSearchResults}" />
+                            </StackPanel>
+                        </components:StackFrameBorder>
+
+                        <ScrollViewer IsVisible="{Binding !ModsListIsEmpty}"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl x:Name="ModsListControl"
+                                          ItemsSource="{Binding ProfileOptionalMods}">
+                                <ItemsControl.DataTemplates>
+                                    <DataTemplate x:DataType="vm:ExternalModReadDto">
+                                        <Border Classes="SciFiCard"
+                                                Margin="0, 0, 0, 12">
+                                            <Grid ColumnDefinitions="Auto, 14, *, 14, Auto"
+                                                  VerticalAlignment="Center">
+                                                <Border Classes="SciFiIcon">
+                                                    <Svg Path="/Assets/Images/document.svg"
+                                                         Width="20"
+                                                         Height="20" />
+                                                </Border>
+
+                                                <StackPanel Grid.Column="2"
+                                                            Spacing="3"
+                                                            VerticalAlignment="Center">
                                                     <TextBlock Foreground="{DynamicResource HeadlineColor}"
                                                                FontSize="14"
-                                                               FontWeight="SemiBold">
+                                                               FontWeight="SemiBold"
+                                                               TextTrimming="CharacterEllipsis">
                                                         <TextBlock.Text>
                                                             <MultiBinding Converter="{converters:ModsNameConverter}">
                                                                 <Binding Path="." />
@@ -106,7 +178,6 @@
                                                     </TextBlock>
                                                     <TextBlock Foreground="{DynamicResource ContentColor}"
                                                                TextWrapping="Wrap"
-                                                               MinWidth="145"
                                                                LineHeight="20"
                                                                FontSize="12">
                                                         <TextBlock.Text>
@@ -119,15 +190,20 @@
                                                         </TextBlock.Text>
                                                     </TextBlock>
                                                 </StackPanel>
-                                            </StackPanel>
 
-                                        </Grid>
-
-                                    </components:StackFrameBorder>
-                                </DataTemplate>
-                            </ItemsControl.DataTemplates>
-                        </ItemsControl>
-                    </ScrollViewer>
+                                                <CheckBox Grid.Column="4"
+                                                          Classes="SciFiToggle"
+                                                          VerticalAlignment="Center"
+                                                          IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                          CommandParameter="{Binding .}"
+                                                          Command="{Binding ((vm:ModsPageViewModel)DataContext).ChangeOptionalModState, ElementName=ModsListControl}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.DataTemplates>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
 
                 </Grid>
 

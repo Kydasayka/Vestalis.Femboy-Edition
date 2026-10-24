@@ -349,4 +349,25 @@
   <data name="TwoFactorDescription" xml:space="preserve">
     <value>Пожалуйста, введите код подтверждения из вашего приложения аутентификации</value>
   </data>
+  <data name="InterfaceSounds" xml:space="preserve">
+    <value>Звуки интерфейса</value>
+  </data>
+  <data name="InterfaceSoundsDescription" xml:space="preserve">
+    <value>Щелчки, переключатели и другие звуки интерфейса.</value>
+  </data>
+  <data name="ModsSearchTitle" xml:space="preserve">
+    <value>Поиск</value>
+  </data>
+  <data name="ModsSearchPlaceholder" xml:space="preserve">
+    <value>Поиск модов...</value>
+  </data>
+  <data name="ModsEnabled" xml:space="preserve">
+    <value>Включено</value>
+  </data>
+  <data name="ModsTotal" xml:space="preserve">
+    <value>Всего</value>
+  </data>
+  <data name="ModsNoSearchResults" xml:space="preserve">
+    <value>Ничего не найдено. Попробуйте другой запрос.</value>
+  </data>
 </root>

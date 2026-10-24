@@ -12,7 +12,8 @@
              Background="Transparent"
              d:DesignHeight="600"
              x:DataType="vm:OverviewPageViewModel"
-             x:Class="Gml.Launcher.Views.Pages.OverviewPageView">
+             x:Class="Gml.Launcher.Views.Pages.OverviewPageView"
+             Classes="Page">
 
 
     <Grid ColumnDefinitions="Auto, *">

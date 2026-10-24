@@ -60,6 +60,13 @@
                         </rxui:RoutedViewHost.ViewLocator>
                     </rxui:RoutedViewHost>
 
+                    <!-- Server selector -->
+                    <components:ServerSelectorComponent
+                        ZIndex="10"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Margin="0,48,20,0" />
+
                 </Grid>
             </Panel>
         </Border>

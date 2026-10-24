@@ -57,7 +57,12 @@ public class OverviewPageViewModel : PageViewModelBase
     private readonly ISystemService _systemService;
     private readonly IBackendChecker _backendChecker;
     private readonly ISettingsService _settingsService;
+    private readonly IAutoLoginService _autoLoginService;
     private readonly IDisposable? _speedSubscription;
+    private readonly object _sessionRecoveryLock = new();
+    private Task<bool>? _sessionRecoveryTask;
+    private int _logoutRequested;
+    private ILauncherUser _user;
 
     internal OverviewPageViewModel(IScreen screen,
         ILauncherUser user,
@@ -67,10 +72,11 @@ public class OverviewPageViewModel : PageViewModelBase
         IStorageService? storageService = null,
         ISettingsService? settingsService = null,
         IBackendChecker? backendChecker = null,
-        LogHandler? logHandler = null) : base(screen)
+        LogHandler? logHandler = null,
+        IAutoLoginService? autoLoginService = null) : base(screen)
     {
         _mainViewModel = screen as MainWindowViewModel ?? throw new Exception("Not valid screen");
-        User = user;
+        _user = user;
         _onClosed = onClosed;
 
         _logHandler = logHandler
@@ -97,6 +103,10 @@ public class OverviewPageViewModel : PageViewModelBase
                            ?? Locator.Current.GetService<ISettingsService>()
                            ?? throw new ServiceNotFoundException(typeof(ISettingsService));
 
+        _autoLoginService = autoLoginService
+                            ?? Locator.Current.GetService<IAutoLoginService>()
+                            ?? throw new ServiceNotFoundException(typeof(IAutoLoginService));
+
         GoProfileCommand = ReactiveCommand.CreateFromObservable(
             () => screen.Router.Navigate.Execute(new ProfilePageViewModel(screen, User, _gmlManager))
         );
@@ -118,7 +128,7 @@ public class OverviewPageViewModel : PageViewModelBase
                 _gmlManager))
         );
 
-        HomeCommand = ReactiveCommand.Create(async () => await LoadProfiles());
+        HomeCommand = ReactiveCommand.CreateFromTask(() => LoadProfilesSafe());
 
         _gmlManager.ProgressChanged.Subscribe(percentage =>
         {
@@ -162,7 +172,11 @@ public class OverviewPageViewModel : PageViewModelBase
     public ICommand GoSettingsCommand { get; set; }
     public ICommand HomeCommand { get; set; }
     public ListViewModel ListViewModel { get; } = new();
-    public ILauncherUser User { get; }
+    public ILauncherUser User
+    {
+        get => _user;
+        private set => _user = value;
+    }
     public bool BackendIsActive { get; }
 
     [Reactive] public int? LoadingPercentage { get; set; }
@@ -181,7 +195,28 @@ public class OverviewPageViewModel : PageViewModelBase
 
     private async void LoadProfilesAsync(bool eventInfo)
     {
-        await LoadProfiles();
+        await LoadProfilesSafe();
+    }
+
+    private async Task LoadProfilesSafe(bool canRecover = true)
+    {
+        try
+        {
+            await LoadProfiles();
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            SentrySdk.CaptureException(exception);
+            Console.WriteLine(exception);
+
+            if (canRecover && await TryRecoverSessionAsync())
+            {
+                await LoadProfilesSafe(false);
+                return;
+            }
+
+            await OnLogout(CancellationToken.None);
+        }
     }
 
     private void OnProfileChanged(ProfileReadDto? profile)
@@ -233,18 +268,61 @@ public class OverviewPageViewModel : PageViewModelBase
 
     private Task OnLogout(CancellationToken arg)
     {
+        if (Interlocked.Exchange(ref _logoutRequested, 1) == 1)
+            return Task.CompletedTask;
+
         return Dispatcher.UIThread.InvokeAsync(async () =>
         {
             await _storageService.SetAsync<IUser?>(StorageConstants.User, null);
-            _mainViewModel.Router.Navigate.Execute(new LoginPageViewModel(_mainViewModel, _onClosed));
+            await _autoLoginService.ClearCredentialsAsync();
+            _ = _mainViewModel.Router.Navigate.Execute(new LoginPageViewModel(_mainViewModel, _onClosed));
         });
+    }
+
+    private Task<bool> TryRecoverSessionAsync()
+    {
+        lock (_sessionRecoveryLock)
+        {
+            if (_sessionRecoveryTask is { IsCompleted: false })
+                return _sessionRecoveryTask;
+
+            _sessionRecoveryTask = RecoverSessionCoreAsync();
+            return _sessionRecoveryTask;
+        }
+    }
+
+    private async Task<bool> RecoverSessionCoreAsync()
+    {
+        try
+        {
+            var result = await _autoLoginService.TrySignInAsync();
+
+            if (!result.IsAuthenticated || result.User is null)
+                return false;
+
+            User = result.User;
+            return true;
+        }
+        finally
+        {
+            lock (_sessionRecoveryLock)
+            {
+                _sessionRecoveryTask = null;
+            }
+        }
     }
 
     private async Task StartGame()
     {
+        await StartGameCore(true);
+    }
+
+    private async Task StartGameCore(bool canRecover)
+    {
         var tokenSource = new CancellationTokenSource();
         var cancellationToken = tokenSource.Token;
         var disposable =  new CompositeDisposable();
+        var retrying = false;
 
         await ExecuteFromNewThread(async () =>
         {
@@ -266,6 +344,15 @@ public class OverviewPageViewModel : PageViewModelBase
             }
             catch (UnauthorizedAccessException)
             {
+                if (canRecover && await TryRecoverSessionAsync())
+                {
+                    retrying = true;
+                    disposable.Dispose();
+
+                    await StartGameCore(false);
+                    return;
+                }
+
                 await OnLogout(CancellationToken.None);
             }
             catch (ProfileNotLoadedException exception)
@@ -316,13 +403,16 @@ public class OverviewPageViewModel : PageViewModelBase
             }
             finally
             {
-                disposable.Dispose();
-                Dispatcher.UIThread.Invoke(() => _mainViewModel._gameLaunched.OnNext(false));
-                UpdateProgress(string.Empty, string.Empty, false);
-                if (!_backendChecker.IsOffline)
+                if (!retrying)
                 {
-                    await _gmlManager.UpdateDiscordRpcState(
-                        LocalizationService.GetString(ResourceKeysDictionary.DefaultDRpcText));
+                    disposable.Dispose();
+                    Dispatcher.UIThread.Invoke(() => _mainViewModel._gameLaunched.OnNext(false));
+                    UpdateProgress(string.Empty, string.Empty, false);
+                    if (!_backendChecker.IsOffline)
+                    {
+                        await _gmlManager.UpdateDiscordRpcState(
+                            LocalizationService.GetString(ResourceKeysDictionary.DefaultDRpcText));
+                    }
                 }
             }
         });
@@ -439,6 +529,11 @@ public class OverviewPageViewModel : PageViewModelBase
 
     private async void LoadData()
     {
+        await LoadDataAsync(true);
+    }
+
+    private async Task LoadDataAsync(bool canRecover)
+    {
         try
         {
             await LoadProfiles();
@@ -450,6 +545,19 @@ public class OverviewPageViewModel : PageViewModelBase
                 await _gmlManager.UpdateDiscordRpcState(
                     LocalizationService.GetString(ResourceKeysDictionary.DefaultDRpcText));
             }
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            SentrySdk.CaptureException(exception);
+            Console.WriteLine(exception);
+
+            if (canRecover && await TryRecoverSessionAsync())
+            {
+                await LoadDataAsync(false);
+                return;
+            }
+
+            await OnLogout(CancellationToken.None);
         }
         catch (TaskCanceledException exception)
         {

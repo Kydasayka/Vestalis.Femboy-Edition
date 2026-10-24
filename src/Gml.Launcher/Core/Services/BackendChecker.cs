@@ -17,6 +17,7 @@ namespace Gml.Launcher.Core.Services;
 
 public class BackendChecker: IBackendChecker
 {
+    private static readonly TimeSpan BackendCheckTimeout = TimeSpan.FromSeconds(10);
     private readonly IGmlClientManager _manager;
     public IGmlClientManager Manager => _manager;
     public bool IsOffline => GlobalVariables.BackendInactive;
@@ -37,7 +38,7 @@ public class BackendChecker: IBackendChecker
     {
         try
         {
-            return GmlClientManager.CheckApiAsync(_manager.HostUri.ToString());
+            return GmlClientManager.CheckApiAsync(_manager.HostUri.ToString(), BackendCheckTimeout);
         }
         catch (TaskCanceledException exception)
         {

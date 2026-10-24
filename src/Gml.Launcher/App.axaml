@@ -32,6 +32,7 @@
         <StyleInclude Source="/Views/Components/ProgressBar.axaml" />
         <StyleInclude Source="/Views/Components/OnlineComponent.axaml" />
         <StyleInclude Source="/Views/Components/NewsComponent.axaml" />
+        <StyleInclude Source="/Views/Components/SciFiToggle.axaml" />
 
         <StyleInclude Source="Assets/Styles/Classes.axaml" />
 

@@ -170,7 +170,11 @@ public class SplashScreenViewModel : WindowViewModelBase
             .ConfigureAwait(false);
 
         if (userData.User.IsAuth)
-            return userData.User.IsAuth;
+        {
+            // The backend may rotate the access token while validating it.
+            await _storageService.SetAsync(StorageConstants.User, userData.User).ConfigureAwait(false);
+            return true;
+        }
 
         await _storageService.SetAsync<ILauncherUser?>(StorageConstants.User, null).ConfigureAwait(false);
 
@@ -200,33 +204,10 @@ public class SplashScreenViewModel : WindowViewModelBase
     private static async Task InitializeSentryAsync()
     {
         Debug.WriteLine($"[Gml][{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] Start sentry initialization");
-        var manager = Locator.Current.GetService<IGmlClientManager>() ?? throw new ServiceNotFoundException(typeof(IGmlClientManager));
-        var sentryUrl = await GmlClientManager.GetSentryLinkAsync(manager.HostUri.ToString());
 
-        try
-        {
-            if (!string.IsNullOrEmpty(sentryUrl))
-                await Task.Run(() =>
-                {
-                    SentrySdk.Init(options =>
-                    {
-                        options.Dsn = sentryUrl;
-#if DEBUG
-                    options.Debug = true;
-#endif
-                        options.TracesSampleRate = 1.0;
-                        options.DiagnosticLevel = SentryLevel.Debug;
-                        options.IsGlobalModeEnabled = true;
-                        options.SendDefaultPii = true;
-                        options.MaxAttachmentSize = 10 * 1024 * 1024;
-                    });
-                });
+        var manager = Locator.Current.GetService<IGmlClientManager>()
+            ?? throw new ServiceNotFoundException(typeof(IGmlClientManager));
 
-            Debug.WriteLine($"[Gml][{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] Sentry initialized");
-        }
-        catch (Exception exception)
-        {
-            Console.WriteLine(exception);
-        }
+        await SentryInitializer.RefreshAsync(manager.HostUri.ToString()).ConfigureAwait(false);
     }
 }

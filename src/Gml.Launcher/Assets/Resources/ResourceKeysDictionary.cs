@@ -45,7 +45,16 @@ public static class ResourceKeysDictionary
     public const string NewsOffline = "NewsOffline";
     public const string NewsEmptyTitle = "NewsEmptyTitle";
     public const string NewsEmptyContent = "NewsEmptyContent";
-    public const string Host = "https://201.58.180.2/";
-    public const string SecondaryHost = "https://201.58.180.2/";
+    public const string Host = "https://201-58-180-2.sslip.io/";
+    public const string SecondaryHost = "https://201-58-180-2.sslip.io/";
+
+    // Alternative servers available in the server selector.
+    // PL1 has a certificate issued for the sslip.io alias of its address, so the
+    // bare IP must never be used: Java clients reject a certificate without a matching SAN.
+    public const string ServerPl1Host = "https://201-58-180-2.sslip.io/";
+    public const string ServerRu2Host = "https://msk1.gmlfr.vestalis.xyz/";
+    public const string ServerRu1Host = "https://gmlfrr.vestalis.xyz/";
+    public const string ServerEu1Host = "https://gmlfr.vestalis.xyz/";
+
     public const string FolderName = "Vestalis";
 }

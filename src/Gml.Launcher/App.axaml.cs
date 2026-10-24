@@ -2,6 +2,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Gml.Launcher.Core.Services;
 using Gml.Launcher.ViewModels;
 using Gml.Launcher.Views;
 using Gml.Launcher.Views.SplashScreen;
@@ -19,6 +20,8 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            SoundService.Install();
+
             var splashViewModel = new SplashScreenViewModel();
             var splashScreen = new SplashScreen
             {

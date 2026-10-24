@@ -30,8 +30,17 @@ public static class ServiceLocator
         var manager = RegisterGmlManager(systemService, installationDirectory, arguments);
         var storageService = RegisterStorage();
 
+        Locator.CurrentMutable.RegisterConstant(
+            new AutoLoginService(storageService, manager, systemService),
+            typeof(IAutoLoginService));
+
+        if (!ApplySavedHost(storageService, manager))
+            manager.ChangeHost(
+                GmlClientManager.CheckApiStatus(ResourceKeysDictionary.Host, ResourceKeysDictionary.SecondaryHost));
+
         CheckAndChangeInstallationFolder(storageService, manager);
         CheckAndChangeLanguage(storageService, systemService);
+        ApplySoundSettings(storageService);
         Locator.CurrentMutable.RegisterConstant(new VpnChecker(), typeof(IVpnChecker));
         Locator.CurrentMutable.RegisterConstant(new BackendChecker(), typeof(IBackendChecker));
         Locator.CurrentMutable.RegisterConstant(new SettingsService(
@@ -80,6 +89,26 @@ public static class ServiceLocator
         return storageService;
     }
 
+    /// <summary>
+    /// Restores the interface-sound preference before the first page is shown, so the very first
+    /// click already follows the user's choice.
+    /// </summary>
+    private static void ApplySoundSettings(LocalStorageService storageService)
+    {
+        try
+        {
+            var settings = storageService.GetAsync<SettingsInfo>(StorageConstants.Settings).Result;
+            SoundService.IsEnabled = settings?.InterfaceSounds ?? true;
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine(
+                $"[Gml][{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] Failed to read sound settings: {exception.Message}");
+
+            SoundService.IsEnabled = true;
+        }
+    }
+
     private static void CheckAndChangeInstallationFolder(LocalStorageService storageService, GmlClientManager manager)
     {
         var installationDirectory = storageService.GetAsync<string>(StorageConstants.InstallationDirectory).Result;
@@ -87,10 +116,41 @@ public static class ServiceLocator
         if (!string.IsNullOrEmpty(installationDirectory)) manager.ChangeInstallationFolder(installationDirectory);
     }
 
+    private static bool ApplySavedHost(LocalStorageService storageService, GmlClientManager manager)
+    {
+        try
+        {
+            var savedHost = storageService.GetAsync<string>(StorageConstants.ServerHost).Result;
+
+            if (string.IsNullOrWhiteSpace(savedHost))
+                return false;
+
+            // The saved address may no longer be served: PL1 used to be addressed by its bare
+            // IP, which its certificate does not cover. Fall back to the configured default
+            // instead of trying to reach a host the backend cannot authenticate.
+            if (GmlServers.FindByHost(savedHost) is not { } server)
+            {
+                Debug.WriteLine(
+                    $"[Gml][{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] Ignoring outdated saved server '{savedHost}'");
+
+                storageService.SetAsync<string?>(StorageConstants.ServerHost, null).Wait();
+                return false;
+            }
+
+            manager.ChangeHost(server.Host);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"[Gml][{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] Failed to apply saved server: {exception.Message}");
+            return false;
+        }
+    }
+
     private static GmlClientManager RegisterGmlManager(SystemService systemService, string installationDirectory,
         string[] arguments)
     {
-        var gateWay = GmlClientManager.CheckApiStatus(ResourceKeysDictionary.Host, ResourceKeysDictionary.SecondaryHost);
+        var gateWay = ResourceKeysDictionary.Host;
 
         var manager = new GmlClientManager(
             installationDirectory,
