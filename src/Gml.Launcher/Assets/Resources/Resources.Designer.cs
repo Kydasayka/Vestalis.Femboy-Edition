@@ -775,6 +775,42 @@ namespace Gml.Launcher.Assets.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Device identifier.
+        /// </summary>
+        public static string HwidTitle {
+            get {
+                return ResourceManager.GetString("HwidTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Send HWID.
+        /// </summary>
+        public static string HwidSend {
+            get {
+                return ResourceManager.GetString("HwidSend", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Sent to the server when signing in..
+        /// </summary>
+        public static string HwidDescription {
+            get {
+                return ResourceManager.GetString("HwidDescription", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to If the server says the user is blocked, try turning this off..
+        /// </summary>
+        public static string HwidLoginHint {
+            get {
+                return ResourceManager.GetString("HwidLoginHint", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Search.
         /// </summary>
         public static string ModsSearchTitle {

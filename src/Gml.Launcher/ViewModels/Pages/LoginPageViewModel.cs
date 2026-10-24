@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Reactive.Concurrency;
+using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -29,7 +30,7 @@ public class LoginPageViewModel : PageViewModelBase
     private readonly MainWindowViewModel _screen;
     private readonly IBackendChecker _backendChecker;
     private readonly IStorageService _storageService;
-    private readonly ISystemService _systemService;
+    private readonly ISettingsService _settingsService;
     private readonly IAutoLoginService _autoLoginService;
     private ObservableCollection<string> _errorList = [];
     private bool _isProcessing;
@@ -39,10 +40,10 @@ public class LoginPageViewModel : PageViewModelBase
         IObservable<bool> onClosed,
         IGmlClientManager? gmlClientManager = null,
         IStorageService? storageService = null,
-        ISystemService? systemService = null,
         IBackendChecker? backendChecker = null,
         ILocalizationService? localizationService = null,
-        IAutoLoginService? autoLoginService = null) : base(screen, localizationService)
+        IAutoLoginService? autoLoginService = null,
+        ISettingsService? settingsService = null) : base(screen, localizationService)
     {
         _screen = (MainWindowViewModel)screen;
         _onClosed = onClosed;
@@ -50,10 +51,6 @@ public class LoginPageViewModel : PageViewModelBase
         _storageService = storageService
                           ?? Locator.Current.GetService<IStorageService>()
                           ?? throw new ServiceNotFoundException(typeof(IStorageService));
-
-        _systemService = systemService
-                         ?? Locator.Current.GetService<ISystemService>()
-                         ?? throw new ServiceNotFoundException(typeof(IStorageService));
 
         _gmlClientManager = gmlClientManager
                             ?? Locator.Current.GetService<IGmlClientManager>()
@@ -67,11 +64,21 @@ public class LoginPageViewModel : PageViewModelBase
                             ?? Locator.Current.GetService<IAutoLoginService>()
                             ?? throw new ServiceNotFoundException(typeof(IAutoLoginService));
 
+        _settingsService = settingsService
+                           ?? Locator.Current.GetService<ISettingsService>()
+                           ?? throw new ServiceNotFoundException(typeof(ISettingsService));
+
 
         _screen.OnClosed.Subscribe(DisposeConnections);
 
         LoginCommand = ReactiveCommand.CreateFromTask(OnAuth);
         Verify2FaCommand = ReactiveCommand.CreateFromTask(OnVerify2Fa);
+
+        // The preference can be flipped right on this page, because a backend that blocks the
+        // device by HWID would otherwise leave no way to sign in and reach the settings page.
+        this.WhenAnyValue(x => x.SendHwid)
+            .Skip(1)
+            .Subscribe(OnSendHwidChanged);
 
         RxApp.MainThreadScheduler.Schedule(CheckAuth);
     }
@@ -80,6 +87,9 @@ public class LoginPageViewModel : PageViewModelBase
     [Reactive] public string Password { get; set; }
     [Reactive] public string TwoFactorCode { get; set; }
     [Reactive] public bool Is2FaVisible { get; set; }
+
+    /// <summary>Mirrors <see cref="SettingsInfo.SendHwid"/> so it can be changed before signing in.</summary>
+    [Reactive] public bool SendHwid { get; set; } = true;
 
     public bool IsProcessing
     {
@@ -111,6 +121,10 @@ public class LoginPageViewModel : PageViewModelBase
 
     private async void CheckAuth()
     {
+        // Load the preference first: the silent sign-in below sends the HWID and must already
+        // respect the toggle.
+        await LoadHwidSettingAsync();
+
         var authUser = await _storageService.GetAsync<AuthLauncherUser>(StorageConstants.User);
 
         if (authUser is { IsAuth: true } && authUser.ExpiredDate > DateTime.Now)
@@ -121,6 +135,33 @@ public class LoginPageViewModel : PageViewModelBase
         }
 
         await TryAutoLoginAsync();
+    }
+
+    private async Task LoadHwidSettingAsync()
+    {
+        try
+        {
+            var settings = await _settingsService.GetSettings();
+            SendHwid = settings.SendHwid;
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"[Hwid] Failed to read the HWID preference: {exception}");
+            SentrySdk.CaptureException(exception);
+        }
+    }
+
+    private async void OnSendHwidChanged(bool sendHwid)
+    {
+        try
+        {
+            await _settingsService.SetHwidSendingEnabledAsync(sendHwid);
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"[Hwid] Failed to save the HWID preference: {exception}");
+            SentrySdk.CaptureException(exception);
+        }
     }
 
     private async Task TryAutoLoginAsync()
@@ -211,7 +252,8 @@ public class LoginPageViewModel : PageViewModelBase
             Errors.Clear();
 
             Debug.WriteLine("Starting authentication...");
-            var authInfo = await _gmlClientManager.Auth(Login, Password, _systemService.GetHwid());
+            var hwid = await _settingsService.GetHwidForAuthAsync();
+            var authInfo = await _gmlClientManager.Auth(Login, Password, hwid);
             Debug.WriteLine($"Auth response - IsAuth: {authInfo.User?.IsAuth}, Has2Fa: {authInfo.User?.Has2Fa}");
             Debug.WriteLine($"Auth message: {authInfo.Message}");
             Debug.WriteLine($"Auth details: {string.Join(", ", authInfo.Details)}");
@@ -288,7 +330,8 @@ public class LoginPageViewModel : PageViewModelBase
             Errors.Clear();
 
             Debug.WriteLine($"Verifying 2FA code: {TwoFactorCode}");
-            var authInfo = await _gmlClientManager.AuthWith2Fa(Login, Password, _systemService.GetHwid(), TwoFactorCode);
+            var hwid = await _settingsService.GetHwidForAuthAsync();
+            var authInfo = await _gmlClientManager.AuthWith2Fa(Login, Password, hwid, TwoFactorCode);
             Debug.WriteLine($"2FA verification response - IsAuth: {authInfo.User?.IsAuth}, Has2Fa: {authInfo.User?.Has2Fa}");
             Debug.WriteLine($"2FA verification message: {authInfo.Message}");
             Debug.WriteLine($"2FA verification details: {string.Join(", ", authInfo.Details)}");

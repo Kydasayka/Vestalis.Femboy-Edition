@@ -30,8 +30,11 @@ public static class ServiceLocator
         var manager = RegisterGmlManager(systemService, installationDirectory, arguments);
         var storageService = RegisterStorage();
 
+        var settingsService = new SettingsService(systemService, storageService);
+        Locator.CurrentMutable.RegisterConstant(settingsService, typeof(ISettingsService));
+
         Locator.CurrentMutable.RegisterConstant(
-            new AutoLoginService(storageService, manager, systemService),
+            new AutoLoginService(storageService, manager, settingsService),
             typeof(IAutoLoginService));
 
         if (!ApplySavedHost(storageService, manager))
@@ -43,12 +46,6 @@ public static class ServiceLocator
         ApplySoundSettings(storageService);
         Locator.CurrentMutable.RegisterConstant(new VpnChecker(), typeof(IVpnChecker));
         Locator.CurrentMutable.RegisterConstant(new BackendChecker(), typeof(IBackendChecker));
-        Locator.CurrentMutable.RegisterConstant(new SettingsService(
-                GetRequiredService<ISystemService>(),
-                GetRequiredService<IStorageService>()
-            ),
-            typeof(ISettingsService)
-        );
 
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
@@ -58,11 +55,6 @@ public static class ServiceLocator
         Debug.WriteLine($"[Gml][{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] Configuring ended");
 
         return builder;
-    }
-
-    private static T GetRequiredService<T>()
-    {
-        return Locator.Current.GetService<T>() ?? throw new Exception();
     }
 
     private static void RegisterLogHelper(SystemService systemService)

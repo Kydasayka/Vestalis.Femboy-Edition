@@ -31,4 +31,22 @@ public class SettingsService(ISystemService system, IStorageService storage) : I
     {
         return storage.SetAsync(StorageConstants.InstallationDirectory, installationFolder);
     }
+
+    public async Task<string?> GetHwidForAuthAsync()
+    {
+        var settings = await GetSettings();
+
+        return settings.SendHwid ? system.GetHwid() : null;
+    }
+
+    public async Task SetHwidSendingEnabledAsync(bool enabled)
+    {
+        var settings = await GetSettings();
+
+        if (settings.SendHwid == enabled)
+            return;
+
+        settings.SendHwid = enabled;
+        await UpdateSettingsAsync(settings);
+    }
 }

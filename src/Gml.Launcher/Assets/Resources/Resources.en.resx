@@ -357,6 +357,18 @@ To exit offline mode, make sure that the server is available, and then restart t
   <data name="InterfaceSoundsDescription" xml:space="preserve">
     <value>Clicks, toggles and other interface feedback.</value>
   </data>
+  <data name="HwidTitle" xml:space="preserve">
+    <value>Device identifier</value>
+  </data>
+  <data name="HwidSend" xml:space="preserve">
+    <value>Send HWID</value>
+  </data>
+  <data name="HwidDescription" xml:space="preserve">
+    <value>Sent to the server when signing in. Turn it off if the server wrongly reports this device as blocked.</value>
+  </data>
+  <data name="HwidLoginHint" xml:space="preserve">
+    <value>If the server says the user is blocked, try turning this off.</value>
+  </data>
   <data name="ModsSearchTitle" xml:space="preserve">
     <value>Search</value>
   </data>

@@ -17,7 +17,8 @@ public record SettingsInfo
         string? customJvmArguments = null,
         int? xmsRamValueMb = null,
         int? xmxRamValueMb = null,
-        bool interfaceSounds = true)
+        bool interfaceSounds = true,
+        bool sendHwid = true)
     {
         GameHeight = gameHeight;
         GameWidth = gameWidth;
@@ -29,6 +30,7 @@ public record SettingsInfo
         XmsRamValueMb = xmsRamValueMb;
         XmxRamValueMb = xmxRamValueMb;
         InterfaceSounds = interfaceSounds;
+        SendHwid = sendHwid;
     }
 
     public int GameWidth { get; set; }
@@ -49,6 +51,12 @@ public record SettingsInfo
 
     /// <summary>Whether the launcher plays its interface sounds.</summary>
     public bool InterfaceSounds { get; set; } = true;
+
+    /// <summary>
+    /// Whether the hardware ID is sent to the backend on sign-in. Some backends reject a device
+    /// that was blocked by mistake, so the check can be turned off from the settings.
+    /// </summary>
+    public bool SendHwid { get; set; } = true;
 
     public static SettingsInfo Default =>
         new SettingsInfo(900, 600, false, false, 8192, CultureInfo.CurrentUICulture.Name,

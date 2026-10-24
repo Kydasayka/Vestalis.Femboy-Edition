@@ -13,16 +13,16 @@ public sealed class AutoLoginService : IAutoLoginService
 {
     private readonly IGmlClientManager _gmlClientManager;
     private readonly IStorageService _storageService;
-    private readonly ISystemService _systemService;
+    private readonly ISettingsService _settingsService;
 
     public AutoLoginService(
         IStorageService storageService,
         IGmlClientManager gmlClientManager,
-        ISystemService systemService)
+        ISettingsService settingsService)
     {
         _storageService = storageService;
         _gmlClientManager = gmlClientManager;
-        _systemService = systemService;
+        _settingsService = settingsService;
     }
 
     public async Task<SavedLogin?> GetSavedLoginAsync()
@@ -69,7 +69,8 @@ public sealed class AutoLoginService : IAutoLoginService
 
         try
         {
-            var authResult = await _gmlClientManager.Auth(saved.Login, saved.Password, _systemService.GetHwid());
+            var hwid = await _settingsService.GetHwidForAuthAsync();
+            var authResult = await _gmlClientManager.Auth(saved.Login, saved.Password, hwid);
 
             if (authResult.User is { IsAuth: true })
             {

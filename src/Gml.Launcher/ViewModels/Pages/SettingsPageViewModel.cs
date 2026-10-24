@@ -51,17 +51,15 @@ public class SettingsPageViewModel : PageViewModelBase
                 x => x.FullScreen,
                 x => x.SelectedLanguage,
                 x => x.CustomJvmArguments)
-            .Select(settings => (settings.Item1, settings.Item2, settings.Item3,
-                settings.Item4, settings.Item5, settings.Item6, settings.Item7, InterfaceSounds));
+            .Select(_ => CreateUpdate());
 
-        // Toggling the sound switch alone does not touch the values above, so it is merged in
+        // Toggling a switch alone does not touch the values above, so the switches are merged in
         // separately to keep the whole settings object in sync.
-        var soundsChanged = this.WhenAnyValue(x => x.InterfaceSounds)
-            .Select(interfaceSounds => (XmsRamValue, XmxRamValue, WindowWidth, WindowHeight,
-                FullScreen, SelectedLanguage, CustomJvmArguments, interfaceSounds));
+        var switchesChanged = this.WhenAnyValue(x => x.InterfaceSounds, x => x.SendHwid)
+            .Select(_ => CreateUpdate());
 
         settingsChanged
-            .Merge(soundsChanged)
+            .Merge(switchesChanged)
             .Where(ValidateParams)
             .Throttle(TimeSpan.FromMilliseconds(400), RxApp.TaskpoolScheduler)
             .ObserveOn(RxApp.TaskpoolScheduler)
@@ -79,30 +77,45 @@ public class SettingsPageViewModel : PageViewModelBase
         RxApp.TaskpoolScheduler.Schedule(LoadSettings);
     }
 
-    private bool ValidateParams(
-        (double xmsRamValue, double xmxRamValue, string width, string height,
-            bool isFullScreen, Language? selectedLanguage, string? customJvmArguments,
-            bool interfaceSounds) update)
+    private bool ValidateParams(SettingsUpdate update)
     {
-        if (update.xmsRamValue < MinXmsRamMb ||
-            update.xmxRamValue < MinXmxRamMb ||
-            update.xmsRamValue > update.xmxRamValue ||
-            update.xmxRamValue > MaxJvmRamValue)
+        if (update.XmsRamValue < MinXmsRamMb ||
+            update.XmxRamValue < MinXmxRamMb ||
+            update.XmsRamValue > update.XmxRamValue ||
+            update.XmxRamValue > MaxJvmRamValue)
         {
             return false;
         }
 
-        if (!int.TryParse(update.width, out var width) || width <= 0)
+        if (!int.TryParse(update.WindowWidth, out var width) || width <= 0)
             return false;
 
-        if (!int.TryParse(update.height, out var height) || height <= 0)
+        if (!int.TryParse(update.WindowHeight, out var height) || height <= 0)
             return false;
 
         return true;
     }
 
+    private SettingsUpdate CreateUpdate()
+    {
+        return new SettingsUpdate(XmsRamValue, XmxRamValue, WindowWidth, WindowHeight, FullScreen,
+            SelectedLanguage, CustomJvmArguments, InterfaceSounds, SendHwid);
+    }
+
+    private sealed record SettingsUpdate(
+        double XmsRamValue,
+        double XmxRamValue,
+        string WindowWidth,
+        string WindowHeight,
+        bool FullScreen,
+        Language? SelectedLanguage,
+        string? CustomJvmArguments,
+        bool InterfaceSounds,
+        bool SendHwid);
+
     [Reactive] public bool FullScreen { get; set; }
     [Reactive] public bool InterfaceSounds { get; set; } = true;
+    [Reactive] public bool SendHwid { get; set; } = true;
     [Reactive] public string CustomJvmArguments { get; set; } = string.Empty;
     [Reactive] public double MinJvmRamValue { get; set; } = MinXmsRamMb;
     [Reactive] public double MinXmxRamValue { get; set; } = MinXmxRamMb;
@@ -221,6 +234,7 @@ public class SettingsPageViewModel : PageViewModelBase
         WindowHeight = settings.GameHeight.ToString(CultureInfo.InvariantCulture);
         FullScreen = settings.FullScreen;
         InterfaceSounds = settings.InterfaceSounds;
+        SendHwid = settings.SendHwid;
         SoundService.IsEnabled = settings.InterfaceSounds;
         CustomJvmArguments = settings.CustomJvmArguments ?? string.Empty;
         SelectedLanguage = AvailableLanguages.FirstOrDefault(c => c.Culture.Name == settings.LanguageCode);
@@ -255,26 +269,24 @@ public class SettingsPageViewModel : PageViewModelBase
         }
     }
 
-    private async void SaveSettings(
-        (double xmsRamValue, double xmxRamValue, string width, string height,
-            bool isFullScreen, Language? selectedLanguage, string? customJvmArguments,
-            bool interfaceSounds) update)
+    private async void SaveSettings(SettingsUpdate update)
     {
         try
         {
-            SoundService.IsEnabled = update.interfaceSounds;
+            SoundService.IsEnabled = update.InterfaceSounds;
 
             var newSettings = new SettingsInfo(
-                int.Parse(update.width, CultureInfo.InvariantCulture),
-                int.Parse(update.height, CultureInfo.InvariantCulture),
-                update.isFullScreen,
+                int.Parse(update.WindowWidth, CultureInfo.InvariantCulture),
+                int.Parse(update.WindowHeight, CultureInfo.InvariantCulture),
+                update.FullScreen,
                 false,
-                update.xmxRamValue,
-                update.selectedLanguage?.Culture.Name,
-                update.customJvmArguments,
-                Convert.ToInt32(update.xmsRamValue),
-                Convert.ToInt32(update.xmxRamValue),
-                update.interfaceSounds);
+                update.XmxRamValue,
+                update.SelectedLanguage?.Culture.Name,
+                update.CustomJvmArguments,
+                Convert.ToInt32(update.XmsRamValue),
+                Convert.ToInt32(update.XmxRamValue),
+                update.InterfaceSounds,
+                update.SendHwid);
 
             await _settingsService.UpdateSettingsAsync(newSettings);
         }

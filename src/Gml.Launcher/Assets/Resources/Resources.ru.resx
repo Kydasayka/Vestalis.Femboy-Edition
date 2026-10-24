@@ -355,6 +355,18 @@
   <data name="InterfaceSoundsDescription" xml:space="preserve">
     <value>Щелчки, переключатели и другие звуки интерфейса.</value>
   </data>
+  <data name="HwidTitle" xml:space="preserve">
+    <value>Идентификатор устройства</value>
+  </data>
+  <data name="HwidSend" xml:space="preserve">
+    <value>Отправлять HWID</value>
+  </data>
+  <data name="HwidDescription" xml:space="preserve">
+    <value>Передаётся серверу при входе. Выключите, если сервер ошибочно считает это устройство заблокированным.</value>
+  </data>
+  <data name="HwidLoginHint" xml:space="preserve">
+    <value>Если сервер пишет «Пользователь заблокирован», попробуйте выключить.</value>
+  </data>
   <data name="ModsSearchTitle" xml:space="preserve">
     <value>Поиск</value>
   </data>
