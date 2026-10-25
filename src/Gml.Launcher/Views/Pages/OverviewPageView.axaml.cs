@@ -39,6 +39,14 @@ public partial class OverviewPageView : ReactiveUserControl<OverviewPageViewMode
         if (_profileHost is null || _profileShift is null)
             return;
 
+        // The profile list loads in the background and raises this event from a worker thread.
+        // Touching Transitions from there throws "Call from invalid thread", so hop to the UI thread.
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(AnimateProfileChange);
+            return;
+        }
+
         var hostTransitions = _profileHost.Transitions;
         var shiftTransitions = _profileShift.Transitions;
 
