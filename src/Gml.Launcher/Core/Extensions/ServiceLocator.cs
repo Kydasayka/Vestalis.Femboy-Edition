@@ -17,7 +17,7 @@ namespace Gml.Launcher.Core.Extensions;
 
 public static class ServiceLocator
 {
-    public static AppBuilder RegisterServices(this AppBuilder builder, string[] arguments)
+    public static AppBuilder RegisterServices(this AppBuilder builder)
     {
         var systemService = new SystemService();
 
@@ -27,7 +27,7 @@ public static class ServiceLocator
         RegisterLocalizationService();
         RegisterSystemService(systemService);
         RegisterLogHelper(systemService);
-        var manager = RegisterGmlManager(systemService, installationDirectory, arguments);
+        var manager = RegisterGmlManager(systemService, installationDirectory);
         var storageService = RegisterStorage();
 
         var settingsService = new SettingsService(systemService, storageService);
@@ -139,8 +139,7 @@ public static class ServiceLocator
         }
     }
 
-    private static GmlClientManager RegisterGmlManager(SystemService systemService, string installationDirectory,
-        string[] arguments)
+    private static GmlClientManager RegisterGmlManager(SystemService systemService, string installationDirectory)
     {
         var gateWay = ResourceKeysDictionary.Host;
 
@@ -150,11 +149,6 @@ public static class ServiceLocator
             new GameLoader(),
             ResourceKeysDictionary.FolderName,
             systemService.GetOsType());
-#if DEBUG
-        manager.SkipUpdate = true;
-#else
-        manager.SkipUpdate = arguments.Contains("-skip-update");
-#endif
 
         Locator.CurrentMutable.RegisterConstant(manager, typeof(IGmlClientManager));
 

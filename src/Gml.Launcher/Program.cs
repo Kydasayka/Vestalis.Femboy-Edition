@@ -39,7 +39,7 @@ internal class Program
             Debug.WriteLine($"[Gml][{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] Application started");
             //InitializeSentry();
             RxApp.DefaultExceptionHandler = Observer.Create<Exception>(GlobalExceptionHandler);
-            BuildAvaloniaApp(args)
+            BuildAvaloniaApp()
                 .StartWithClassicDesktopLifetime(args);
         }
         catch (Exception exception)
@@ -62,18 +62,18 @@ internal class Program
         return AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .WithInterFont()
-            .RegisterServices([])
+            .RegisterServices()
             .LogToTrace()
             .UseReactiveUI();
     }
 #else
-    public static AppBuilder BuildAvaloniaApp(string[] args)
+    public static AppBuilder BuildAvaloniaApp()
     {
         Debug.WriteLine($"[Gml][{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] Configuring launcher");
         return AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .WithInterFont()
-            .RegisterServices(args)
+            .RegisterServices()
             .LogToTrace()
             .UseReactiveUI();
     }
