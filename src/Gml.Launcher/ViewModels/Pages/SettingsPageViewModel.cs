@@ -230,15 +230,20 @@ public class SettingsPageViewModel : PageViewModelBase
 
     private void UpdateSettings(SettingsInfo settings)
     {
-        WindowWidth = settings.GameWidth.ToString(CultureInfo.InvariantCulture);
-        WindowHeight = settings.GameHeight.ToString(CultureInfo.InvariantCulture);
-        FullScreen = settings.FullScreen;
-        InterfaceSounds = settings.InterfaceSounds;
-        SendHwid = settings.SendHwid;
-        SoundService.IsEnabled = settings.InterfaceSounds;
-        CustomJvmArguments = settings.CustomJvmArguments ?? string.Empty;
-        SelectedLanguage = AvailableLanguages.FirstOrDefault(c => c.Culture.Name == settings.LanguageCode);
-        InstallationFolder = _gmlManager.InstallationDirectory;
+        // Restoring the saved values also sets the language ComboBox selection programmatically.
+        // That raises SelectionChanged just like a click, so keep it silent.
+        using (SoundService.Suppress())
+        {
+            WindowWidth = settings.GameWidth.ToString(CultureInfo.InvariantCulture);
+            WindowHeight = settings.GameHeight.ToString(CultureInfo.InvariantCulture);
+            FullScreen = settings.FullScreen;
+            InterfaceSounds = settings.InterfaceSounds;
+            SendHwid = settings.SendHwid;
+            SoundService.IsEnabled = settings.InterfaceSounds;
+            CustomJvmArguments = settings.CustomJvmArguments ?? string.Empty;
+            SelectedLanguage = AvailableLanguages.FirstOrDefault(c => c.Culture.Name == settings.LanguageCode);
+            InstallationFolder = _gmlManager.InstallationDirectory;
+        }
 
         // Migrate settings from the old single-RAM slider. Previously automatic mode
         // used the profile's recommendation, so use 8 GB as the new starting point.

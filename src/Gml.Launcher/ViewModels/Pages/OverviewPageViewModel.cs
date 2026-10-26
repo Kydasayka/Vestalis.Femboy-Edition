@@ -136,7 +136,9 @@ public class OverviewPageViewModel : PageViewModelBase
                 LoadingPercentage = percentage;
         });
 
-        _gmlManager.ProfilesChanges.Subscribe(LoadProfilesAsync);
+        _gmlManager.ProfilesChanges
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(LoadProfilesAsync);
 
         _closeEvent ??= onClosed.Subscribe(KillGameProcess);
         _profileNameChanged ??= ListViewModel.ProfileChanged.Subscribe(OnProfileChanged);
@@ -637,15 +639,20 @@ public class OverviewPageViewModel : PageViewModelBase
             profilesData = await _gmlManager.GetProfiles(User.AccessToken);
         }
 
-        ListViewModel.Profiles = new ObservableCollection<ProfileReadDto>(profilesData.Data ?? []);
-
         var lastSelectedProfileName = await _storageService.GetAsync<string>(StorageConstants.LastSelectedProfileName);
 
-        if (!string.IsNullOrEmpty(lastSelectedProfileName) &&
-            ListViewModel.Profiles.FirstOrDefault(c => c.Name == lastSelectedProfileName) is { } profile)
-            ListViewModel.SelectedProfile = profile;
+        // Rebuilding the collection re-selects the current profile, which raises SelectionChanged
+        // exactly like a real click. Silence the sounds for the duration of the update.
+        using (SoundService.Suppress())
+        {
+            ListViewModel.Profiles = new ObservableCollection<ProfileReadDto>(profilesData.Data ?? []);
 
-        ListViewModel.SelectedProfile ??= ListViewModel.Profiles.FirstOrDefault();
+            if (!string.IsNullOrEmpty(lastSelectedProfileName) &&
+                ListViewModel.Profiles.FirstOrDefault(c => c.Name == lastSelectedProfileName) is { } profile)
+                ListViewModel.SelectedProfile = profile;
+
+            ListViewModel.SelectedProfile ??= ListViewModel.Profiles.FirstOrDefault();
+        }
 
         // НОВОЕ: Устанавливаем начальное состояние видимости кнопки при первой загрузке
         UpdateModsButtonVisibility(ListViewModel.SelectedProfile);

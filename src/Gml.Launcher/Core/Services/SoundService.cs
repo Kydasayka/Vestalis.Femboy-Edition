@@ -50,12 +50,35 @@ public static class SoundService
     private static volatile bool _isEnabled = true;
     private static bool _isInstalled;
     private static long _lastPlaybackMs = -MinIntervalMs;
+    private static int _suppressionDepth;
 
     /// <summary>Gets or sets whether interface sounds are played.</summary>
     public static bool IsEnabled
     {
         get => _isEnabled;
         set => _isEnabled = value;
+    }
+
+    /// <summary>
+    /// Silences interface sounds until the returned scope is disposed. Used while collections are
+    /// rebuilt from background data, because replacing the items also raises SelectionChanged even
+    /// though the user did nothing.
+    /// </summary>
+    public static IDisposable Suppress()
+    {
+        Interlocked.Increment(ref _suppressionDepth);
+        return new SuppressionScope();
+    }
+
+    private sealed class SuppressionScope : IDisposable
+    {
+        private int _disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                Interlocked.Decrement(ref _suppressionDepth);
+        }
     }
 
     /// <summary>
@@ -90,7 +113,7 @@ public static class SoundService
         if (!ReferenceEquals(args.Source, button))
             return;
 
-        if (IsSilent(button))
+        if (IsSilent(button) || !IsInActiveWindow(button))
             return;
 
         if (button is ToggleButton)
@@ -101,7 +124,7 @@ public static class SoundService
 
     private static void OnGmlButtonClick(GmlButton button, RoutedEventArgs args)
     {
-        if (!ReferenceEquals(args.Source, button))
+        if (!ReferenceEquals(args.Source, button) || !IsInActiveWindow(button))
             return;
 
         PlayClick();
@@ -109,8 +132,28 @@ public static class SoundService
 
     private static void OnSelectionChanged(object? sender, SelectionChangedEventArgs args)
     {
-        if (args.AddedItems is { Count: > 0 })
-            PlayClick();
+        if (args.AddedItems is not { Count: > 0 })
+            return;
+
+        // The profile list is rebuilt whenever the backend pushes "RefreshProfiles", which also
+        // re-selects the current profile. That is not a user action and must stay silent.
+        if (sender is not Control control || !IsInActiveWindow(control))
+            return;
+
+        PlayClick();
+    }
+
+    /// <summary>
+    /// A background push (for example "RefreshProfiles" from the backend) can change the UI while
+    /// the user is in the game and the launcher is not focused. Only react to a window the user is
+    /// actually looking at.
+    /// </summary>
+    private static bool IsInActiveWindow(Control control)
+    {
+        // A control that is not attached to a window yet still raises SelectionChanged while the
+        // page is being built (for example the saved language in the settings). Nothing is visible
+        // at that point, so it cannot be a user action.
+        return TopLevel.GetTopLevel(control) is Window { IsActive: true };
     }
 
     /// <summary>
@@ -127,7 +170,7 @@ public static class SoundService
 
     private static void Play(Lazy<IntPtr> sound)
     {
-        if (!_isEnabled || !OperatingSystem.IsWindows())
+        if (!_isEnabled || Volatile.Read(ref _suppressionDepth) > 0 || !OperatingSystem.IsWindows())
             return;
 
         var now = Environment.TickCount64;
