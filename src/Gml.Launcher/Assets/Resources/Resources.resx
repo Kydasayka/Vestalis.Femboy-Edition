@@ -364,10 +364,10 @@ To exit offline mode, make sure that the server is available, and then restart t
     <value>Send HWID</value>
   </data>
   <data name="HwidDescription" xml:space="preserve">
-    <value>Sent to the server when signing in. Turn it off if the server wrongly reports this device as blocked.</value>
+    <value>Sent to the server when signing in. Turn it off to send a generated identifier instead of the real hardware data.</value>
   </data>
   <data name="HwidLoginHint" xml:space="preserve">
-    <value>If the server says the user is blocked, try turning this off.</value>
+    <value>The server requires a device identifier. If it reports this device as blocked, keep this off to send a generated one.</value>
   </data>
   <data name="ModsSearchTitle" xml:space="preserve">
     <value>Search</value>

@@ -49,6 +49,14 @@ public interface ISystemService
     string GetHwid();
 
     /// <summary>
+    ///     Gets a stable synthetic identifier that does not expose the real hardware serials.
+    ///     The backend rejects sign-in without an HWID, so it is used when the user opts out
+    ///     of sharing the actual hardware data.
+    /// </summary>
+    /// <returns>A stable, machine-bound synthetic HWID.</returns>
+    string GetSyntheticHwid();
+
+    /// <summary>
     ///     Asynchronously loads system data such as drive list, motherboard list, and CPU list.
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>

@@ -36,7 +36,10 @@ public class SettingsService(ISystemService system, IStorageService storage) : I
     {
         var settings = await GetSettings();
 
-        return settings.SendHwid ? system.GetHwid() : null;
+        // Sign-in is rejected when the X-HWID header is missing, so the launcher always sends a
+        // value. Turning the setting off only switches from the real serials to a synthetic id,
+        // which keeps the "do not share hardware data" option while still passing the check.
+        return settings.SendHwid ? system.GetHwid() : system.GetSyntheticHwid();
     }
 
     public async Task SetHwidSendingEnabledAsync(bool enabled)
