@@ -27,6 +27,7 @@ public class SplashScreenViewModel : WindowViewModelBase
     private readonly IGmlClientManager _manager;
     private readonly ISystemService _systemService;
     private readonly IBackendChecker _backendChecker;
+    private readonly ISettingsService _settingsService;
     private readonly DispatcherTimer _timer;
     private bool _isBackendChecked;
     public IGmlClientManager Manager => _manager;
@@ -36,7 +37,8 @@ public class SplashScreenViewModel : WindowViewModelBase
         IGmlClientManager? manager = null,
         IStorageService? storage = null,
         ILocalizationService? localizationService = null,
-        IBackendChecker? backendChecker = null)
+        IBackendChecker? backendChecker = null,
+        ISettingsService? settingsService = null)
     {
         _storageService = storage ?? Locator.Current.GetService<IStorageService>()
             ?? throw new ServiceNotFoundException(typeof(IStorageService));
@@ -52,6 +54,9 @@ public class SplashScreenViewModel : WindowViewModelBase
 
         _backendChecker = backendChecker ?? Locator.Current.GetService<IBackendChecker>()
             ?? throw new ServiceNotFoundException(typeof(IBackendChecker));
+
+        _settingsService = settingsService ?? Locator.Current.GetService<ISettingsService>()
+            ?? throw new ServiceNotFoundException(typeof(ISettingsService));
 
         _timer = new DispatcherTimer();
         _timer.Interval = TimeSpan.FromSeconds(15);
@@ -137,7 +142,9 @@ public class SplashScreenViewModel : WindowViewModelBase
 
     private async Task<bool> ValidateTokenWithApi(AuthLauncherUser launcherUser)
     {
-        var userData = await _manager.Auth(launcherUser.AccessToken)
+        var hwid = await _settingsService.GetHwidForAuthAsync().ConfigureAwait(false);
+
+        var userData = await _manager.Auth(launcherUser.AccessToken, hwid)
             .ConfigureAwait(false);
 
         if (userData.User.IsAuth)
