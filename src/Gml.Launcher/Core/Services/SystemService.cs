@@ -4,8 +4,6 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading.Tasks;
 using Gml.Launcher.Models;
 using Gml.Web.Api.Domains.System;
@@ -58,16 +56,12 @@ public class SystemService : ISystemService
         return $"{cpuIdentifier}-{motherboardIdentifier}-{diskIdentifiers}";
     }
 
-    public string GetSyntheticHwid()
+    public string GetRandomHwid()
     {
         // The server dropped support for requests without an HWID, so a value must always be
-        // sent. This one is derived from the Windows account instead of the hardware serials:
-        // it stays the same between launches (so the account is not treated as a new device)
-        // while revealing nothing about the actual machine.
-        var seed = $"Gml.Launcher.SyntheticHwid.v1|{Environment.MachineName}|{Environment.UserName}";
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(seed));
-
-        return new Guid(hash.AsSpan(0, 16)).ToString("D").ToUpperInvariant();
+        // sent. This one is random and new on every call, so it passes the check without
+        // revealing the actual hardware and without reusing an identifier that may be banned.
+        return Guid.NewGuid().ToString("D").ToUpperInvariant();
     }
 
     public Task LoadSystemData()

@@ -49,12 +49,12 @@ public interface ISystemService
     string GetHwid();
 
     /// <summary>
-    ///     Gets a stable synthetic identifier that does not expose the real hardware serials.
-    ///     The backend rejects sign-in without an HWID, so it is used when the user opts out
-    ///     of sharing the actual hardware data.
+    ///     Gets a new random identifier on every call. The backend rejects sign-in without an
+    ///     HWID, so it is used when the user opts out of sharing the actual hardware data.
+    ///     A fresh value each time keeps a ban tied to a specific identifier from sticking.
     /// </summary>
-    /// <returns>A stable, machine-bound synthetic HWID.</returns>
-    string GetSyntheticHwid();
+    /// <returns>A randomly generated HWID.</returns>
+    string GetRandomHwid();
 
     /// <summary>
     ///     Asynchronously loads system data such as drive list, motherboard list, and CPU list.
