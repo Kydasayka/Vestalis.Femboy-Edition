@@ -457,3 +457,21 @@ $RECYCLE.BIN/
 !.vscode/launch.json
 !.vscode/extensions.json
 /src/Gml.Launcher/FodyWeavers.xml
+
+##
+## GML Launcher (Vestalis fork) local artifacts
+##
+# Local publish/dist output
+dist/
+
+# SQLite side files (identifier.sqlite itself stays tracked)
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+
+# Local runtime traces/caches (normally in %LOCALAPPDATA%, ignore if copied here)
+launch-trace.log
+validation-cache*.json
