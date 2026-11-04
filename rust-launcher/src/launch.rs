@@ -121,7 +121,10 @@ fn remove_authlib_agent(arguments: &str) -> String {
 }
 
 fn configure_heap(arguments: &str, custom_jvm: &str, xms: u32, xmx: u32) -> String {
-    let heap = Regex::new(r"(?i)-Xm[sx][0-9]+(?:[kKmMgGtT])?").expect("valid regex");
+    // Some manifests write `-Xmx 8G` with a space; consume the value too,
+    // otherwise the leftover `8G` becomes a program argument.
+    let heap = Regex::new(r"(?i)-Xm[sx](?:[0-9]+(?:[kKmMgGtT])?|\s+[0-9]+(?:[kKmMgGtT])?)")
+        .expect("valid regex");
 
     let arguments = heap.replace_all(arguments, " ").trim().to_string();
     let custom = heap.replace_all(custom_jvm, " ").trim().to_string();
@@ -138,7 +141,7 @@ fn configure_heap(arguments: &str, custom_jvm: &str, xms: u32, xmx: u32) -> Stri
     let anchor = Regex::new(r"(?i)(?:^|\s)(?:-cp|-classpath|--class-path|-jar|-m|--module)\s")
         .expect("valid regex");
 
-    match anchor.find(&arguments) {
+    let mut result = match anchor.find(&arguments) {
         Some(found) => {
             let start = arguments[found.start()..]
                 .find(|character: char| !character.is_whitespace())
@@ -159,7 +162,16 @@ fn configure_heap(arguments: &str, custom_jvm: &str, xms: u32, xmx: u32) -> Stri
                 format!("{injected} {arguments}")
             }
         }
+    };
+
+    // Belt and braces: a malformed manifest must never leave the game with
+    // -Xms but without an explicit maximum heap.
+    let lower = result.to_lowercase();
+    if !lower.contains("-xmx") {
+        result = format!("-Xms{xms}M -Xmx{xmx}M {result}");
     }
+
+    result
 }
 
 #[cfg(not(windows))]
@@ -189,6 +201,13 @@ mod tests {
         );
         assert!(result.contains("https://new.example/api/v1/integrations/authlib/minecraft"));
         assert!(!result.contains("old.example"));
+    }
+
+    #[test]
+    fn spaced_heap_flags_are_removed_entirely() {
+        let result = configure_heap("-Xmx 4G -jar client.jar", "", 2048, 8192);
+        assert!(result.contains("-Xms2048M -Xmx8192M -jar client.jar"));
+        assert!(!result.contains(" 4G"));
     }
 
     #[test]

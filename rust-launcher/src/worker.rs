@@ -399,7 +399,7 @@ impl Worker {
                 self.emit(Event::Screen(1));
                 if via_mirror {
                     self.emit(Event::MainStatus(
-                        "Сессия выдана через зеркало (основной хост блокирует клиент)".into(),
+                        "Сессия зеркала: официальный хост отклонил клиент. Для RU/EU-серверов нужен доступ от их администратора.".into(),
                     ));
                 }
                 self.load_data().await;
@@ -760,6 +760,7 @@ impl Worker {
         let safe_max = 32768.min((max_ram.saturating_sub(4096)).max(1024)) as u32;
         let xmx = settings.xmx.clamp(1024, safe_max);
         let xms = settings.xms.clamp(512, xmx);
+        info!(xms, xmx, "heap configured");
 
         let install_dir = settings.install_path();
         let tx = self.tx.clone();

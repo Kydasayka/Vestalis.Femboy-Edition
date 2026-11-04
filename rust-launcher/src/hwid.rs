@@ -1,12 +1,57 @@
+use std::process::Command;
+use std::sync::OnceLock;
+
 use uuid::Uuid;
 use winreg::enums::{HKEY_LOCAL_MACHINE, KEY_READ};
 use winreg::RegKey;
 
-/// A stable string that identifies the machine to the backend. It mirrors the
-/// CPU / motherboard / disk idea of the C# launcher without pulling a hardware
-/// inventory crate: the Windows MachineGuid plus the CPU model string is stable
-/// across reboots and unique enough for HWID bans.
+/// Must match the C# launcher exactly: `Hardware.Info` sends
+/// `CPU.ProcessorId-Motherboard.SerialNumber-Disk1-Disk2...`. A different value
+/// looks like another device to the backend, which can reject the account.
 pub fn real_hwid() -> String {
+    static CACHE: OnceLock<String> = OnceLock::new();
+
+    CACHE
+        .get_or_init(|| cim_hwid().unwrap_or_else(registry_hwid))
+        .clone()
+}
+
+fn cim_hwid() -> Option<String> {
+    const SCRIPT: &str = "$cpu=(Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty ProcessorId); \
+$mb=(Get-CimInstance Win32_BaseBoard | Select-Object -First 1 -ExpandProperty SerialNumber); \
+$disks=(Get-CimInstance Win32_DiskDrive | ForEach-Object { $_.SerialNumber }) -join '-'; \
+\"$cpu-$mb-$disks\"";
+
+    let mut command = Command::new("powershell.exe");
+    command.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        SCRIPT,
+    ]);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+
+    let output = command.output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if value.is_empty() || value == "---" {
+        None
+    } else {
+        Some(value)
+    }
+}
+
+fn registry_hwid() -> String {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
 
     let machine_guid: String = hklm
