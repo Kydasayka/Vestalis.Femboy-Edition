@@ -239,6 +239,36 @@ dotnet publish 'src\Gml.Launcher\Gml.Launcher.csproj' -c Release -r win-x64 `
   блоки режима и самодиагностики скрыты.
 - **Самодиагностика:** Настройки → «Проверить бэкенд» → строки со статусом и временем.
 
+## Rust rewrite (`rust-launcher/`, ветка `feature/rust-launcher-rewrite`)
+
+- Отдельный нативный лаунчер на Rust + Slint 1.18 (`ui/app.slint`), `main` и `src/`
+  не трогаются. Ветка создана от `rust`.
+- Сборка/запуск/тесты (MSVC Build Tools + VC workload обязательны для линковки):
+
+```powershell
+cd rust-launcher
+cargo run
+cargo test
+cargo clippy --all-targets -- -D warnings
+```
+
+- Что уже работает: вход + 2FA + HWID, выбор сервера, профили/новости, оффлайн-режим
+  по `%APPDATA%\Vestalis\offline-mode`, SHA-1-валидация (импортирует старый кэш
+  `%LOCALAPPDATA%\Gml.Launcher\validation-cache-v1.json`), параллельные загрузки,
+  запуск `javaw.exe` с `-Xms/-Xmx` и подменой authlib-эндпоинта, настройки.
+- Данные: `%APPDATA%\Vestalis\rust-launcher\state.json`,
+  кэш `%LOCALAPPDATA%\Vestalis\validation-cache-rust.json`,
+  логи `%LOCALAPPDATA%\Vestalis\logs\launcher.log.<date>`.
+- PL-1 (`https://201-58-180-2.sslip.io/`) — дефолт: RU/EU отдают 403 «неофициальный
+  клиент». Остальные хосты остаются в селекторе.
+- Подводные камни: в Rust `regex` **нет look-around** — не тащить сюда C#-паттерны
+  с `(?<!…)`/`(?=…)`; `slint` facade не экспортирует feature `svg`, она включается
+  через прямую зависимость `i-slint-core = { features = ["svg"] }`; UI-поток обязан
+  остаться главным (`ui.run()`), Tokio — фоновый.
+- Ещё не сделано: SignalR-обновления, страница модов, звуки, скины, Discord RPC,
+  Sentry, mirror-control ключ/Tor/selftest, кастомный хром и сплэш. Подробности —
+  `rust-launcher/README.md` и `rust-launcher/docs/ARCHITECTURE.md`.
+
 ## Стиль работы
 
 - Не читать большие каталоги целиком (там runtime Java и тысячи файлов) — только

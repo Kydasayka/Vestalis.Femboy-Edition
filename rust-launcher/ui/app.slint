@@ -1,0 +1,1027 @@
+import { ScrollView } from "std-widgets.slint";
+
+
+export struct ProfileItem {
+    id: int,
+    name: string,
+    display-name: string,
+    initial: string,
+    subtitle: string,
+    description: string,
+    online: int,
+    icon: image,
+    has-icon: bool,
+}
+
+export struct NewsItem {
+    title: string,
+    body: string,
+    date: string,
+}
+
+component Chip inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    callback clicked();
+
+    height: 30px;
+    width: text.preferred-width + 28px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: active ? #e879f9 : #2c2c34;
+    background: active ? #3b0d42 : (area.has-hover ? #1c1c23 : #141418);
+
+    area := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    text := Text {
+        width: parent.width;
+        height: parent.height;
+        text: root.label;
+        color: root.active ? #f5d0fe : #a7a7b4;
+        font-size: 11px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+component ActionButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> primary: false;
+    in property <bool> available: true;
+    callback clicked();
+
+    height: 44px;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: !available ? #26262c : (primary ? #e879f9 : #303038);
+    background: !available ? #17171c
+        : area.has-hover ? (primary ? #d946ef : #23232b)
+        : (primary ? #a21caf : #1a1a20);
+
+    area := TouchArea {
+        enabled: root.available;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    Text {
+        text: root.label;
+        color: root.available ? (root.primary ? #ffffff : #d9d9e2) : #5a5a66;
+        font-size: 14px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+component TextField inherits Rectangle {
+    in-out property <string> text <=> input.text;
+    in property <string> placeholder;
+    in property <bool> password: false;
+    in property <bool> numeric: false;
+    callback accepted();
+
+    height: 46px;
+    border-radius: 10px;
+    background: #101014;
+    border-width: 1px;
+    border-color: input.has-focus ? #a21caf : #26262e;
+
+    input := TextInput {
+        x: 14px;
+        width: parent.width - 28px;
+        height: parent.height;
+        color: #f2f2f6;
+        font-size: 14px;
+        vertical-alignment: center;
+        single-line: true;
+        input-type: root.password ? InputType.password : (root.numeric ? InputType.number : InputType.text);
+        selection-background-color: #a21caf;
+        accepted => { root.accepted(); }
+    }
+
+    if input.text.is-empty && !root.placeholder.is-empty: Text {
+        x: 14px;
+        width: parent.width - 28px;
+        height: parent.height;
+        text: root.placeholder;
+        color: #60606c;
+        font-size: 14px;
+        vertical-alignment: center;
+    }
+}
+
+component Toggle inherits Rectangle {
+    in-out property <bool> checked;
+    callback toggled(bool);
+
+    width: 46px;
+    height: 26px;
+    border-radius: 13px;
+    background: checked ? #a21caf : #2b2b33;
+
+    Rectangle {
+        width: 20px;
+        height: 20px;
+        y: 3px;
+        x: root.checked ? root.width - 23px : 3px;
+        border-radius: 10px;
+        background: #ffffff;
+        animate x { duration: 120ms; easing: ease-out; }
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.checked = !root.checked;
+            root.toggled(root.checked);
+        }
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "Vestalis Launcher";
+    width: 1180px;
+    height: 640px;
+    background: #0d0d10;
+
+    // ---- login / global state -------------------------------------------
+    in-out property <int> screen: 0;
+    in-out property <string> app-version: "";
+    in-out property <string> login: "";
+    in-out property <string> password: "";
+    in-out property <string> error-text: "";
+    in-out property <bool> busy: false;
+    in-out property <bool> show-2fa: false;
+    in-out property <string> twofa: "";
+    in-out property <int> server-index: 0;
+    in-out property <string> server-host-label: "";
+    in-out property <string> main-status: "";
+
+    // ---- main ------------------------------------------------------------
+    in-out property <string> user-name: "";
+    in-out property <string> user-initial: "?";
+    in-out property <[ProfileItem]> profiles: [];
+    in-out property <int> selected-index: -1;
+    in-out property <string> selected-title: "Профиль не выбран";
+    in-out property <string> selected-description: "";
+    in-out property <string> selected-version: "";
+    in-out property <string> selected-online: "";
+    in-out property <image> selected-icon;
+    in-out property <[NewsItem]> news: [];
+    in-out property <bool> can-play: false;
+
+    in-out property <bool> progress-visible: false;
+    in-out property <float> progress-value: 0;
+    in-out property <string> progress-title: "";
+    in-out property <string> progress-text: "";
+    in-out property <string> progress-speed: "";
+
+    in-out property <string> backend-mode: "";
+    in-out property <bool> backend-mode-visible: false;
+    in-out property <color> backend-mode-color: #2e9e5b;
+
+    // ---- settings --------------------------------------------------------
+    in-out property <string> set-install-dir: "";
+    in-out property <int> set-xms: 2048;
+    in-out property <int> set-xmx: 8192;
+    in-out property <string> set-width-text: "900";
+    in-out property <string> set-height-text: "600";
+    in-out property <bool> set-fullscreen: false;
+    in-out property <string> set-custom-jvm: "";
+    in-out property <bool> set-send-hwid: true;
+    in-out property <bool> set-sounds: true;
+    in-out property <int> max-ram: 16384;
+    in-out property <string> settings-status: "";
+
+    callback login-clicked();
+    callback verify-clicked();
+    callback offline-clicked();
+    callback hwid-toggled(bool);
+    callback logout-clicked();
+    callback settings-clicked();
+    callback back-clicked();
+    callback play-clicked();
+    callback refresh-clicked();
+    callback server-clicked(int);
+    callback profile-clicked(int);
+    callback save-settings-clicked();
+    callback check-backend-clicked();
+    callback adjust-xms(int);
+    callback adjust-xmx(int);
+
+    // =====================================================================
+    // LOGIN
+    // =====================================================================
+    if screen == 0: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: #0e0e11;
+
+        Image {
+            source: @image-url("../assets/background.jpg");
+            width: 100%;
+            height: 100%;
+            image-fit: cover;
+            opacity: 0.4;
+        }
+
+        Rectangle {
+            background: @linear-gradient(180deg, #0e0e11cc 0%, #0e0e11f0 55%, #0e0e11 100%);
+        }
+
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                alignment: center;
+                width: 440px;
+                spacing: 18px;
+
+                HorizontalLayout {
+                    spacing: 12px;
+                    alignment: center;
+                    Image {
+                        source: @image-url("../assets/logo.svg");
+                        width: 44px;
+                        height: 44px;
+                    }
+                    Text {
+                        text: "Vestalis";
+                        color: #ffffff;
+                        font-size: 40px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: "Femboy Edition";
+                        color: #d8b4fe;
+                        font-size: 14px;
+                        vertical-alignment: bottom;
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: center;
+                    ActionButton { label: "RU-1"; primary: root.server-index == 0; width: 82px; height: 34px; clicked => { root.server-clicked(0); } }
+                    ActionButton { label: "RU-2"; primary: root.server-index == 1; width: 82px; height: 34px; clicked => { root.server-clicked(1); } }
+                    ActionButton { label: "EU-1"; primary: root.server-index == 2; width: 82px; height: 34px; clicked => { root.server-clicked(2); } }
+                    ActionButton { label: "PL-1"; primary: root.server-index == 3; width: 82px; height: 34px; clicked => { root.server-clicked(3); } }
+                }
+
+                Rectangle {
+                    height: root.show-2fa ? 528px : 430px;
+                    border-radius: 16px;
+                    background: #121216f2;
+                    border-width: 1px;
+                    border-color: #292930;
+
+                    VerticalLayout {
+                        padding: 28px;
+                        spacing: 12px;
+
+                        Text {
+                            text: "Вход в аккаунт";
+                            color: #ffffff;
+                            font-size: 22px;
+                            font-weight: 700;
+                        }
+                        Text {
+                            text: "Войдите, чтобы играть на серверах Vestalis";
+                            color: #85858f;
+                            font-size: 12px;
+                        }
+
+                        Rectangle { height: 4px; }
+
+                        TextField {
+                            text <=> root.login;
+                            placeholder: "Логин";
+                            accepted => { root.login-clicked(); }
+                        }
+                        TextField {
+                            text <=> root.password;
+                            placeholder: "Пароль";
+                            password: true;
+                            accepted => { root.login-clicked(); }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 10px;
+                            alignment: start;
+                            Toggle {
+                                checked: root.set-send-hwid;
+                                toggled(v) => { root.set-send-hwid = v; root.hwid-toggled(v); }
+                            }
+                            Text {
+                                text: "Отправлять HWID";
+                                color: #9a9aa6;
+                                font-size: 12px;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                            }
+                        }
+
+                        if root.show-2fa: VerticalLayout {
+                            spacing: 8px;
+                            TextField {
+                                text <=> root.twofa;
+                                placeholder: "Код двухфакторной аутентификации";
+                                accepted => { root.verify-clicked(); }
+                            }
+                            ActionButton {
+                                label: root.busy ? "Проверка…" : "Подтвердить код";
+                                primary: true;
+                                available: !root.busy;
+                                clicked => { root.verify-clicked(); }
+                            }
+                        }
+
+                        Text {
+                            text: root.error-text;
+                            color: #f87171;
+                            font-size: 12px;
+                            wrap: word-wrap;
+                            visible: !root.error-text.is-empty;
+                        }
+
+                        Rectangle { vertical-stretch: 1; }
+
+                        ActionButton {
+                            label: root.busy ? "Подключение…" : "Войти";
+                            primary: true;
+                            available: !root.busy;
+                            clicked => { root.login-clicked(); }
+                        }
+                        ActionButton {
+                            label: "Оффлайн-режим";
+                            available: !root.busy;
+                            clicked => { root.offline-clicked(); }
+                        }
+                    }
+                }
+
+                Text {
+                    text: "v" + root.app-version;
+                    color: #55555f;
+                    font-size: 11px;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+    }
+
+    // =====================================================================
+    // MAIN
+    // =====================================================================
+    if screen == 1: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: #0d0d10;
+
+        Image {
+            source: @image-url("../assets/background.jpg");
+            width: 100%;
+            height: 100%;
+            image-fit: cover;
+            opacity: 0.22;
+        }
+        Rectangle {
+            background: @linear-gradient(120deg, #0d0d10f5 0%, #0d0d10d9 55%, #0d0d10f2 100%);
+        }
+
+        HorizontalLayout {
+            spacing: 0px;
+
+            // ---- sidebar ----
+            Rectangle {
+                width: 316px;
+                background: #0a0a0df2;
+                border-width: 0px;
+
+                VerticalLayout {
+                    padding: 20px;
+                    spacing: 14px;
+
+                    HorizontalLayout {
+                        spacing: 10px;
+                        Image {
+                            source: @image-url("../assets/logo.svg");
+                            width: 34px;
+                            height: 34px;
+                        }
+                        Text {
+                            text: "Vestalis";
+                            color: #ffffff;
+                            font-size: 24px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: "Femboy";
+                            color: #c084fc;
+                            font-size: 11px;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Rectangle {
+                        height: 64px;
+                        border-radius: 12px;
+                        background: #131318;
+                        border-width: 1px;
+                        border-color: #24242c;
+                        HorizontalLayout {
+                            padding: 10px;
+                            spacing: 12px;
+                            Rectangle {
+                                width: 42px;
+                                height: 42px;
+                                border-radius: 21px;
+                                background: @linear-gradient(135deg, #a21caf 0%, #6d28d9 100%);
+                                Text {
+                                    text: root.user-initial;
+                                    color: #ffffff;
+                                    font-size: 18px;
+                                    font-weight: 700;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            VerticalLayout {
+                                spacing: 2px;
+                                alignment: center;
+                                Text {
+                                    text: root.user-name;
+                                    color: #ffffff;
+                                    font-size: 14px;
+                                    font-weight: 600;
+                                }
+                                Text {
+                                    text: root.server-host-label;
+                                    color: #777783;
+                                    font-size: 10px;
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 5px;
+                        Chip { label: "RU-1"; active: root.server-index == 0; clicked => { root.server-clicked(0); } }
+                        Chip { label: "RU-2"; active: root.server-index == 1; clicked => { root.server-clicked(1); } }
+                        Chip { label: "EU-1"; active: root.server-index == 2; clicked => { root.server-clicked(2); } }
+                        Chip { label: "PL-1"; active: root.server-index == 3; clicked => { root.server-clicked(3); } }
+                    }
+
+                    Text {
+                        text: "ПРОФИЛИ";
+                        color: #6d6d79;
+                        font-size: 10px;
+                        font-weight: 700;
+                        letter-spacing: 1.4px;
+                    }
+
+                    ScrollView {
+                        vertical-stretch: 1;
+                        VerticalLayout {
+                            spacing: 6px;
+                            for p in root.profiles: Rectangle {
+                                height: 62px;
+                                border-radius: 11px;
+                                background: p.id == root.selected-index ? #2a1030e6
+                                    : row-area.has-hover ? #191920 : #00000000;
+                                border-width: 1px;
+                                border-color: p.id == root.selected-index ? #a21caf : #00000000;
+
+                                row-area := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.profile-clicked(p.id); }
+                                }
+
+                                HorizontalLayout {
+                                    padding: 8px;
+                                    spacing: 10px;
+                                    Rectangle {
+                                        width: 44px;
+                                        height: 44px;
+                                        border-radius: 9px;
+                                        background: #1c1c24;
+                                        clip: true;
+                                        Text {
+                                            text: p.initial;
+                                            color: #8b8b99;
+                                            font-size: 18px;
+                                            font-weight: 700;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            visible: !p.has-icon;
+                                        }
+                                        Image {
+                                            source: p.icon;
+                                            width: 100%;
+                                            height: 100%;
+                                            image-fit: cover;
+                                        }
+                                    }
+                                    VerticalLayout {
+                                        spacing: 3px;
+                                        alignment: center;
+                                        horizontal-stretch: 1;
+                                        Text {
+                                            text: p.display-name;
+                                            color: p.id == root.selected-index ? #ffffff : #d2d2dc;
+                                            font-size: 13px;
+                                            font-weight: 600;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: p.subtitle;
+                                            color: #74747f;
+                                            font-size: 10px;
+                                            overflow: elide;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        ActionButton {
+                            label: "Настройки";
+                            clicked => { root.settings-clicked(); }
+                        }
+                        ActionButton {
+                            label: "Выйти";
+                            clicked => { root.logout-clicked(); }
+                        }
+                    }
+                }
+            }
+
+            // ---- content ----
+            VerticalLayout {
+                width: root.width - 316px;
+                padding: 28px;
+                spacing: 12px;
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Rectangle {
+                        height: 26px;
+                        width: version-text.preferred-width + 24px;
+                        border-radius: 8px;
+                        background: #1a1a21;
+                        border-width: 1px;
+                        border-color: #2c2c35;
+                        visible: !root.selected-version.is-empty;
+                        version-text := Text {
+                            text: root.selected-version;
+                            color: #b7b7c3;
+                            font-size: 11px;
+                            font-weight: 600;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Rectangle {
+                        height: 26px;
+                        width: online-text.preferred-width + 24px;
+                        border-radius: 8px;
+                        background: #122016;
+                        border-width: 1px;
+                        border-color: #1f4a2c;
+                        visible: !root.selected-online.is-empty;
+                        online-text := Text {
+                            text: root.selected-online;
+                            color: #6ee7a0;
+                            font-size: 11px;
+                            font-weight: 600;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Rectangle { horizontal-stretch: 1; }
+
+                    Rectangle {
+                        height: 26px;
+                        width: mode-text.preferred-width + 26px;
+                        border-radius: 9px;
+                        background: root.backend-mode-color;
+                        visible: root.backend-mode-visible;
+                        mode-text := Text {
+                            text: root.backend-mode;
+                            color: #ffffff;
+                            font-size: 10px;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Text {
+                    text: root.selected-title;
+                    color: #ffffff;
+                    font-size: 40px;
+                    font-weight: 700;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: root.selected-description;
+                    color: #9a9aa4;
+                    font-size: 13px;
+                    wrap: word-wrap;
+                    max-height: 58px;
+                    overflow: elide;
+                }
+
+                Rectangle { height: 8px; }
+
+                Text {
+                    text: "НОВОСТИ";
+                    color: #6d6d79;
+                    font-size: 10px;
+                    font-weight: 700;
+                    letter-spacing: 1.4px;
+                }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        spacing: 8px;
+                        for n in root.news: Rectangle {
+                            height: news-layout.preferred-height + 28px;
+                            border-radius: 12px;
+                            background: #111116e6;
+                            border-width: 1px;
+                            border-color: #22222a;
+
+                            news-layout := VerticalLayout {
+                                padding: 14px;
+                                spacing: 6px;
+                                Text {
+                                    text: n.title;
+                                    color: #ededf2;
+                                    font-size: 14px;
+                                    font-weight: 600;
+                                }
+                                Text {
+                                    text: n.body;
+                                    color: #8c8c98;
+                                    font-size: 12px;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    text: n.date;
+                                    color: #5d5d68;
+                                    font-size: 10px;
+                                    visible: !n.date.is-empty;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if root.progress-visible: VerticalLayout {
+                    spacing: 6px;
+                    HorizontalLayout {
+                        spacing: 10px;
+                        Text {
+                            text: root.progress-title;
+                            color: #e4e4ee;
+                            font-size: 12px;
+                            font-weight: 600;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Text {
+                            text: root.progress-speed;
+                            color: #a78bfa;
+                            font-size: 11px;
+                        }
+                    }
+                    Rectangle {
+                        height: 6px;
+                        border-radius: 3px;
+                        background: #22222a;
+                        Rectangle {
+                            x: 0;
+                            y: 0;
+                            width: parent.width * root.progress-value;
+                            height: 100%;
+                            border-radius: 3px;
+                            background: @linear-gradient(90deg, #a21caf 0%, #c084fc 100%);
+                        }
+                    }
+                    Text {
+                        text: root.progress-text;
+                        color: #7c7c88;
+                        font-size: 11px;
+                        overflow: elide;
+                    }
+                }
+
+                if !root.main-status.is-empty: Text {
+                    text: root.main-status;
+                    color: #6ee7a0;
+                    font-size: 12px;
+                    wrap: word-wrap;
+                }
+
+                if !root.error-text.is-empty: Text {
+                    text: root.error-text;
+                    color: #f87171;
+                    font-size: 12px;
+                    wrap: word-wrap;
+                }
+
+                Rectangle { height: 2px; }
+
+                HorizontalLayout {
+                    spacing: 14px;
+                    ActionButton {
+                        label: "Играть";
+                        primary: true;
+                        available: root.can-play;
+                        width: 220px;
+                        height: 52px;
+                        clicked => { root.play-clicked(); }
+                    }
+                    ActionButton {
+                        label: "Обновить";
+                        width: 130px;
+                        height: 52px;
+                        clicked => { root.refresh-clicked(); }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                }
+            }
+        }
+    }
+
+    // =====================================================================
+    // SETTINGS
+    // =====================================================================
+    if screen == 2: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: #0d0d10;
+
+        VerticalLayout {
+            padding: 24px;
+            spacing: 16px;
+
+            HorizontalLayout {
+                spacing: 12px;
+                ActionButton {
+                    label: "← Назад";
+                    width: 120px;
+                    clicked => { root.back-clicked(); }
+                }
+                Text {
+                    text: "Настройки";
+                    color: #ffffff;
+                    font-size: 26px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Text {
+                    text: root.settings-status;
+                    color: #6ee7a0;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+            }
+
+            ScrollView {
+                vertical-stretch: 1;
+                HorizontalLayout {
+                    spacing: 16px;
+                    alignment: start;
+
+                    // ---- column 1 ----
+                    VerticalLayout {
+                        width: 50%;
+                        spacing: 16px;
+
+                        Rectangle {
+                            border-radius: 14px;
+                            background: #121217e6;
+                            border-width: 1px;
+                            border-color: #24242c;
+                            height: ram-layout.preferred-height + 40px;
+
+                            ram-layout := VerticalLayout {
+                                padding: 20px;
+                                spacing: 10px;
+                                Text { text: "Память"; color: #ffffff; font-size: 17px; font-weight: 700; }
+                                Text {
+                                    text: "Сколько оперативной памяти выделять игре. Всего в системе: " + root.max-ram + " МБ.";
+                                    color: #8a8a96;
+                                    font-size: 12px;
+                                    wrap: word-wrap;
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Text { text: "Минимум (Xms)"; color: #b9b9c4; font-size: 12px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    ActionButton { label: "−"; width: 40px; clicked => { root.adjust-xms(-512); } }
+                                    Text {
+                                        text: root.set-xms + " МБ";
+                                        color: #ffffff;
+                                        font-size: 13px;
+                                        font-weight: 600;
+                                        width: 90px;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                    ActionButton { label: "+"; width: 40px; clicked => { root.adjust-xms(512); } }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Text { text: "Максимум (Xmx)"; color: #b9b9c4; font-size: 12px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    ActionButton { label: "−"; width: 40px; clicked => { root.adjust-xmx(-1024); } }
+                                    Text {
+                                        text: root.set-xmx + " МБ";
+                                        color: #ffffff;
+                                        font-size: 13px;
+                                        font-weight: 600;
+                                        width: 90px;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                    ActionButton { label: "+"; width: 40px; clicked => { root.adjust-xmx(1024); } }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            border-radius: 14px;
+                            background: #121217e6;
+                            border-width: 1px;
+                            border-color: #24242c;
+                            height: jvm-layout.preferred-height + 40px;
+
+                            jvm-layout := VerticalLayout {
+                                padding: 20px;
+                                spacing: 10px;
+                                Text { text: "Дополнительные аргументы JVM"; color: #ffffff; font-size: 17px; font-weight: 700; }
+                                Text {
+                                    text: "Флаги добавляются перед classpath. Флаги -Xms/-Xmx здесь игнорируются.";
+                                    color: #8a8a96;
+                                    font-size: 12px;
+                                    wrap: word-wrap;
+                                }
+                                TextField {
+                                    text <=> root.set-custom-jvm;
+                                    placeholder: "-XX:+UseZGC -XX:+UnlockExperimentalVMOptions";
+                                }
+                            }
+                        }
+                    }
+
+                    // ---- column 2 ----
+                    VerticalLayout {
+                        width: 50%;
+                        spacing: 16px;
+
+                        Rectangle {
+                            border-radius: 14px;
+                            background: #121217e6;
+                            border-width: 1px;
+                            border-color: #24242c;
+                            height: window-layout.preferred-height + 40px;
+
+                            window-layout := VerticalLayout {
+                                padding: 20px;
+                                spacing: 10px;
+                                Text { text: "Окно игры"; color: #ffffff; font-size: 17px; font-weight: 700; }
+
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Text { text: "Полноэкранный режим"; color: #b9b9c4; font-size: 12px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Toggle {
+                                        checked: root.set-fullscreen;
+                                        toggled(v) => { root.set-fullscreen = v; }
+                                    }
+                                }
+
+                                if !root.set-fullscreen: HorizontalLayout {
+                                    spacing: 10px;
+                                    TextField { text <=> root.set-width-text; numeric: true; horizontal-stretch: 1; }
+                                    Text { text: "×"; color: #6d6d79; vertical-alignment: center; }
+                                    TextField { text <=> root.set-height-text; numeric: true; horizontal-stretch: 1; }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            border-radius: 14px;
+                            background: #121217e6;
+                            border-width: 1px;
+                            border-color: #24242c;
+                            height: launcher-layout.preferred-height + 40px;
+
+                            launcher-layout := VerticalLayout {
+                                padding: 20px;
+                                spacing: 10px;
+                                Text { text: "Лаунчер"; color: #ffffff; font-size: 17px; font-weight: 700; }
+
+                                Text { text: "Папка установки"; color: #b9b9c4; font-size: 12px; }
+                                TextField {
+                                    text <=> root.set-install-dir;
+                                    placeholder: "%APPDATA%\\Vestalis";
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Text { text: "Отправлять реальный HWID"; color: #b9b9c4; font-size: 12px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Toggle {
+                                        checked: root.set-send-hwid;
+                                        toggled(v) => { root.set-send-hwid = v; }
+                                    }
+                                }
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Text { text: "Звуки интерфейса"; color: #b9b9c4; font-size: 12px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Toggle {
+                                        checked: root.set-sounds;
+                                        toggled(v) => { root.set-sounds = v; }
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            border-radius: 14px;
+                            background: #121217e6;
+                            border-width: 1px;
+                            border-color: #24242c;
+                            height: backend-layout.preferred-height + 40px;
+
+                            backend-layout := VerticalLayout {
+                                padding: 20px;
+                                spacing: 10px;
+                                Text { text: "Бэкенд"; color: #ffffff; font-size: 17px; font-weight: 700; }
+                                Text {
+                                    text: root.server-host-label;
+                                    color: #8a8a96;
+                                    font-size: 12px;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    text: root.backend-mode.is-empty ? "Режим неизвестен" : "Режим: " + root.backend-mode;
+                                    color: #b9b9c4;
+                                    font-size: 12px;
+                                }
+                                HorizontalLayout {
+                                    spacing: 5px;
+                                    Chip { label: "RU-1"; active: root.server-index == 0; clicked => { root.server-clicked(0); } }
+                                    Chip { label: "RU-2"; active: root.server-index == 1; clicked => { root.server-clicked(1); } }
+                                    Chip { label: "EU-1"; active: root.server-index == 2; clicked => { root.server-clicked(2); } }
+                                    Chip { label: "PL-1"; active: root.server-index == 3; clicked => { root.server-clicked(3); } }
+                                }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    ActionButton {
+                                        label: "Проверить";
+                                        clicked => { root.check-backend-clicked(); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 12px;
+                ActionButton {
+                    label: "Сохранить настройки";
+                    primary: true;
+                    width: 240px;
+                    height: 48px;
+                    clicked => { root.save-settings-clicked(); }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Text {
+                    text: "v" + root.app-version;
+                    color: #55555f;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}
