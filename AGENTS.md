@@ -1,19 +1,47 @@
-# AGENTS.md — рабочие заметки по GML Launcher (Vestalis fork)
+# AGENTS.md — рабочие заметки (Vestalis Femboy edition)
 
 Короткая карта проекта, чтобы не перечитывать весь код. Держать этот файл в актуальном
 состоянии: сюда дописываются решения, подводные камни и проверенные команды.
 
 ## Что это
 
-Форк GML Launcher (Avalonia 11.3.3, .NET 8) для проекта Vestalis. Клиентская логика
-(загрузка файлов, авторизация, SignalR) лежит в git-сабмодуле `src/Gml.Client`.
+- **Vestalis Femboy edition** — форк лаунчера Vestalis, который сам форк GML Launcher
+  (GamerVII-NET). Avalonia 11.3.3, .NET 8, Windows.
+- Решение: `Gml.Launcher.sln`; UI: `src/Gml.Launcher`.
+- Клиентская логика (авторизация, загрузка файлов, SignalR) — в сабмодуле `src/Gml.Client`
+  (`src/Gml.Client/src/Gml.Client`, интерфейсы `src/Gml.Client/src/Gml.Client.Interfaces`).
+- Уведомления — сабмодуль `src/GamerVII.Notification.Avalonia`.
+- Тесты клиента: `src/Gml.Client/Tests/Gml.Client.Tests` (8 тестов).
+- CI: `.github/workflows/dotnet.yml` — `ubuntu-latest`, `dotnet restore/build/test`,
+  сабмодули обязательны (`git submodule update --init --recursive`).
 
-- Решение: `Gml.Launcher.sln`
-- Лаунчер: `src/Gml.Launcher`
-- Клиент (сабмодуль): `src/Gml.Client/src/Gml.Client`, интерфейсы: `src/Gml.Client/src/Gml.Client.Interfaces`
-- Тесты клиента: `src/Gml.Client/Tests/Gml.Client.Tests` (8 тестов)
+## Состояние репозитория (проверять перед работой)
 
-## Сборка и запуск
+```powershell
+git status --short; git log --oneline -6; git log --oneline origin/main..main
+git -C src/Gml.Client status --short; git -C src/Gml.Client log --oneline -3
+```
+
+- Корень: ветка `main`, origin — `https://github.com/Kydasayka/Vestalis.Femboy-Edition.git`.
+  Локально бывают незапушенные коммиты — не считать `origin/main` актуальным.
+- `src/Gml.Client` — ветка `master`, origin — форк `Kydasayka/Gml.Client` (upstream —
+  `GamerVII-NET/Gml.Client`). Коммит `4690172` `Faster Game loading`: параллельный SHA-1,
+  `ValidationCache`, `.disabled`-моды, `LaunchTrace` (см. раздел про подводные камни).
+- `src/GamerVII.Notification.Avalonia` — ветка `master`, upstream `f063e0b`, не трогается.
+- Сабмодули — отдельные клоны: коммитятся отдельно, потом в корне обновляется указатель
+  (`git add src/Gml.Client`).
+
+## Открытые вопросы (не забыть в следующей сессии)
+
+- Бэкенд отвечает `400 «Пользователь заблокирован!»` даже с рандомным HWID — это бан
+  аккаунта/IP на стороне сервера, а не баг лаунчера. HWID-часть уже сделана.
+- Тексты карточки «Сервисный доступ» и сообщения `MirrorControlService` захардкожены
+  по-русски (локализация не сделана, см. ниже).
+- `dist/portable/Gml.Launcher.exe` — локальный артефакт; после правок его надо пересобрать,
+  в git он не попадает.
+- Корневые коммиты могут быть не запушены: перед PR проверить `git log origin/main..main`.
+
+## Сборка, тесты, запуск
 
 ```powershell
 # Обязательно: остановить запущенный лаунчер, иначе MSB3027/MSB3021 (файл занят)
@@ -26,36 +54,75 @@ dotnet test Gml.Launcher.sln --no-build -v q 2>&1 | Select-Object -Last 2
 Start-Process 'src\Gml.Launcher\bin\Debug\net8.0\Gml.Launcher.exe'
 ```
 
-Локальные данные: `%APPDATA%\Vestalis\data.db` (SQLite, таблица `StorageItems`, колонки
-`Key`, `Value` — JSON). Ключи: `Settings`, `ServerHost`, `LastSelectedProfile`,
-`SavedCredentials`, `UserInfo`. Пока лаунчер запущен — читать копию файла.
+Портативная single-file сборка (результат gitignored, лежит в `dist/portable`):
 
-Быстро посмотреть содержимое (Python 3 есть в системе):
-`python %LOCALAPPDATA%\Temp\opencode\read_db.py`
+```powershell
+dotnet publish 'src\Gml.Launcher\Gml.Launcher.csproj' -c Release -r win-x64 `
+  --self-contained true -p:PublishSingleFile=true `
+  -p:IncludeNativeLibrariesForSelfExtract=true -o dist\portable
+```
 
-## Серверы
+`IncludeNativeLibrariesForSelfExtract` обязателен, иначе рядом с exe окажутся нативные
+`libSkiaSharp`/`libHarfBuzzSharp`/`e_sqlite3`/`av_libglesv2`.
 
-Хосты заданы в `src/Gml.Launcher/Assets/Resources/ResourceKeysDictionary.cs`:
+Известные предупреждения сборки (не ошибки, не связаны с текущими правками):
+`CS4014` в `LoginPageViewModel` и `CS8600` в `SkinService`.
+
+## Локальные данные и артефакты
+
+- `%APPDATA%\Vestalis\data.db` — SQLite, таблица `StorageItems` (`Key`, `Value` — JSON).
+  Ключи: `Settings`, `ServerHost`, `LastSelectedProfile`, `SavedCredentials`, `UserInfo`,
+  `InstallationDirectory`, `MirrorControlKey` (сервисный ключ зеркала, в репозиторий его
+  не класть; у обычного пользователя его нет).
+- Пока лаунчер запущен, БД читать только копией. Дамп:
+  `python %LOCALAPPDATA%\Temp\opencode\read_db.py`.
+- `%LOCALAPPDATA%\Gml.Launcher\validation-cache-v1.json` — кэш SHA-1 (можно удалять).
+- `%LOCALAPPDATA%\Gml.Launcher\launch-trace.log` — трассировка запуска, только при
+  `GML_LAUNCH_TRACE=1`.
+- `.gitignore` игнорирует `dist/`, `*.db-wal/-shm/-journal`, `launch-trace.log`,
+  `validation-cache*.json`.
+
+## Серверы и режимы бэкенда
+
+Хосты — `src/Gml.Launcher/Assets/Resources/ResourceKeysDictionary.cs`:
 
 - `ServerRu1Host` — `https://gmlfrr.vestalis.xyz/`
 - `ServerRu2Host` — `https://msk1.gmlfr.vestalis.xyz/`
 - `ServerEu1Host` — `https://gmlfr.vestalis.xyz/`
-- `ServerPl1Host` / `Host` — `https://201-58-180-2.sslip.io/`
+- `ServerPl1Host` / `Host` — `https://201-58-180-2.sslip.io/` (сторонний, см. README)
+
+Режимы зеркала (`GET /api/v1/mirror/mode`), бейдж в правом верхнем углу:
+
+| `data.mode` | Бейдж | Цвет | Смысл |
+| --- | --- | --- | --- |
+| `local` | `ЗЕРКАЛО` | `#2E9E5B` зелёный | ответы из локального кэша VDS |
+| `proxy` | `ПРОКСИ` | `#D9822B` оранжевый | запросы напрямую на основной бэкенд |
+| `direct` | `ОСНОВНОЙ` | `#3B82F6` синий | основного бэкенда, зеркальных эндпоинтов нет |
+| `null`/ошибка | бейдж скрыт | — | бэкенд недоступен или режим неизвестен |
 
 ## Карта кода (главное)
 
 | Что | Где |
 | --- | --- |
 | Точка входа, DI | `Program.cs`, `App.axaml.cs`, `Core/Extensions/ServiceLocator.cs` |
+| Сплэш, старт, валидация токена с HWID | `ViewModels/SplashScreenViewModel.cs` |
+| Главное окно: сервер, бейдж режима | `ViewModels/MainWindowViewModel.cs`, `Views/MainWindow.axaml` |
+| Глобальное состояние (режим, доступ) | `ViewModels/GlobalVariables.cs` |
 | Логин, 2FA, HWID | `ViewModels/Pages/LoginPageViewModel.cs`, `Core/Services/AutoLoginService.cs` |
-| Настройки | `ViewModels/Pages/SettingsPageViewModel.cs`, `Core/Services/SettingsService.cs` |
+| Настройки (RAM/JVM/звук/HWID/ключ) | `ViewModels/Pages/SettingsPageViewModel.cs`, `Views/Pages/SettingsPageView.axaml` |
+| Проверка бэкенда и режим | `Core/Services/BackendChecker.cs`, `IBackendChecker.cs` |
+| Сервисный ключ, смена режима, selftest | `Core/Services/MirrorControlService.cs`, `IMirrorControlService.cs` |
+| Модель строки самодиагностики | `Models/SelfTestRow.cs` |
+| Настройки/хранилище | `Core/Services/SettingsService.cs`, `LocalStorageService.cs`, `StorageConstants.cs` |
 | Главная, профили, новости | `ViewModels/Pages/OverviewPageViewModel.cs` |
 | Список профилей | `ViewModels/Components/ListViewModel.cs`, `Views/Components/ServerListComponent.axaml` |
-| Выбор сервера | `ViewModels/MainWindowViewModel.cs`, `Views/Components/ServerSelectorComponent.axaml` |
+| Выбор сервера | `Views/Components/ServerSelectorComponent.axaml`, `Models/GmlServer.cs` |
 | Звуки интерфейса | `Core/Services/SoundService.cs` |
-| Система / HWID из железа | `Core/Services/SystemService.cs` |
+| Система / HWID из железа | `Core/Services/SystemService.cs`, `ISystemService.cs` |
+| Sentry, VPN, скины | `Core/Services/SentryInitializer.cs`, `VpnChecker.cs`, `SkinService.cs` |
 | SignalR | `src/Gml.Client/.../Helpers/SignalRConnect.cs`, `GmlClientManager.cs` |
-| Загрузка/валидация файлов | `src/Gml.Client/.../Helpers/Files/*`, `ApiProcedures.cs` |
+| Валидация/загрузка файлов | `src/Gml.Client/.../Helpers/Files/*`, `ApiProcedures.cs` |
+| Кэш SHA-1, трассировка | `Helpers/Files/ValidationCache.cs`, `Gml.Client.Interfaces/Helpers/LaunchTrace.cs` |
 
 ## Решения и подводные камни (не ломать)
 
@@ -64,10 +131,10 @@ Start-Process 'src\Gml.Launcher\bin\Debug\net8.0\Gml.Launcher.exe'
   (`SkipUpdate`, `GetActualVersion`, `UpdateCurrentLauncher`, `LauncherUpdater` и т.п.).
 - **HWID обязателен для нового бэкенда.** Без заголовка `X-HWID` авторизация отдаёт 403
   («HWID отключена или недействительна»). Поэтому `SettingsService.GetHwidForAuthAsync`
-  никогда не возвращает `null`: при включённом тумблере уходит реальный HWID
-  (`CPU-плата-диски`), при выключенном — **новый случайный GUID на каждый запрос**
-  (`SystemService.GetRandomHwid`), чтобы не светить серийники и чтобы бан, привязанный
-  к конкретному идентификатору, не залипал. Не возвращать `null` обратно.
+  никогда не возвращает `null`: с включённым тумблером уходит реальный HWID
+  (`CPU-плата-диски`), с выключенным — **новый случайный GUID на каждый запрос**
+  (`SystemService.GetRandomHwid`). Не возвращать `null` обратно. `checkToken` тоже обязан
+  слать `X-HWID`: `Auth(accessToken, hwid)` в интерфейсе → менеджере → `ApiProcedures`.
 - **Звуки не должны играть от фоновых событий.** Бэкенд по SignalR присылает
   `RefreshProfiles`; перестройка списка профилей поднимает `SelectionChanged`, как от клика.
   Лечится `SoundService.Suppress()` вокруг перестройки коллекций + проверкой
@@ -76,32 +143,44 @@ Start-Process 'src\Gml.Launcher\bin\Debug\net8.0\Gml.Launcher.exe'
 - **UI-поток.** Подписки Rx, меняющие UI, переводить на `RxApp.MainThreadScheduler`;
   анимации/изменения из других потоков — через `Dispatcher.UIThread.CheckAccess()/Post`.
   Симптом нарушения: `InvalidOperationException: Call from invalid thread`.
-- **Опциональные моды** хранятся с суффиксом `.disabled`; при выключенном моде сервер
-  всё равно отдаёт имя без суффикса. Логика — в `HashValidationDecorator` /
-  `ApiProcedures.DownloadFiles`.
-- **Кэш валидации файлов** — `Helpers/Files/ValidationCache.cs`
-  (`%LOCALAPPDATA%\Gml.Launcher\validation-cache-v1.json`): доверяет SHA-1, пока совпадают
-  размер и `LastWriteTimeUtc`. Формат файлов профиля меняется — кэш можно смело удалять.
-- **Трассировка запуска** — `Gml.Client.Interfaces/Helpers/LaunchTrace.cs`, включается
-  переменной окружения `GML_LAUNCH_TRACE=1`, пишет в
-  `%LOCALAPPDATA%\Gml.Launcher\launch-trace.log`. По умолчанию выключена.
-- **Индикатор режима бэкенда.** `IBackendChecker.GetBackendModeAsync` раз в 20 с дергает
-  `GET /api/v1/mirror/mode` (у основного бэкенда такого эндпоинта нет — тогда режим
-  `direct`). `MainWindowViewModel` красит бейдж в правом верхнем углу: `ЗЕРКАЛО`
-  (local, зелёный), `ПРОКСИ` (proxy, оранжевый), `ОСНОВНОЙ` (direct, синий). Ошибки
-  сети не должны валить лаунчер: бейдж просто скрывается. Значение хранится в
-  `GlobalVariables.BackendMode`, в `data.db` не пишется.
-- **Управление режимом бэкенда.** Сервисный ключ (`MIRROR_CONTROL_KEY`) вводится в
-  настройках вручную и лежит в `data.db` под `StorageConstants.MirrorControlKey`; в
-  исходники его не класть. `MirrorControlService` проверяет ключ через
-  `GET /api/v1/mirror/mode` (`data.canControl`) и сохраняет только принятый. Кнопки
-  «Зеркало»/«Прокси» видны только при `IsBackendControlAvailable`. После смены режима
-  вызывается `MainWindowViewModel.RefreshBackendModeAsync`, чтобы бейдж обновился сразу,
-  не дожидаясь 20-секундного опроса.
-- **Самодиагностика.** Кнопка «Проверить бэкенд» в той же карточке дергает
-  `GET /api/v1/mirror/selftest` с тем же ключом (без ключа сервер отвечает 403).
-  Результат — список `SelfTestRow` (`Models/SelfTestRow.cs`): точка и подпись цвета
-  статуса, время шага и подробности. Это только чтение; эндпоинт ничего не меняет.
+- **Опциональные моды** хранятся с суффиксом `.disabled`; сервер отдаёт имя без суффикса.
+  `HashValidationDecorator` считает мод опциональным по `-optional-mod.jar` в пути и
+  принимает `<файл>.disabled` как актуальную копию, чтобы не качать его каждый запуск.
+- **Кэш валидации файлов.** `ValidationCache` доверяет сохранённому SHA-1, только пока
+  совпадают размер и `LastWriteTimeUtc` (тики). Хэширование — параллельное
+  (`ProcessorCount * 2`, зажато в 4..16), `SystemHelper.CalculateFileHash` читает файл
+  чанками по 1 МБ через `ArrayPool`. Битый кэш не роняет запуск; запись атомарная
+  через `.tmp`. Формат файлов профиля меняется — кэш можно смело удалять.
+- **Старое исключение для `assets` при валидации убрано.** Если сервер начнёт отдавать
+  другие хэши для `assets`, файлы будут перекачиваться — это ожидаемо, не «чинить»
+  возвратом исключения без проверки формата на сервере.
+- **Трассировка запуска** — `Gml.Client.Interfaces/Helpers/LaunchTrace.cs` (namespace
+  `Gml.Client.Helpers`), включается `GML_LAUNCH_TRACE=1`, пишет в
+  `%LOCALAPPDATA%\Gml.Launcher\launch-trace.log`. По умолчанию выключена, на запуск не влияет.
+- **Бейдж режима бэкенда.** `BackendChecker.UpdateBackendStatus` (сплэш, смена сервера,
+  кнопка проверки) определяет доступность и режим; `MainWindowViewModel` опрашивает
+  `RefreshBackendModeAsync` через 3 с после старта и каждые 20 с, применяет изменения в
+  UI-потоке. `IsOffline` — это `GlobalVariables.BackendInactive` (глобальное состояние,
+  не поле экземпляра). Ошибки сети не должны валить лаунчер: бейдж скрывается.
+- **Управление режимом.** `MirrorControlService` шлёт заголовок `X-Mirror-Control-Key`:
+  `GET /api/v1/mirror/mode` (таймаут 10 с) — статус и `data.canControl`;
+  `PUT /api/v1/mirror/mode` с `{"mode":"local"|"proxy"}` — переключение.
+  Ключ вводится вручную в настройках, сохраняется только если сервер его принял
+  (`data.canControl == true`), лежит в `data.db` под `MirrorControlKey`; **в исходники
+  его не класть**. Кнопки «Зеркало»/«Прокси» видны только при `IsBackendControlAvailable`.
+  После смены режима сразу вызывается `MainWindowViewModel.RefreshBackendModeAsync`.
+- **Самодиагностика.** `GET /api/v1/mirror/selftest` с тем же ключом, таймаут 45 с,
+  только чтение (ничего не меняет). Ответ: `data.status/mode/upstream/durationMs` и
+  `data.checks[]` (`key`, `name`, `status`, `message`, `durationMs`). Статусы строк:
+  `ok` → «ОК» зелёный, `warn` → «ВНИМАНИЕ» оранжевый, иначе «ОШИБКА» красный.
+  Без ключа сервер отвечает 403 — это не ошибка кода, а ожидаемое поведение.
+- **Локализация карточки сервисного доступа.** Тексты карточки и сообщения
+  `MirrorControlService`/`SettingsPageViewModel` захардкожены по-русски в axaml и коде,
+  а не через `Resources.*` (в отличие от остального UI). При добавлении языков это
+  первое место, где нужно вынести строки в ресурсы.
+- **Смена сервера** (`MainWindowViewModel.SwitchServerAsync`) сохраняет хост, меняет
+  хост клиента, **сбрасывает `UserInfo` и `SavedCredentials`** (авторизация привязана к
+  бэкенду), обновляет режим и Sentry DSN. Это поведение по дизайну.
 - **Git.** Сабмодуль коммитится отдельно, потом обновляется указатель в корне
   (`git add src/Gml.Client`). Локальные правки хостов в `ResourceKeysDictionary.cs`
   не коммитить без просьбы.
@@ -113,6 +192,15 @@ Start-Process 'src\Gml.Launcher\bin\Debug\net8.0\Gml.Launcher.exe'
 `shot.ps1` (скрин окна), `input.ps1 -X -Y` (клик), `focus.ps1` (вывести окно вперёд),
 `read_db.py` (дамп `data.db`). Если окно перекрыто — сначала `focus.ps1`, иначе
 `CopyFromScreen` снимет чужое окно.
+
+Типовые сценарии:
+
+- **Логин/HWID:** форма входа, тумблер «Отправлять HWID» и подсказка. Выключенный
+  тумблер = случайный HWID на каждую попытку, включённый = реальный.
+- **Бейдж режима:** правый верхний угол; пропал — бэкенд недоступен или эндпоинта нет.
+- **Сервисный доступ:** Настройки → карточка «Сервисный доступ»; без принятого ключа
+  блоки режима и самодиагностики скрыты.
+- **Самодиагностика:** Настройки → «Проверить бэкенд» → строки со статусом и временем.
 
 ## Стиль работы
 

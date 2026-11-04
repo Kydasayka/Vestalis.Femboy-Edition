@@ -34,11 +34,18 @@ changelog of differences is maintained here.
 - **No Vestalis auto-updates** – the auto-updater script has been removed.
 - **Custom Design** – ultra MEOW design in optional mods :3
 - **Animations** – more animations for UI elements (may cause lag).
-- **Hot Cache** – `javaw` starts faster after pressing the start button.
+- **Hot Cache** – file hashes are cached and computed in parallel, so the game starts faster
+  after the first validation.
 - **Auto Auth** – the launcher automatically sends an authentication request to the backend after a restart if you aren't logged in (!!! Not tested with 2FA !!!).
-- **Random HWID** – enable this feature if you were banned for no reason via your HWID.
+- **Random HWID** – when "Send HWID" is off, every sign-in attempt uses a fresh random
+  identifier, so a ban tied to one hardware ID does not stick. Turning it on sends the real
+  hardware ID instead.
 - **JVM Arguments & RAM settings** – the name says it all (credits to katran).
 - **Custom Backend Server** – mirrors the EU server and is located in Poland/PL1 (W.I.P.).
+- **Backend mode badge** – the top-right corner shows whether the launcher talks to the local
+  mirror (`ЗЕРКАЛО`), the proxy (`ПРОКСИ`) or the main backend directly (`ОСНОВНОЙ`).
+- **Service access** – in the settings a service key can unlock switching between mirror and
+  proxy, plus a read-only backend self-test.
 
 ## Requirements
 
@@ -53,7 +60,7 @@ The client code lives in the `src/Gml.Client` submodule, so clone recursively:
 
 ```bash
 git clone --recursive <this-repo-url>
-cd Gml.Launcher-2025.3.3
+cd Vestalis.Femboy-Edition
 ```
 
 If you cloned without `--recursive`:
@@ -80,13 +87,34 @@ Start-Process 'src\Gml.Launcher\bin\Debug\net8.0\Gml.Launcher.exe'
 
 Startup takes ~35–50 seconds (splash screen, remote data loading).
 
+### Portable build
+
+```powershell
+dotnet publish 'src\Gml.Launcher\Gml.Launcher.csproj' -c Release -r win-x64 `
+  --self-contained true -p:PublishSingleFile=true `
+  -p:IncludeNativeLibrariesForSelfExtract=true -o dist\portable
+```
+
+The result is a single `dist\portable\Gml.Launcher.exe` (ignored by git). Without
+`IncludeNativeLibrariesForSelfExtract` the native SkiaSharp/HarfBuzz/sqlite libraries are left
+next to the executable.
+
 ## Configuration
 
 Servers are defined in `src/Gml.Launcher/Assets/Resources/ResourceKeysDictionary.cs`
 (`ServerRu1Host`, `ServerRu2Host`, `ServerEu1Host`, `ServerPl1Host`).
 
 Local data is stored in `%APPDATA%\Vestalis\data.db` (SQLite, table `StorageItems`), with keys
-such as `Settings`, `ServerHost`, `LastSelectedProfile`, `SavedCredentials` and `UserInfo`.
+such as `Settings`, `ServerHost`, `LastSelectedProfile`, `SavedCredentials`, `UserInfo`,
+`InstallationDirectory` and `MirrorControlKey`. The last one is the optional service key for
+switching the backend mode; it is entered by hand in the settings and never shipped with the
+build.
+
+Backend mode (`local` mirror / `proxy` / `direct`) is reported by `GET /api/v1/mirror/mode`
+and shown as a badge in the top-right corner. A backend without these endpoints is treated as
+`direct` and the badge is hidden when the backend is unreachable. With an accepted service key
+the settings can switch the mode (`PUT /api/v1/mirror/mode`) and run a read-only self-test
+(`GET /api/v1/mirror/selftest`).
 
 Debug artifacts:
 
