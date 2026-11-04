@@ -38,6 +38,8 @@
                     <TextBlock Text="{TemplateBinding ProfileName}"
                                Foreground="{TemplateBinding Foreground}"
                                TextWrapping="Wrap"
+                               MaxLines="2"
+                               TextTrimming="CharacterEllipsis"
                                FontWeight="Black"
                                FontSize="{TemplateBinding FontSize}" />
 
@@ -47,6 +49,8 @@
                                LineHeight="25"
                                MaxWidth="{TemplateBinding MaxWidth}"
                                TextWrapping="Wrap"
+                               MaxLines="5"
+                               TextTrimming="CharacterEllipsis"
                                FontSize="14" />
 
                     <!-- <TextBlock Text="{TemplateBinding CreateDate}" -->
