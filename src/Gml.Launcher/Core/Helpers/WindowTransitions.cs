@@ -105,18 +105,22 @@ public static class WindowTransitions
     }
 
     /// <summary>
-    /// Windows 11 paints a thin matte/accent border around windows. The launcher draws its own
-    /// rounded surface, so that border is switched off (ignored on older Windows).
+    /// Windows 11 paints a thin matte/accent border and a drop shadow around windows. The
+    /// launcher draws its own surface, so both are switched off (ignored on older Windows).
     /// </summary>
     private static void HideSystemBorder(IntPtr handle)
     {
+        const int DwmwaNcRenderingPolicy = 2;
         const int DwmwaBorderColor = 34;
         const uint DwmColorNone = 0xFFFFFFFE;
+        const uint DwmNcRenderingDisabled = 1;
 
+        var policy = DwmNcRenderingDisabled;
         var color = DwmColorNone;
 
         try
         {
+            DwmSetWindowAttribute(handle, DwmwaNcRenderingPolicy, ref policy, sizeof(uint));
             DwmSetWindowAttribute(handle, DwmwaBorderColor, ref color, sizeof(uint));
         }
         catch (DllNotFoundException)

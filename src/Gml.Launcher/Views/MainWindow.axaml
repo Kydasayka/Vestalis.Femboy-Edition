@@ -22,7 +22,7 @@
         ExtendClientAreaToDecorationsHint="True"
         WindowStartupLocation="CenterScreen"
         ShowActivated="False"
-        TransparencyLevelHint="AcrylicBlur"
+        TransparencyLevelHint="Transparent"
         TransparencyBackgroundFallback="Transparent"
         Icon="/Assets/Images/logo.ico"
         Title="Gml.Launcher">
