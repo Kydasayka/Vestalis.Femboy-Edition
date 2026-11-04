@@ -13,12 +13,21 @@ namespace Gml.Launcher;
 
 internal class Program
 {
+    private const string AppUserModelId = "Vestalis.FemboyEdition.Launcher";
+
+    [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern int SetCurrentProcessExplicitAppUserModelID(string appId);
+
     [STAThread]
 #if DEBUG
     public static void Main(string[] args)
     {
         try
         {
+            // Tell Windows which app this process is, so the taskbar uses the launcher icon
+            // instead of a generic placeholder for a borderless window.
+            SetCurrentProcessExplicitAppUserModelID(AppUserModelId);
+
             Debug.WriteLine($"[Gml][{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] Application started");
             //InitializeSentry();
             // RxApp.DefaultExceptionHandler = Observer.Create<Exception>(GlobalExceptionHandler);
@@ -36,6 +45,8 @@ internal class Program
     {
         try
         {
+            SetCurrentProcessExplicitAppUserModelID(AppUserModelId);
+
             Debug.WriteLine($"[Gml][{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] Application started");
             //InitializeSentry();
             RxApp.DefaultExceptionHandler = Observer.Create<Exception>(GlobalExceptionHandler);
