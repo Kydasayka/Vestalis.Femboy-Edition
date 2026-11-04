@@ -4,7 +4,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
-using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.ReactiveUI;
 using Gml.Launcher.Core.Helpers;
@@ -97,23 +96,6 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
         {
             BeginMoveDrag(e);
         }
-    }
-
-    private void MinimizeClick(object? sender, RoutedEventArgs e)
-    {
-        WindowState = WindowState.Minimized;
-    }
-
-    private void MaximizeClick(object? sender, RoutedEventArgs e)
-    {
-        WindowState = WindowState == WindowState.Maximized
-            ? WindowState.Normal
-            : WindowState.Maximized;
-    }
-
-    private void CloseClick(object? sender, RoutedEventArgs e)
-    {
-        Close();
     }
 
     private void WindowClosed(object? sender, EventArgs e)
