@@ -45,6 +45,14 @@ public static class ServiceLocator
         CheckAndChangeLanguage(storageService, systemService);
         ApplySoundSettings(storageService);
         Locator.CurrentMutable.RegisterConstant(new VpnChecker(), typeof(IVpnChecker));
+
+        var mirrorControl = new MirrorControlService(storageService, manager);
+        Locator.CurrentMutable.RegisterConstant(mirrorControl, typeof(IMirrorControlService));
+
+        // Restore the optional service key in the background so the badge knows whether
+        // mode switching is available without opening the settings first.
+        _ = mirrorControl.LoadAsync();
+
         Locator.CurrentMutable.RegisterConstant(new BackendChecker(), typeof(IBackendChecker));
 
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>

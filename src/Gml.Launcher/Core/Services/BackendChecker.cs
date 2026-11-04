@@ -2,16 +2,10 @@ using System;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Runtime.InteropServices;
-using System.Text.Json;
 using System.Threading.Tasks;
-using Avalonia.Controls;
 using Gml.Client;
 using Gml.Client.Interfaces;
-using Gml.Launcher.Assets;
 using Gml.Launcher.Core.Exceptions;
-using Gml.Launcher.Core.Services;
-using Sentry;
 using Splat;
 
 namespace Gml.Launcher.Core.Services;
@@ -19,17 +13,21 @@ namespace Gml.Launcher.Core.Services;
 public class BackendChecker: IBackendChecker
 {
     private static readonly TimeSpan BackendCheckTimeout = TimeSpan.FromSeconds(10);
-    private static readonly TimeSpan ModeCheckTimeout = TimeSpan.FromSeconds(5);
     private readonly IGmlClientManager _manager;
+    private readonly IMirrorControlService _mirrorControl;
     public IGmlClientManager Manager => _manager;
     public bool IsOffline => GlobalVariables.BackendInactive;
     public string? BackendMode { get; private set; }
 
     public BackendChecker(
-        IGmlClientManager? manager=null)
+        IGmlClientManager? manager=null,
+        IMirrorControlService? mirrorControl=null)
     {
         _manager = manager ?? Locator.Current.GetService<IGmlClientManager>()
             ?? throw new ServiceNotFoundException(typeof(IGmlClientManager));
+
+        _mirrorControl = mirrorControl ?? Locator.Current.GetService<IMirrorControlService>()
+            ?? throw new ServiceNotFoundException(typeof(IMirrorControlService));
     }
 
     public async Task UpdateBackendStatus()
@@ -37,9 +35,14 @@ public class BackendChecker: IBackendChecker
         GlobalVariables.BackendInactive = await BackendIsActive() == false;
 
         if (GlobalVariables.BackendInactive)
+        {
             SetMode(null);
+            GlobalVariables.CanControlBackend = false;
+        }
         else
+        {
             await GetBackendModeAsync();
+        }
     }
 
     public Task<bool> BackendIsActive()
@@ -50,13 +53,13 @@ public class BackendChecker: IBackendChecker
         }
         catch (TaskCanceledException exception)
         {
-            SentrySdk.CaptureException(exception);
+            Sentry.SentrySdk.CaptureException(exception);
             Console.WriteLine(exception);
             return Task.FromResult(false);
         }
         catch (HttpRequestException exception)
         {
-            SentrySdk.CaptureException(exception);
+            Sentry.SentrySdk.CaptureException(exception);
             Console.WriteLine(exception);
             return Task.FromResult(false);
         }
@@ -64,38 +67,18 @@ public class BackendChecker: IBackendChecker
 
     public async Task<string?> GetBackendModeAsync()
     {
-        try
-        {
-            using var client = new HttpClient { Timeout = ModeCheckTimeout };
-            using var response = await client.GetAsync(new Uri(_manager.HostUri, "api/v1/mirror/mode"))
-                .ConfigureAwait(false);
+        var state = await _mirrorControl.GetStateAsync();
 
+        if (state is null)
+        {
             // A backend without the mirror endpoints is the main backend itself.
-            if (response.StatusCode == HttpStatusCode.NotFound)
-            {
-                SetMode("direct");
-                return BackendMode;
-            }
-
-            if (!response.IsSuccessStatusCode)
-            {
-                SetMode(null);
-                return BackendMode;
-            }
-
-            await using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
-            using var document = await JsonDocument.ParseAsync(stream).ConfigureAwait(false);
-
-            if (document.RootElement.TryGetProperty("data", out var data) &&
-                data.TryGetProperty("mode", out var mode))
-                SetMode(mode.GetString()?.ToLowerInvariant());
-            else
-                SetMode(null);
+            SetMode(GlobalVariables.BackendInactive ? null : "direct");
+            GlobalVariables.CanControlBackend = false;
+            return BackendMode;
         }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
-        {
-            SetMode(null);
-        }
+
+        SetMode(state.Mode);
+        GlobalVariables.CanControlBackend = state.CanControl;
 
         return BackendMode;
     }

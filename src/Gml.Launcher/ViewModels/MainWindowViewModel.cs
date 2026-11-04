@@ -263,7 +263,7 @@ public class MainWindowViewModel : WindowViewModelBase, IScreen
         }
     }
 
-    private async Task RefreshBackendModeAsync()
+    public async Task RefreshBackendModeAsync()
     {
         var mode = await _backendChecker.GetBackendModeAsync();
 
@@ -275,24 +275,28 @@ public class MainWindowViewModel : WindowViewModelBase, IScreen
 
     private void ApplyBackendMode(string? mode)
     {
+        var controlHint = GlobalVariables.CanControlBackend
+            ? "\nПереключение режима доступно в настройках"
+            : string.Empty;
+
         switch (mode?.ToLowerInvariant())
         {
             case "proxy":
                 IsBackendModeVisible = true;
                 BackendModeLabel = "ПРОКСИ";
-                BackendModeHint = "Запросы уходят напрямую на основной бэкенд";
+                BackendModeHint = "Запросы уходят напрямую на основной бэкенд" + controlHint;
                 BackendModeBrush = new SolidColorBrush(Color.Parse("#D9822B"));
                 break;
             case "local":
                 IsBackendModeVisible = true;
                 BackendModeLabel = "ЗЕРКАЛО";
-                BackendModeHint = "Ответы берутся из локального кэша VDS";
+                BackendModeHint = "Ответы берутся из локального кэша VDS" + controlHint;
                 BackendModeBrush = new SolidColorBrush(Color.Parse("#2E9E5B"));
                 break;
             case "direct":
                 IsBackendModeVisible = true;
                 BackendModeLabel = "ОСНОВНОЙ";
-                BackendModeHint = "Лаунчер подключён к основному бэкенду напрямую";
+                BackendModeHint = "Лаунчер подключён к основному бэкенду напрямую" + controlHint;
                 BackendModeBrush = new SolidColorBrush(Color.Parse("#3B82F6"));
                 break;
             default:

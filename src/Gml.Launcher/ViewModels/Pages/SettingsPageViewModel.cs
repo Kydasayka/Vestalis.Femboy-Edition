@@ -5,8 +5,11 @@ using System.Linq;
 using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
+using System.Threading.Tasks;
+using GamerVII.Notification.Avalonia;
 using Gml.Client;
 using Gml.Client.Interfaces;
+using Gml.Launcher.Assets;
 using Gml.Launcher.Assets.Resources;
 using Gml.Launcher.Core.Services;
 using Gml.Launcher.Models;
@@ -14,6 +17,7 @@ using Gml.Launcher.ViewModels.Base;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
 using Sentry;
+using Splat;
 
 namespace Gml.Launcher.ViewModels.Pages;
 
@@ -27,6 +31,7 @@ public class SettingsPageViewModel : PageViewModelBase
 
     private readonly IGmlClientManager _gmlManager;
     private readonly ISettingsService _settingsService;
+    private readonly IMirrorControlService _mirrorControl;
 
     private double _xmsRamValue = 2048;
     private double _xmxRamValue = 8192;
@@ -37,11 +42,18 @@ public class SettingsPageViewModel : PageViewModelBase
         IScreen screen,
         ILocalizationService? localizationService,
         ISettingsService settingsService,
-        IGmlClientManager gmlManager) : base(screen, localizationService)
+        IGmlClientManager gmlManager,
+        IMirrorControlService? mirrorControl = null) : base(screen, localizationService)
     {
         MainViewModel = (MainWindowViewModel)screen;
         _settingsService = settingsService;
         _gmlManager = gmlManager;
+        _mirrorControl = mirrorControl ?? Locator.Current.GetService<IMirrorControlService>()
+            ?? new MirrorControlService();
+
+        VerifyServiceKeyCommand = ReactiveCommand.CreateFromTask(VerifyServiceKeyAsync);
+        ClearServiceKeyCommand = ReactiveCommand.CreateFromTask(ClearServiceKeyAsync);
+        SetBackendModeCommand = ReactiveCommand.CreateFromTask<string>(SetBackendModeAsync);
 
         var settingsChanged = this.WhenAnyValue(
                 x => x.XmsRamValue,
@@ -75,6 +87,7 @@ public class SettingsPageViewModel : PageViewModelBase
             .Subscribe(UpdateSettings);
 
         RxApp.TaskpoolScheduler.Schedule(LoadSettings);
+        RxApp.TaskpoolScheduler.Schedule(LoadMirrorControl);
     }
 
     private bool ValidateParams(SettingsUpdate update)
@@ -127,6 +140,19 @@ public class SettingsPageViewModel : PageViewModelBase
     [Reactive] public string? InstallationFolder { get; set; }
     [Reactive] private SettingsInfo? Settings { get; set; }
     [Reactive] public ObservableCollection<Language> AvailableLanguages { get; set; } = [];
+
+    // --- Optional mirror control (service key) -------------------------------
+    [Reactive] public string ServiceKey { get; set; } = string.Empty;
+    [Reactive] public bool IsServiceKeySaved { get; private set; }
+    [Reactive] public bool IsServiceKeyBusy { get; private set; }
+    [Reactive] public bool IsBackendControlAvailable { get; private set; }
+    [Reactive] public bool IsBackendLocalMode { get; private set; }
+    [Reactive] public bool IsBackendProxyMode { get; private set; }
+    [Reactive] public string BackendControlStatus { get; private set; } = string.Empty;
+
+    public ReactiveCommand<Unit, Unit> VerifyServiceKeyCommand { get; }
+    public ReactiveCommand<Unit, Unit> ClearServiceKeyCommand { get; }
+    public ReactiveCommand<string, Unit> SetBackendModeCommand { get; }
 
     public MainWindowViewModel MainViewModel { get; }
 
@@ -299,5 +325,110 @@ public class SettingsPageViewModel : PageViewModelBase
         {
             SentrySdk.CaptureException(exception);
         }
+    }
+
+    // --- Optional mirror control ---------------------------------------------
+
+    private async void LoadMirrorControl()
+    {
+        try
+        {
+            await _mirrorControl.LoadAsync();
+            await RefreshBackendControlAsync();
+        }
+        catch (Exception exception)
+        {
+            SentrySdk.CaptureException(exception);
+        }
+    }
+
+    private async Task RefreshBackendControlAsync()
+    {
+        var state = await _mirrorControl.GetStateAsync();
+
+        IsServiceKeySaved = _mirrorControl.HasKey;
+        IsBackendControlAvailable = state?.CanControl == true;
+        IsBackendLocalMode = state?.Mode == "local";
+        IsBackendProxyMode = state?.Mode == "proxy";
+        GlobalVariables.CanControlBackend = IsBackendControlAvailable;
+
+        BackendControlStatus = state switch
+        {
+            null => "Сервер не отвечает на запрос режима",
+            { CanControl: true } => $"Ключ принят. Режим: {(state.Mode == "proxy" ? "прокси" : "зеркало")}",
+            _ when _mirrorControl.HasKey => "Ключ не принят этим сервером",
+            _ => "Введите сервисный ключ, чтобы управлять режимом"
+        };
+    }
+
+    private async Task VerifyServiceKeyAsync()
+    {
+        var key = ServiceKey.Trim();
+
+        if (key.Length == 0)
+        {
+            BackendControlStatus = "Введите сервисный ключ";
+            return;
+        }
+
+        IsServiceKeyBusy = true;
+
+        try
+        {
+            var accepted = await _mirrorControl.SaveKeyAsync(key);
+            ServiceKey = string.Empty;
+            await RefreshBackendControlAsync();
+
+            Notify(accepted, accepted
+                ? "Сервисный ключ сохранён на этом компьютере"
+                : "Сервисный ключ не принят сервером");
+        }
+        finally
+        {
+            IsServiceKeyBusy = false;
+        }
+    }
+
+    private async Task ClearServiceKeyAsync()
+    {
+        IsServiceKeyBusy = true;
+
+        try
+        {
+            await _mirrorControl.ClearKeyAsync();
+            await RefreshBackendControlAsync();
+            Notify(true, "Сервисный ключ удалён с этого компьютера");
+        }
+        finally
+        {
+            IsServiceKeyBusy = false;
+        }
+    }
+
+    private async Task SetBackendModeAsync(string mode)
+    {
+        IsServiceKeyBusy = true;
+
+        try
+        {
+            var (ok, message) = await _mirrorControl.SetModeAsync(mode);
+            await RefreshBackendControlAsync();
+            Notify(ok, message);
+            await MainViewModel.RefreshBackendModeAsync();
+        }
+        finally
+        {
+            IsServiceKeyBusy = false;
+        }
+    }
+
+    private void Notify(bool success, string message)
+    {
+        MainViewModel.Manager
+            .CreateMessage(!success, success ? "#2E9E5B" : "#D03E3E",
+                LocalizationService.GetString(ResourceKeysDictionary.Information), message)
+            .Dismiss()
+            .WithDelay(TimeSpan.FromSeconds(4))
+            .Queue();
     }
 }

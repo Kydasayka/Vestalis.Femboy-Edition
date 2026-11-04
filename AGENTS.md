@@ -91,6 +91,13 @@ Start-Process 'src\Gml.Launcher\bin\Debug\net8.0\Gml.Launcher.exe'
   (local, зелёный), `ПРОКСИ` (proxy, оранжевый), `ОСНОВНОЙ` (direct, синий). Ошибки
   сети не должны валить лаунчер: бейдж просто скрывается. Значение хранится в
   `GlobalVariables.BackendMode`, в `data.db` не пишется.
+- **Управление режимом бэкенда.** Сервисный ключ (`MIRROR_CONTROL_KEY`) вводится в
+  настройках вручную и лежит в `data.db` под `StorageConstants.MirrorControlKey`; в
+  исходники его не класть. `MirrorControlService` проверяет ключ через
+  `GET /api/v1/mirror/mode` (`data.canControl`) и сохраняет только принятый. Кнопки
+  «Зеркало»/«Прокси» видны только при `IsBackendControlAvailable`. После смены режима
+  вызывается `MainWindowViewModel.RefreshBackendModeAsync`, чтобы бейдж обновился сразу,
+  не дожидаясь 20-секундного опроса.
 - **Git.** Сабмодуль коммитится отдельно, потом обновляется указатель в корне
   (`git add src/Gml.Client`). Локальные правки хостов в `ResourceKeysDictionary.cs`
   не коммитить без просьбы.

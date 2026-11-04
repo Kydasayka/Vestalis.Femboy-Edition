@@ -279,6 +279,85 @@
 
                     </components:StackFrameBorder>
 
+                    <!-- Optional service access: switch the mirror backend mode -->
+                    <components:StackFrameBorder
+                        Spacing="10"
+                        VerticalAlignment="Top">
+
+                        <StackPanel Orientation="Horizontal"
+                                    Margin="0, 0, 0, 10"
+                                    Spacing="10">
+                            <Svg Path="/Assets/Images/password.svg"
+                                 Width="28"
+                                 Height="28" />
+                            <TextBlock Text="Сервисный доступ"
+                                       Margin="0"
+                                       Classes="HeadlineText" />
+                        </StackPanel>
+
+                        <Border Classes="Separator" Margin="0, 10" />
+
+                        <TextBlock Text="Ключ хранится только на этом компьютере. С верным ключом можно переключать режим бэкенда между локальным зеркалом и прокси на основной сервер."
+                                   TextWrapping="Wrap"
+                                   Classes="FormText"
+                                   Margin="0" />
+
+                        <Grid ColumnDefinitions="*, 10, Auto"
+                              Margin="0, 10, 0, 0">
+                            <TextBox Grid.Column="0"
+                                     Classes="FormBox"
+                                     PasswordChar="●"
+                                     Text="{Binding ServiceKey, Mode=TwoWay}"
+                                     Watermark="Сервисный ключ" />
+                            <components:GmlButton Grid.Column="2"
+                                                  Classes="Text Additional"
+                                                  Height="42"
+                                                  Text="Проверить"
+                                                  IsEnabled="{Binding !IsServiceKeyBusy}"
+                                                  Command="{Binding VerifyServiceKeyCommand}" />
+                        </Grid>
+
+                        <TextBlock Text="{Binding BackendControlStatus}"
+                                   TextWrapping="Wrap"
+                                   Classes="FormText"
+                                   Margin="0" />
+
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="10"
+                                    IsVisible="{Binding IsServiceKeySaved}">
+                            <components:GmlButton Classes="Text Additional"
+                                                  Height="42"
+                                                  Text="Удалить ключ"
+                                                  IsEnabled="{Binding !IsServiceKeyBusy}"
+                                                  Command="{Binding ClearServiceKeyCommand}" />
+                        </StackPanel>
+
+                        <Border Classes="Separator" Margin="0, 5"
+                                IsVisible="{Binding IsBackendControlAvailable}" />
+
+                        <StackPanel Spacing="10"
+                                    IsVisible="{Binding IsBackendControlAvailable}">
+                            <TextBlock Text="Режим бэкенда"
+                                       Classes="FormText"
+                                       FontSize="15" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <components:GmlButton Classes="Text Additional"
+                                                      Height="42"
+                                                      Text="Зеркало (кэш)"
+                                                      IsEnabled="{Binding !IsServiceKeyBusy}"
+                                                      Command="{Binding SetBackendModeCommand}"
+                                                      CommandParameter="local" />
+                                <components:GmlButton Classes="Text Additional"
+                                                      Height="42"
+                                                      Text="Прокси (основной)"
+                                                      IsEnabled="{Binding !IsServiceKeyBusy}"
+                                                      Command="{Binding SetBackendModeCommand}"
+                                                      CommandParameter="proxy" />
+                            </StackPanel>
+                        </StackPanel>
+
+                    </components:StackFrameBorder>
+
                     </StackPanel>
                 </ScrollViewer>
 
