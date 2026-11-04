@@ -48,30 +48,31 @@
 
         <Grid>
             <StackPanel VerticalAlignment="Center">
-                <!-- Icon + wordmark lockup; the pair spans the window width. -->
-                <Grid ColumnDefinitions="Auto,*" Margin="20,0">
+                <!-- Icon + wordmark lockup; the icon spans the wordmark line, the pair stays
+                     narrower than the progress bar below. -->
+                <Grid ColumnDefinitions="Auto,*" Margin="22,0">
                     <Svg Path="/Assets/Images/logo.svg"
-                         Width="46"
-                         Height="46"
-                         Margin="0,10,10,0"
+                         Width="56"
+                         Height="56"
+                         Margin="0,8,10,0"
                          VerticalAlignment="Top" />
 
                     <StackPanel Grid.Column="1">
                         <TextBlock Text="Vestalis"
                                    FontFamily="{StaticResource BrandFont}"
-                                   FontSize="70"
+                                   FontSize="58"
                                    HorizontalAlignment="Stretch"
                                    TextAlignment="Center"
-                                   LineHeight="74"
+                                   LineHeight="62"
                                    Foreground="{StaticResource HeadlineColor}" />
 
                         <!-- About half the width of the wordmark, tucked under its right edge. -->
                         <TextBlock Text="Femboy Edition"
                                    FontFamily="{StaticResource BrandFont}"
-                                   FontSize="18"
+                                   FontSize="15"
                                    HorizontalAlignment="Right"
                                    Margin="0,-2,1,0"
-                                   LineHeight="22"
+                                   LineHeight="19"
                                    Foreground="{StaticResource EditionShimmerBrush}" />
                     </StackPanel>
                 </Grid>
@@ -81,7 +82,7 @@
                              Maximum="100"
                              Classes="ProgressBar"
                              Background="#1C1C1C"
-                             Margin="28, 16, 28, 10"
+                             Margin="20, 16, 20, 10"
                              Height="1"
                              VerticalAlignment="Bottom" />
 
