@@ -12,6 +12,7 @@
         WindowStartupLocation="CenterScreen"
         SystemDecorations="None"
         ShowActivated="False"
+        ShowInTaskbar="False"
         Background="Transparent"
         TransparencyLevelHint="Transparent"
         TransparencyBackgroundFallback="Transparent"

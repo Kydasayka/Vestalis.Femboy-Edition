@@ -16,6 +16,7 @@
         MinHeight="600"
         CanResize="True"
         SystemDecorations="None"
+        ShowInTaskbar="True"
         Closed="WindowClosed"
         x:Class="Gml.Launcher.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"

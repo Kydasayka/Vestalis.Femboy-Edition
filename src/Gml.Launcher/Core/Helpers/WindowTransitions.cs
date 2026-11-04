@@ -106,6 +106,7 @@ public static class WindowTransitions
         // HWND_TOP, keep position and size, do not activate.
         SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow);
         HideSystemBorder(handle);
+        SyncClassIcon(handle);
     }
 
     /// <summary>
@@ -141,4 +142,32 @@ public static class WindowTransitions
     [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr window, int attribute,
         ref uint value, int size);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SetClassLongPtr(IntPtr window, int index, IntPtr value);
+
+    private const int WmGetIcon = 0x007F;
+    private const int GclpHicon = -14;
+    private const int GclpHiconSm = -34;
+    private const int IconBig = 1;
+    private const int IconSmall = 0;
+
+    /// <summary>
+    /// Windows picks the taskbar icon from the window class, and borderless windows created by
+    /// Avalonia leave it empty — the taskbar then shows a generic placeholder. Pushing the
+    /// window icon into the class fixes that.
+    /// </summary>
+    private static void SyncClassIcon(IntPtr handle)
+    {
+        var small = SendMessage(handle, WmGetIcon, new IntPtr(IconSmall), IntPtr.Zero);
+        if (small != IntPtr.Zero)
+            SetClassLongPtr(handle, GclpHiconSm, small);
+
+        var big = SendMessage(handle, WmGetIcon, new IntPtr(IconBig), IntPtr.Zero);
+        if (big != IntPtr.Zero)
+            SetClassLongPtr(handle, GclpHicon, big);
+    }
 }
