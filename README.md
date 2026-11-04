@@ -47,7 +47,7 @@ changelog of differences is maintained here.
 - **Service access** – in the settings a service key can unlock switching between mirror and
   proxy, plus a read-only backend self-test.
 - **Tor routing** – the same service card can route the backend's requests to the main
-  backend (`gmlfr.vestalis.xyz`) through Tor while all other traffic stays direct.
+  backend through Tor while all other traffic stays direct.
 
 ## Requirements
 
@@ -119,8 +119,8 @@ the settings can switch the mode (`PUT /api/v1/mirror/mode`) and run a read-only
 (`GET /api/v1/mirror/selftest`).
 
 The service card also toggles Tor routing (`PUT /api/v1/mirror/tor`). It affects only the
-backend's outgoing requests to the main backend host (`gmlfr.vestalis.xyz`); the launcher's own
-traffic, the marketplace and other integrations stay direct.
+backend's outgoing requests to the configured main backend host; the launcher's own traffic,
+the marketplace and other integrations stay direct.
 
 Debug artifacts:
 

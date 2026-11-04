@@ -365,7 +365,7 @@
                             <TextBlock Text="Маршрутизация через Tor"
                                        Classes="FormText"
                                        FontSize="15" />
-                            <TextBlock Text="Через Tor идут только запросы этого бэкенда к основному серверу (gmlfr.vestalis.xyz). Остальной трафик остаётся напрямую."
+                            <TextBlock Text="Через Tor идут только запросы этого бэкенда к основному серверу. Остальной трафик остаётся напрямую."
                                        TextWrapping="Wrap"
                                        Classes="FormText"
                                        Margin="0" />
