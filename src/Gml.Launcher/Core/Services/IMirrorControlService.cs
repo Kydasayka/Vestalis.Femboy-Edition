@@ -1,9 +1,21 @@
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace Gml.Launcher.Core.Services;
 
 /// <summary>State reported by <c>GET /api/v1/mirror/mode</c>.</summary>
 public sealed record MirrorModeState(string Mode, string? Upstream, bool SyncEnabled, bool CanControl);
+
+/// <summary>One diagnostic step of <c>GET /api/v1/mirror/selftest</c>.</summary>
+public sealed record MirrorSelfTestCheck(string Key, string Name, string Status, string Message, long DurationMs);
+
+/// <summary>Result of <c>GET /api/v1/mirror/selftest</c>.</summary>
+public sealed record MirrorSelfTestReport(
+    string Status,
+    string Mode,
+    string Upstream,
+    long DurationMs,
+    IReadOnlyList<MirrorSelfTestCheck> Checks);
 
 /// <summary>
 /// Optional service access to the mirror backend. The control key is entered by hand in the
@@ -32,4 +44,7 @@ public interface IMirrorControlService
 
     /// <summary>Switches the backend to <paramref name="mode"/> ("local" or "proxy").</summary>
     Task<(bool Ok, string Message)> SetModeAsync(string mode);
+
+    /// <summary>Runs the backend self-test. Returns null when the key was rejected or the server is unreachable.</summary>
+    Task<MirrorSelfTestReport?> RunSelfTestAsync();
 }

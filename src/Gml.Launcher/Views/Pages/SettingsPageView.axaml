@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:components="clr-namespace:Gml.Launcher.Views.Components"
+             xmlns:models="clr-namespace:Gml.Launcher.Models"
              xmlns:lang="clr-namespace:Gml.Launcher.Assets.Resources"
              xmlns:vm="clr-namespace:Gml.Launcher.ViewModels.Pages"
              xmlns:converters="clr-namespace:Gml.Launcher.Core.Converters"
@@ -354,6 +355,76 @@
                                                       Command="{Binding SetBackendModeCommand}"
                                                       CommandParameter="proxy" />
                             </StackPanel>
+                        </StackPanel>
+
+                        <Border Classes="Separator" Margin="0, 5"
+                                IsVisible="{Binding IsBackendControlAvailable}" />
+
+                        <StackPanel Spacing="10"
+                                    IsVisible="{Binding IsBackendControlAvailable}">
+                            <TextBlock Text="Самодиагностика"
+                                       Classes="FormText"
+                                       FontSize="15" />
+                            <TextBlock Text="Проверяет конфигурацию, режим, кэш, данные зеркала, файлы и доступность прокси-сервера. Занимает до 15 секунд."
+                                       TextWrapping="Wrap"
+                                       Classes="FormText"
+                                       Margin="0" />
+                            <components:GmlButton Classes="Text Additional"
+                                                  Height="42"
+                                                  HorizontalAlignment="Left"
+                                                  Text="Проверить бэкенд"
+                                                  IsEnabled="{Binding !IsSelfTestRunning}"
+                                                  Command="{Binding RunSelfTestCommand}" />
+
+                            <TextBlock Text="{Binding SelfTestSummary}"
+                                       TextWrapping="Wrap"
+                                       Classes="FormText"
+                                       Margin="0"
+                                       IsVisible="{Binding HasSelfTestResults}" />
+
+                            <ItemsControl ItemsSource="{Binding SelfTestChecks}"
+                                          IsVisible="{Binding HasSelfTestResults}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:SelfTestRow">
+                                        <Border Background="{DynamicResource FormBackgroundColor}"
+                                                BorderBrush="{DynamicResource FormBorderColor}"
+                                                BorderThickness="1"
+                                                CornerRadius="10"
+                                                Padding="12,10"
+                                                Margin="0, 0, 0, 8">
+                                            <StackPanel Spacing="6">
+                                                <Grid ColumnDefinitions="Auto, 10, *, Auto, 8, Auto">
+                                                    <Border Grid.Column="0"
+                                                            Width="8"
+                                                            Height="8"
+                                                            CornerRadius="4"
+                                                            Background="{Binding Brush}"
+                                                            VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="{Binding Name}"
+                                                               Foreground="{DynamicResource ContentColor}"
+                                                               FontWeight="SemiBold" />
+                                                    <TextBlock Grid.Column="3"
+                                                               Text="{Binding StatusText}"
+                                                               Foreground="{Binding Brush}"
+                                                               FontSize="11"
+                                                               FontWeight="Bold" />
+                                                    <TextBlock Grid.Column="5"
+                                                               Text="{Binding Duration}"
+                                                               Foreground="{DynamicResource ContentColor}"
+                                                               Opacity="0.6"
+                                                               FontSize="12" />
+                                                </Grid>
+                                                <TextBlock Text="{Binding Detail}"
+                                                           TextWrapping="Wrap"
+                                                           Foreground="{DynamicResource ContentColor}"
+                                                           Opacity="0.85"
+                                                           FontSize="12" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </StackPanel>
 
                     </components:StackFrameBorder>

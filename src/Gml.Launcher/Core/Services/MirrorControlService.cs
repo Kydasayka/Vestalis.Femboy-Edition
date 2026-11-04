@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -20,6 +21,9 @@ public sealed class MirrorControlService : IMirrorControlService
     private const string ControlKeyHeader = "X-Mirror-Control-Key";
 
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10) };
+
+    // Diagnostics probe the proxy upstream and the sync source, so they can take longer.
+    private static readonly HttpClient SelfTestHttp = new() { Timeout = TimeSpan.FromSeconds(45) };
 
     private readonly IStorageService _storage;
     private readonly IGmlClientManager _manager;
@@ -185,6 +189,62 @@ public sealed class MirrorControlService : IMirrorControlService
         }
     }
 
+    public async Task<MirrorSelfTestReport?> RunSelfTestAsync()
+    {
+        if (string.IsNullOrEmpty(_key))
+            return null;
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, BuildUri("api/v1/mirror/selftest"));
+            request.Headers.TryAddWithoutValidation(ControlKeyHeader, _key);
+
+            using var response = await SelfTestHttp.SendAsync(request).ConfigureAwait(false);
+
+            if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+            {
+                SetUnlocked(false);
+                return null;
+            }
+
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            await using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            using var document = await JsonDocument.ParseAsync(stream).ConfigureAwait(false);
+
+            if (!document.RootElement.TryGetProperty("data", out var data))
+                return null;
+
+            var checks = new List<MirrorSelfTestCheck>();
+
+            if (data.TryGetProperty("checks", out var checksElement) &&
+                checksElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in checksElement.EnumerateArray())
+                {
+                    checks.Add(new MirrorSelfTestCheck(
+                        ReadString(item, "key") ?? string.Empty,
+                        ReadString(item, "name") ?? string.Empty,
+                        ReadString(item, "status") ?? "warn",
+                        ReadString(item, "message") ?? string.Empty,
+                        ReadLong(item, "durationMs")));
+                }
+            }
+
+            return new MirrorSelfTestReport(
+                ReadString(data, "status") ?? "warn",
+                ReadString(data, "mode") ?? "local",
+                ReadString(data, "upstream") ?? string.Empty,
+                ReadLong(data, "durationMs"),
+                checks);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            return null;
+        }
+    }
+
     private Uri BuildUri(string path)
     {
         return new Uri(_manager.HostUri, path);
@@ -210,5 +270,17 @@ public sealed class MirrorControlService : IMirrorControlService
         {
             return null;
         }
+    }
+
+    private static string? ReadString(JsonElement element, string property)
+    {
+        return element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+    }
+
+    private static long ReadLong(JsonElement element, string property)
+    {
+        return element.TryGetProperty(property, out var value) && value.TryGetInt64(out var result) ? result : 0;
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
@@ -6,6 +7,7 @@ using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
+using Avalonia.Media;
 using GamerVII.Notification.Avalonia;
 using Gml.Client;
 using Gml.Client.Interfaces;
@@ -54,7 +56,7 @@ public class SettingsPageViewModel : PageViewModelBase
         VerifyServiceKeyCommand = ReactiveCommand.CreateFromTask(VerifyServiceKeyAsync);
         ClearServiceKeyCommand = ReactiveCommand.CreateFromTask(ClearServiceKeyAsync);
         SetBackendModeCommand = ReactiveCommand.CreateFromTask<string>(SetBackendModeAsync);
-
+        RunSelfTestCommand = ReactiveCommand.CreateFromTask(RunSelfTestAsync);
         var settingsChanged = this.WhenAnyValue(
                 x => x.XmsRamValue,
                 x => x.XmxRamValue,
@@ -149,10 +151,16 @@ public class SettingsPageViewModel : PageViewModelBase
     [Reactive] public bool IsBackendLocalMode { get; private set; }
     [Reactive] public bool IsBackendProxyMode { get; private set; }
     [Reactive] public string BackendControlStatus { get; private set; } = string.Empty;
+    [Reactive] public bool IsSelfTestRunning { get; private set; }
+    [Reactive] public bool HasSelfTestResults { get; private set; }
+    [Reactive] public string SelfTestSummary { get; private set; } = string.Empty;
+
+    public ObservableCollection<SelfTestRow> SelfTestChecks { get; } = [];
 
     public ReactiveCommand<Unit, Unit> VerifyServiceKeyCommand { get; }
     public ReactiveCommand<Unit, Unit> ClearServiceKeyCommand { get; }
     public ReactiveCommand<string, Unit> SetBackendModeCommand { get; }
+    public ReactiveCommand<Unit, Unit> RunSelfTestCommand { get; }
 
     public MainWindowViewModel MainViewModel { get; }
 
@@ -420,6 +428,81 @@ public class SettingsPageViewModel : PageViewModelBase
         {
             IsServiceKeyBusy = false;
         }
+    }
+
+    private async Task RunSelfTestAsync()
+    {
+        IsSelfTestRunning = true;
+
+        try
+        {
+            var report = await _mirrorControl.RunSelfTestAsync();
+
+            SelfTestChecks.Clear();
+
+            if (report is null)
+            {
+                HasSelfTestResults = false;
+                SelfTestSummary = string.Empty;
+                Notify(false, "Самодиагностика недоступна: сервер не ответил или ключ не принят");
+                return;
+            }
+
+            foreach (var check in report.Checks)
+                SelfTestChecks.Add(CreateSelfTestRow(check));
+
+            HasSelfTestResults = SelfTestChecks.Count > 0;
+            SelfTestSummary = BuildSelfTestSummary(report);
+
+            Notify(report.Status == "ok", SelfTestSummary);
+
+            // The mode check runs against the live server, so refresh the controls afterwards.
+            await RefreshBackendControlAsync();
+        }
+        finally
+        {
+            IsSelfTestRunning = false;
+        }
+    }
+
+    private static SelfTestRow CreateSelfTestRow(MirrorSelfTestCheck check)
+    {
+        var (statusText, brush) = check.Status switch
+        {
+            "ok" => ("ОК", new SolidColorBrush(Color.Parse("#2E9E5B"))),
+            "warn" => ("ВНИМАНИЕ", new SolidColorBrush(Color.Parse("#D9822B"))),
+            _ => ("ОШИБКА", new SolidColorBrush(Color.Parse("#D03E3E")))
+        };
+
+        return new SelfTestRow
+        {
+            Name = check.Name,
+            Detail = check.Message,
+            StatusText = statusText,
+            Duration = $"{check.DurationMs} мс",
+            Brush = brush
+        };
+    }
+
+    private static string BuildSelfTestSummary(MirrorSelfTestReport report)
+    {
+        var failed = report.Checks.Count(c => c.Status == "fail");
+        var warnings = report.Checks.Count(c => c.Status == "warn");
+        var mode = report.Mode == "proxy" ? "прокси" : "зеркало";
+        var elapsed = $"{report.DurationMs} мс, режим: {mode}";
+
+        if (failed == 0 && warnings == 0)
+            return $"Всё в порядке ({elapsed})";
+
+        var parts = new List<string>();
+
+        if (failed > 0)
+            parts.Add($"ошибок: {failed}");
+
+        if (warnings > 0)
+            parts.Add($"замечаний: {warnings}");
+
+        return $"Проблемы: {string.Join(", ", parts)} ({elapsed})";
     }
 
     private void Notify(bool success, string message)

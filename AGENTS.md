@@ -98,6 +98,10 @@ Start-Process 'src\Gml.Launcher\bin\Debug\net8.0\Gml.Launcher.exe'
   «Зеркало»/«Прокси» видны только при `IsBackendControlAvailable`. После смены режима
   вызывается `MainWindowViewModel.RefreshBackendModeAsync`, чтобы бейдж обновился сразу,
   не дожидаясь 20-секундного опроса.
+- **Самодиагностика.** Кнопка «Проверить бэкенд» в той же карточке дергает
+  `GET /api/v1/mirror/selftest` с тем же ключом (без ключа сервер отвечает 403).
+  Результат — список `SelfTestRow` (`Models/SelfTestRow.cs`): точка и подпись цвета
+  статуса, время шага и подробности. Это только чтение; эндпоинт ничего не меняет.
 - **Git.** Сабмодуль коммитится отдельно, потом обновляется указатель в корне
   (`git add src/Gml.Client`). Локальные правки хостов в `ResourceKeysDictionary.cs`
   не коммитить без просьбы.
