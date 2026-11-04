@@ -358,6 +358,33 @@
                         </StackPanel>
 
                         <Border Classes="Separator" Margin="0, 5"
+                                IsVisible="{Binding IsBackendTorAvailable}" />
+
+                        <StackPanel Spacing="10"
+                                    IsVisible="{Binding IsBackendTorAvailable}">
+                            <TextBlock Text="Маршрутизация через Tor"
+                                       Classes="FormText"
+                                       FontSize="15" />
+                            <TextBlock Text="Через Tor идут только запросы этого бэкенда к основному серверу (gmlfr.vestalis.xyz). Остальной трафик остаётся напрямую."
+                                       TextWrapping="Wrap"
+                                       Classes="FormText"
+                                       Margin="0" />
+                            <Grid ColumnDefinitions="*, 12, Auto">
+                                <TextBlock Grid.Column="0"
+                                           Text="Отправлять запросы к основному бэкенду через Tor"
+                                           TextWrapping="Wrap"
+                                           VerticalAlignment="Center"
+                                           Classes="FormText"
+                                           Margin="0, 0, 8, 0" />
+                                <CheckBox Grid.Column="2"
+                                          Classes="SciFiToggle"
+                                          VerticalAlignment="Center"
+                                          IsEnabled="{Binding !IsServiceKeyBusy}"
+                                          IsChecked="{Binding IsBackendTorEnabled, Mode=TwoWay}" />
+                            </Grid>
+                        </StackPanel>
+
+                        <Border Classes="Separator" Margin="0, 5"
                                 IsVisible="{Binding IsBackendControlAvailable}" />
 
                         <StackPanel Spacing="10"

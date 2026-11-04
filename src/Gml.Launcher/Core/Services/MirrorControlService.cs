@@ -141,10 +141,14 @@ public sealed class MirrorControlService : IMirrorControlService
                               syncElement.ValueKind == JsonValueKind.True;
             var canControl = data.TryGetProperty("canControl", out var controlElement) &&
                              controlElement.ValueKind == JsonValueKind.True;
+            var torEnabled = data.TryGetProperty("torEnabled", out var torElement) &&
+                             torElement.ValueKind == JsonValueKind.True;
+            var torAvailable = data.TryGetProperty("torAvailable", out var torAvailableElement) &&
+                               torAvailableElement.ValueKind == JsonValueKind.True;
 
             SetUnlocked(canControl);
 
-            return new MirrorModeState(mode, upstream, syncEnabled, canControl);
+            return new MirrorModeState(mode, upstream, syncEnabled, canControl, torEnabled, torAvailable);
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException)
         {
@@ -182,6 +186,41 @@ public sealed class MirrorControlService : IMirrorControlService
             }
 
             return (false, ReadMessage(body) ?? "Не удалось переключить режим");
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            return (false, "Бэкенд недоступен");
+        }
+    }
+
+    public async Task<(bool Ok, string Message)> SetTorAsync(bool enabled)
+    {
+        if (!IsUnlocked || string.IsNullOrEmpty(_key))
+            return (false, "Сервисный ключ не подтверждён");
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Put, BuildUri("api/v1/mirror/tor"));
+            request.Headers.TryAddWithoutValidation(ControlKeyHeader, _key);
+            request.Content = new StringContent(JsonSerializer.Serialize(new { enabled }), Encoding.UTF8,
+                "application/json");
+
+            using var response = await Http.SendAsync(request).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            if (response.IsSuccessStatusCode)
+                return (true, ReadMessage(body) ??
+                              (enabled
+                                  ? "Маршрутизация через Tor включена"
+                                  : "Маршрутизация через Tor выключена"));
+
+            if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+            {
+                SetUnlocked(false);
+                return (false, "Сервисный ключ не принят сервером");
+            }
+
+            return (false, ReadMessage(body) ?? "Не удалось изменить маршрутизацию через Tor");
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
         {

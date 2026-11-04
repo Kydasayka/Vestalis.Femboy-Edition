@@ -169,6 +169,12 @@ dotnet publish 'src\Gml.Launcher\Gml.Launcher.csproj' -c Release -r win-x64 `
   (`data.canControl == true`), лежит в `data.db` под `MirrorControlKey`; **в исходники
   его не класть**. Кнопки «Зеркало»/«Прокси» видны только при `IsBackendControlAvailable`.
   После смены режима сразу вызывается `MainWindowViewModel.RefreshBackendModeAsync`.
+- **Маршрутизация через Tor.** В той же карточке есть переключатель
+  «Отправлять запросы к основному бэкенду через Tor» (`PUT /api/v1/mirror/tor`,
+  состояние читается из `GET /api/v1/mirror/mode`: `torEnabled`, `torAvailable`).
+  Через Tor идут **только** запросы бэкенда к `gmlfr.vestalis.xyz`; маркет, скины,
+  авторизация и сам лаунчер остаются прямыми. Состояние хранится на бэкенде
+  (`tor.json`), поэтому переключатель общий для всех клиентов с сервисным ключом.
 - **Самодиагностика.** `GET /api/v1/mirror/selftest` с тем же ключом, таймаут 45 с,
   только чтение (ничего не меняет). Ответ: `data.status/mode/upstream/durationMs` и
   `data.checks[]` (`key`, `name`, `status`, `message`, `durationMs`). Статусы строк:

@@ -39,6 +39,7 @@ public class SettingsPageViewModel : PageViewModelBase
     private double _xmxRamValue = 8192;
     private int _windowHeight;
     private int _windowWidth;
+    private bool _suppressTorToggle;
 
     public SettingsPageViewModel(
         IScreen screen,
@@ -57,6 +58,16 @@ public class SettingsPageViewModel : PageViewModelBase
         ClearServiceKeyCommand = ReactiveCommand.CreateFromTask(ClearServiceKeyAsync);
         SetBackendModeCommand = ReactiveCommand.CreateFromTask<string>(SetBackendModeAsync);
         RunSelfTestCommand = ReactiveCommand.CreateFromTask(RunSelfTestAsync);
+
+        // The toggle is bound two-way. Programmatic state refreshes set the same property, so
+        // they are guarded to avoid sending the value back to the server.
+        this.WhenAnyValue(x => x.IsBackendTorEnabled)
+            .Skip(1)
+            .Subscribe(enabled =>
+            {
+                if (!_suppressTorToggle)
+                    _ = SetBackendTorAsync(enabled);
+            });
         var settingsChanged = this.WhenAnyValue(
                 x => x.XmsRamValue,
                 x => x.XmxRamValue,
@@ -150,6 +161,8 @@ public class SettingsPageViewModel : PageViewModelBase
     [Reactive] public bool IsBackendControlAvailable { get; private set; }
     [Reactive] public bool IsBackendLocalMode { get; private set; }
     [Reactive] public bool IsBackendProxyMode { get; private set; }
+    [Reactive] public bool IsBackendTorEnabled { get; set; }
+    [Reactive] public bool IsBackendTorAvailable { get; private set; }
     [Reactive] public string BackendControlStatus { get; private set; } = string.Empty;
     [Reactive] public bool IsSelfTestRunning { get; private set; }
     [Reactive] public bool HasSelfTestResults { get; private set; }
@@ -358,12 +371,19 @@ public class SettingsPageViewModel : PageViewModelBase
         IsBackendControlAvailable = state?.CanControl == true;
         IsBackendLocalMode = state?.Mode == "local";
         IsBackendProxyMode = state?.Mode == "proxy";
+
+        _suppressTorToggle = true;
+        IsBackendTorAvailable = state?.TorAvailable == true;
+        IsBackendTorEnabled = state?.TorEnabled == true;
+        _suppressTorToggle = false;
+
         GlobalVariables.CanControlBackend = IsBackendControlAvailable;
 
         BackendControlStatus = state switch
         {
             null => "Сервер не отвечает на запрос режима",
-            { CanControl: true } => $"Ключ принят. Режим: {(state.Mode == "proxy" ? "прокси" : "зеркало")}",
+            { CanControl: true } =>
+                $"Ключ принят. Режим: {(state.Mode == "proxy" ? "прокси" : "зеркало")}; Tor: {(state.TorEnabled ? "включён" : "выключен")}",
             _ when _mirrorControl.HasKey => "Ключ не принят этим сервером",
             _ => "Введите сервисный ключ, чтобы управлять режимом"
         };
@@ -423,6 +443,30 @@ public class SettingsPageViewModel : PageViewModelBase
             await RefreshBackendControlAsync();
             Notify(ok, message);
             await MainViewModel.RefreshBackendModeAsync();
+        }
+        finally
+        {
+            IsServiceKeyBusy = false;
+        }
+    }
+
+    private async Task SetBackendTorAsync(bool enabled)
+    {
+        if (IsServiceKeyBusy)
+            return;
+
+        IsServiceKeyBusy = true;
+
+        try
+        {
+            var (ok, message) = await _mirrorControl.SetTorAsync(enabled);
+            await RefreshBackendControlAsync();
+            Notify(ok, message);
+        }
+        catch (Exception exception)
+        {
+            SentrySdk.CaptureException(exception);
+            Notify(false, "Не удалось изменить маршрутизацию через Tor");
         }
         finally
         {

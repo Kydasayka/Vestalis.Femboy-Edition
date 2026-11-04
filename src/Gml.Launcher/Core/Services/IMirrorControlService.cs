@@ -4,7 +4,13 @@ using System.Threading.Tasks;
 namespace Gml.Launcher.Core.Services;
 
 /// <summary>State reported by <c>GET /api/v1/mirror/mode</c>.</summary>
-public sealed record MirrorModeState(string Mode, string? Upstream, bool SyncEnabled, bool CanControl);
+public sealed record MirrorModeState(
+    string Mode,
+    string? Upstream,
+    bool SyncEnabled,
+    bool CanControl,
+    bool TorEnabled = false,
+    bool TorAvailable = false);
 
 /// <summary>One diagnostic step of <c>GET /api/v1/mirror/selftest</c>.</summary>
 public sealed record MirrorSelfTestCheck(string Key, string Name, string Status, string Message, long DurationMs);
@@ -44,6 +50,12 @@ public interface IMirrorControlService
 
     /// <summary>Switches the backend to <paramref name="mode"/> ("local" or "proxy").</summary>
     Task<(bool Ok, string Message)> SetModeAsync(string mode);
+
+    /// <summary>
+    /// Enables or disables routing the backend's upstream requests through Tor.
+    /// The setting is stored on the backend, not on this computer.
+    /// </summary>
+    Task<(bool Ok, string Message)> SetTorAsync(bool enabled);
 
     /// <summary>Runs the backend self-test. Returns null when the key was rejected or the server is unreachable.</summary>
     Task<MirrorSelfTestReport?> RunSelfTestAsync();
