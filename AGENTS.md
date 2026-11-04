@@ -252,10 +252,19 @@ cargo test
 cargo clippy --all-targets -- -D warnings
 ```
 
-- Что уже работает: вход + 2FA + HWID, выбор сервера, профили/новости, оффлайн-режим
-  по `%APPDATA%\Vestalis\offline-mode`, SHA-1-валидация (импортирует старый кэш
-  `%LOCALAPPDATA%\Gml.Launcher\validation-cache-v1.json`), параллельные загрузки,
-  запуск `javaw.exe` с `-Xms/-Xmx` и подменой authlib-эндпоинта, настройки.
+- Что уже работает: вход + 2FA + HWID, выбор сервера, профили/новости (обновление
+  раз в 90 с), оффлайн-режим по `%APPDATA%\Vestalis\offline-mode`, SHA-1-валидация
+  (импортирует старый кэш `%LOCALAPPDATA%\Gml.Launcher\validation-cache-v1.json`),
+  параллельные загрузки, запуск `javaw.exe` с `-Xms/-Xmx` и подменой
+  authlib-эндпоинта, страница модов (`.jar` ↔ `.jar.disabled`), звуки, безрамочное
+  окно со своими кнопками, сплэш, настройки, сервисный доступ.
+- Сервисный доступ (ключ, режимы `local/proxy`, Tor, selftest) — **только PL-1**:
+  RU/EU отдают 404 на `/api/v1/mirror/*`, карточка скрыта, команды в воркере
+  дополнительно проверяют хост.
+- Если RU/EU отвечают на signin `403 «Требуется запуск через официальный лаунчер»`,
+  воркер повторяет вход через PL-1 и помечает сессию как зеркальную (бейдж
+  `ЗЕРКАЛО`). Токен зеркала сначала пробуется на выбранном хосте; если он его
+  принимает, данные снова идут напрямую.
 - Данные: `%APPDATA%\Vestalis\rust-launcher\state.json`,
   кэш `%LOCALAPPDATA%\Vestalis\validation-cache-rust.json`,
   логи `%LOCALAPPDATA%\Vestalis\logs\launcher.log.<date>`.

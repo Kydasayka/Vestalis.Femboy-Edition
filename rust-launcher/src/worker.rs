@@ -13,7 +13,7 @@ use crate::hwid;
 use crate::launch;
 use crate::model::{
     app_dir, ApiResponse, News, Persisted, Profile, ProfileInfoRequest, Settings, DEFAULT_HOST,
-    SERVERS,
+    MIRROR_HOST, SERVERS,
 };
 use crate::storage::{load_state, save_state};
 
@@ -30,6 +30,14 @@ pub enum Command {
     Refresh,
     SaveSettings(Settings),
     CheckBackend,
+    OpenMods,
+    ToggleMod { id: usize, enabled: bool },
+    RefreshMirror,
+    SaveMirrorKey(String),
+    ClearMirrorKey,
+    SetMirrorMode(String),
+    SetTor(bool),
+    SelfTest,
     Shutdown,
 }
 
@@ -44,6 +52,22 @@ pub struct ProfileView {
     pub online: String,
     pub icon: Option<String>,
     pub has_icon: bool,
+}
+
+#[derive(Clone)]
+pub struct ModView {
+    pub id: usize,
+    pub name: String,
+    pub description: String,
+    pub enabled: bool,
+}
+
+#[derive(Clone)]
+pub struct SelfTestRowView {
+    pub name: String,
+    pub status: String,
+    pub message: String,
+    pub duration: String,
 }
 
 #[derive(Clone)]
@@ -68,7 +92,24 @@ pub enum Event {
     },
     Selected(ProfileView),
     News(Vec<NewsView>),
+    Mods {
+        views: Vec<ModView>,
+        enabled: usize,
+        total: usize,
+    },
     CanPlay(bool),
+    MirrorState {
+        key: String,
+        mode: String,
+        upstream: String,
+        can_control: bool,
+        tor_enabled: bool,
+        tor_available: bool,
+    },
+    SelfTest {
+        rows: Vec<SelfTestRowView>,
+        summary: String,
+    },
     Progress {
         visible: bool,
         value: f32,
@@ -95,8 +136,11 @@ pub struct Worker {
     tx: UnboundedSender<Event>,
     state: Persisted,
     backend: Backend,
+    mirror: Backend,
+    via_mirror: bool,
     profiles: Vec<Profile>,
     views: Vec<ProfileView>,
+    mods: Vec<ModView>,
     selected: usize,
     offline: bool,
     busy: bool,
@@ -106,12 +150,17 @@ pub struct Worker {
 impl Worker {
     pub fn new(state: Persisted, tx: UnboundedSender<Event>) -> Self {
         let backend = Backend::new(&state.server_host);
+        let mirror = Backend::new(MIRROR_HOST);
+        let via_mirror = state.auth_via_mirror;
         Self {
             tx,
             state,
             backend,
+            mirror,
+            via_mirror,
             profiles: Vec::new(),
             views: Vec::new(),
+            mods: Vec::new(),
             selected: 0,
             offline: false,
             busy: false,
@@ -123,16 +172,66 @@ impl Worker {
         let _ = self.tx.send(event);
     }
 
-    fn host(&self) -> &str {
-        &self.state.server_host
-    }
-
     fn token(&self) -> Option<String> {
         self.state
             .user
             .as_ref()
             .map(|session| session.access_token.clone())
             .filter(|token| !token.is_empty())
+    }
+
+    /// Mirror control endpoints exist only on PL-1; RU/EU answer 404 there.
+    fn is_pl_host(&self) -> bool {
+        self.state
+            .server_host
+            .trim_end_matches('/')
+            .eq_ignore_ascii_case(MIRROR_HOST.trim_end_matches('/'))
+    }
+
+    /// Data and token operations use the host that actually issued the session.
+    fn data_backend(&self) -> &Backend {
+        if self.via_mirror {
+            &self.mirror
+        } else {
+            &self.backend
+        }
+    }
+
+    async fn signin_with_fallback(
+        &self,
+        login: &str,
+        password: &str,
+        code: &str,
+        hwid: &str,
+    ) -> Result<(crate::api::AuthOutcome, bool)> {
+        let first = self.backend.signin(login, password, code, hwid).await?;
+
+        if first.session.is_none() && first.blocked && self.backend.base() != self.mirror.base() {
+            info!("sign-in blocked by the selected host, retrying through the mirror");
+            let second = self.mirror.signin(login, password, code, hwid).await?;
+            if second.session.is_some() {
+                return Ok((second, true));
+            }
+        }
+
+        Ok((first, false))
+    }
+
+    async fn check_token_with_fallback(
+        &self,
+        token: &str,
+        hwid: &str,
+    ) -> Result<(crate::api::AuthOutcome, bool)> {
+        let first = self.backend.check_token(token, hwid).await?;
+
+        if first.session.is_none() && first.blocked && self.backend.base() != self.mirror.base() {
+            let second = self.mirror.check_token(token, hwid).await?;
+            if second.session.is_some() {
+                return Ok((second, true));
+            }
+        }
+
+        Ok((first, false))
     }
 
     pub async fn run(mut self, mut rx: UnboundedReceiver<Command>) {
@@ -146,6 +245,11 @@ impl Worker {
         let mut tick = tokio::time::interval(Duration::from_secs(45));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         tick.tick().await;
+
+        // Approximates the SignalR "RefreshProfiles" event of the C# client.
+        let mut profiles_tick = tokio::time::interval(Duration::from_secs(90));
+        profiles_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        profiles_tick.tick().await;
 
         loop {
             tokio::select! {
@@ -174,12 +278,30 @@ impl Worker {
                         }
                         Some(Command::SaveSettings(settings)) => self.save_settings(settings),
                         Some(Command::CheckBackend) => self.spawn_check(),
+                        Some(Command::OpenMods) => self.open_mods().await,
+                        Some(Command::ToggleMod { id, enabled }) => self.toggle_mod(id, enabled),
+                        Some(Command::RefreshMirror) => self.refresh_mirror().await,
+                        Some(Command::SaveMirrorKey(key)) => self.save_mirror_key(key).await,
+                        Some(Command::ClearMirrorKey) => {
+                            self.state.mirror_key.clear();
+                            save_state(&self.state);
+                            self.emit(Event::SettingsStatus("Ключ удалён".into()));
+                            self.emit_mirror(None);
+                        }
+                        Some(Command::SetMirrorMode(mode)) => self.set_mirror_mode(mode).await,
+                        Some(Command::SetTor(enabled)) => self.set_tor(enabled).await,
+                        Some(Command::SelfTest) => self.run_self_test().await,
                         Some(Command::Shutdown) | None => break,
                     }
                 }
                 _ = tick.tick() => {
                     if !self.offline {
                         self.spawn_check();
+                    }
+                }
+                _ = profiles_tick.tick() => {
+                    if !self.offline && self.state.user.is_some() && !self.busy {
+                        self.load_data().await;
                     }
                 }
             }
@@ -194,11 +316,11 @@ impl Worker {
                 let hwid = hwid::hwid_for(&self.state.settings);
                 let check = tokio::time::timeout(
                     Duration::from_secs(15),
-                    self.backend.check_token(&session.access_token, &hwid),
+                    self.check_token_with_fallback(&session.access_token, &hwid),
                 )
                 .await;
 
-                if let Ok(Ok(outcome)) = check {
+                if let Ok(Ok((outcome, via_mirror))) = check {
                     if let Some(mut fresh) = outcome.session {
                         if fresh.name.is_empty() {
                             fresh.name = session.name;
@@ -206,6 +328,8 @@ impl Worker {
                         if fresh.uuid.is_empty() {
                             fresh.uuid = session.uuid;
                         }
+                        self.via_mirror = via_mirror;
+                        self.state.auth_via_mirror = via_mirror;
                         self.state.user = Some(fresh);
                         save_state(&self.state);
                         if let Some(user) = self.state.user.clone() {
@@ -243,19 +367,24 @@ impl Worker {
 
         let hwid = hwid::hwid_for(&self.state.settings);
         info!(login = %login, "sign-in requested");
-        let result = self.backend.signin(&login, &password, &code, &hwid).await;
+        let result = self
+            .signin_with_fallback(&login, &password, &code, &hwid)
+            .await;
 
-        if let Ok(outcome) = &result {
+        if let Ok((outcome, via_mirror)) = &result {
             info!(
                 authenticated = outcome.session.is_some(),
                 requires_2fa = outcome.requires_2fa,
+                via_mirror,
                 "sign-in finished"
             );
         }
 
         match result {
-            Ok(outcome) if outcome.session.is_some() => {
+            Ok((outcome, via_mirror)) if outcome.session.is_some() => {
                 let session = outcome.session.expect("checked");
+                self.via_mirror = via_mirror;
+                self.state.auth_via_mirror = via_mirror;
                 self.state.user = Some(session.clone());
                 self.state.saved_login = Some(crate::model::SavedLogin { login, password });
                 save_state(&self.state);
@@ -268,14 +397,19 @@ impl Worker {
                     initial: session.initial(),
                 });
                 self.emit(Event::Screen(1));
+                if via_mirror {
+                    self.emit(Event::MainStatus(
+                        "Сессия выдана через зеркало (основной хост блокирует клиент)".into(),
+                    ));
+                }
                 self.load_data().await;
             }
-            Ok(outcome) if outcome.requires_2fa => {
+            Ok((outcome, _)) if outcome.requires_2fa => {
                 self.busy = false;
                 self.emit(Event::Busy(false));
                 self.emit(Event::TwoFa);
             }
-            Ok(outcome) => {
+            Ok((outcome, _)) => {
                 self.busy = false;
                 self.emit(Event::Busy(false));
                 let mut message = outcome.message;
@@ -301,8 +435,10 @@ impl Worker {
         self.state.user = None;
         self.state.saved_login = None;
         self.state.last_profile = None;
+        self.state.auth_via_mirror = false;
         save_state(&self.state);
 
+        self.via_mirror = false;
         self.offline = false;
         self.profiles.clear();
         self.views.clear();
@@ -324,6 +460,8 @@ impl Worker {
         save_state(&self.state);
 
         self.backend = Backend::new(host);
+        self.via_mirror = false;
+        self.state.auth_via_mirror = false;
         self.offline = false;
         self.busy = false;
         self.profiles.clear();
@@ -387,11 +525,38 @@ impl Worker {
             return;
         };
 
-        let result = self.backend.profiles(&token).await;
+        // A token issued through the mirror may still be accepted by the
+        // selected host (the mirror proxies to the same upstream). Prefer the
+        // real server's data when that works, so RU/EU labels are not cosmetic.
+        if self.via_mirror && self.backend.base() != self.mirror.base() {
+            if let Ok(profiles) = self.backend.profiles(&token).await {
+                if !profiles.is_empty() {
+                    info!("mirror token accepted by the selected host");
+                    self.via_mirror = false;
+                    self.state.auth_via_mirror = false;
+                    save_state(&self.state);
+                    self.apply_profiles(profiles);
+                    let news = self.backend.news().await;
+                    self.emit(Event::News(map_news(&news)));
+                    return;
+                }
+            }
+        }
+
+        let backend = self.data_backend().clone();
+        let mut result = backend.profiles(&token).await;
+
+        // A mirror can briefly answer with an empty snapshot while syncing;
+        // retry once instead of showing an empty sidebar.
+        if matches!(&result, Ok(profiles) if profiles.is_empty()) {
+            tokio::time::sleep(Duration::from_millis(600)).await;
+            result = backend.profiles(&token).await;
+        }
+
         match result {
             Ok(profiles) => {
                 self.apply_profiles(profiles);
-                let news = self.backend.news().await;
+                let news = backend.news().await;
                 self.emit(Event::News(map_news(&news)));
             }
             Err(error) => {
@@ -567,7 +732,8 @@ impl Worker {
                 os_architecture: hwid::os_architecture(),
             };
 
-            match self.backend.profile_info(&token, &request).await {
+            let backend = self.data_backend().clone();
+            match backend.profile_info(&token, &request).await {
                 Ok(Some(info)) => Ok(info),
                 Ok(None) => Err(anyhow::anyhow!("Сервер не вернул параметры профиля")),
                 Err(error) => Err(error),
@@ -643,7 +809,7 @@ impl Worker {
             &install_dir,
             &settings,
             !self.offline,
-            self.host(),
+            self.data_backend().base(),
             xms,
             xmx,
         );
@@ -673,6 +839,354 @@ impl Worker {
                 });
                 self.emit(Event::Error(format!("Не удалось запустить игру: {error}")));
             }
+        }
+    }
+
+    fn mods_dir(&self, profile: &str) -> PathBuf {
+        self.state
+            .settings
+            .install_path()
+            .join("game data")
+            .join(profile)
+            .join("mods")
+    }
+
+    fn mod_file_is_enabled(&self, profile: &str, name: &str) -> bool {
+        let directory = self.mods_dir(profile);
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            return false;
+        };
+        let needle = name.to_lowercase();
+
+        entries.flatten().any(|entry| {
+            let file_name = entry.file_name().to_string_lossy().to_lowercase();
+            file_name.contains(&needle)
+                && file_name.ends_with(".jar")
+                && !file_name.ends_with(".jar.disabled")
+        })
+    }
+
+    async fn open_mods(&mut self) {
+        let Some(profile) = self.profiles.get(self.selected).cloned() else {
+            self.emit(Event::Error("Профиль не выбран".into()));
+            return;
+        };
+
+        if self.offline {
+            self.emit(Event::Error(
+                "Список модов доступен только при подключённом бэкенде".into(),
+            ));
+            return;
+        }
+
+        let Some(token) = self.token() else {
+            self.emit(Event::Screen(0));
+            return;
+        };
+
+        self.emit(Event::MainStatus("Загрузка списка модов…".into()));
+        let backend = self.data_backend().clone();
+        let mods = backend.optional_mods(&profile.name, &token).await;
+        let details = backend.optional_mods_details(&token).await;
+
+        match mods {
+            Ok(list) => {
+                let mut views: Vec<ModView> = list
+                    .into_iter()
+                    .map(|item| {
+                        let description = item
+                            .description
+                            .clone()
+                            .filter(|value| !value.trim().is_empty())
+                            .or_else(|| {
+                                details
+                                    .iter()
+                                    .find(|detail| {
+                                        detail.key.eq_ignore_ascii_case(&item.name)
+                                            || detail.title.eq_ignore_ascii_case(&item.name)
+                                    })
+                                    .map(|detail| detail.description.clone())
+                                    .filter(|value| !value.trim().is_empty())
+                            })
+                            .unwrap_or_default();
+
+                        ModView {
+                            id: 0,
+                            name: item.name.clone(),
+                            description,
+                            enabled: self.mod_file_is_enabled(&profile.name, &item.name),
+                        }
+                    })
+                    .collect();
+
+                views.sort_by(|left, right| left.name.cmp(&right.name));
+                for (index, view) in views.iter_mut().enumerate() {
+                    view.id = index;
+                }
+
+                self.mods = views;
+                self.emit_mods();
+                self.emit(Event::MainStatus(String::new()));
+                self.emit(Event::Screen(3));
+            }
+            Err(error) => {
+                self.emit(Event::MainStatus(String::new()));
+                self.emit(Event::Error(format!("Не удалось загрузить моды: {error}")));
+            }
+        }
+    }
+
+    fn toggle_mod(&mut self, id: usize, enabled: bool) {
+        let Some(profile) = self.profiles.get(self.selected).cloned() else {
+            return;
+        };
+        let Some(view) = self.mods.get(id).cloned() else {
+            return;
+        };
+
+        let directory = self.mods_dir(&profile.name);
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            self.emit(Event::Error(format!(
+                "Папка модов не найдена: {}",
+                directory.display()
+            )));
+            return;
+        };
+
+        let needle = view.name.to_lowercase();
+        let mut candidates: Vec<PathBuf> = entries
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| {
+                let name = path
+                    .file_name()
+                    .map(|value| value.to_string_lossy().to_lowercase())
+                    .unwrap_or_default();
+                name.contains(&needle) && name.contains(".jar")
+            })
+            .collect();
+
+        candidates.sort_by_key(|path| {
+            let name = path
+                .file_name()
+                .map(|value| value.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
+            if name.starts_with(&needle) {
+                0
+            } else {
+                1
+            }
+        });
+
+        let Some(source) = candidates.into_iter().next() else {
+            self.emit(Event::Error(format!(
+                "Файл мода «{}» ещё не скачан. Запустите игру один раз.",
+                view.name
+            )));
+            return;
+        };
+
+        let source_text = source.to_string_lossy().to_string();
+        let target = if enabled {
+            PathBuf::from(source_text.trim_end_matches(".disabled"))
+        } else if source_text.ends_with(".disabled") {
+            source.clone()
+        } else {
+            PathBuf::from(format!("{source_text}.disabled"))
+        };
+
+        if source != target {
+            if target.exists() {
+                let _ = std::fs::remove_file(&target);
+            }
+            if let Err(error) = std::fs::rename(&source, &target) {
+                self.emit(Event::Error(format!(
+                    "Не удалось переключить мод «{}»: {error}",
+                    view.name
+                )));
+                return;
+            }
+        }
+
+        if let Some(item) = self.mods.get_mut(id) {
+            item.enabled = enabled;
+        }
+        self.emit_mods();
+    }
+
+    fn emit_mods(&self) {
+        let enabled = self.mods.iter().filter(|item| item.enabled).count();
+        self.emit(Event::Mods {
+            views: self.mods.clone(),
+            enabled,
+            total: self.mods.len(),
+        });
+    }
+
+    async fn refresh_mirror(&mut self) {
+        if !self.is_pl_host() {
+            self.emit_mirror(None);
+            return;
+        }
+
+        let key = self.state.mirror_key.clone();
+        let state = self.mirror.mirror_state(&key).await;
+        self.emit_mirror(state);
+    }
+
+    fn emit_mirror(&self, state: Option<crate::model::MirrorState>) {
+        let key = self.state.mirror_key.clone();
+        match state {
+            Some(state) => self.emit(Event::MirrorState {
+                key,
+                mode: state.mode,
+                upstream: state.upstream.unwrap_or_default(),
+                can_control: state.can_control,
+                tor_enabled: state.tor_enabled,
+                tor_available: state.tor_available,
+            }),
+            None => self.emit(Event::MirrorState {
+                key,
+                mode: String::new(),
+                upstream: String::new(),
+                can_control: false,
+                tor_enabled: false,
+                tor_available: false,
+            }),
+        }
+    }
+
+    async fn save_mirror_key(&mut self, key: String) {
+        if !self.is_pl_host() {
+            self.emit(Event::SettingsStatus(
+                "Сервисный доступ доступен только на PL-1".into(),
+            ));
+            return;
+        }
+
+        let key = key.trim().to_string();
+        if key.is_empty() {
+            self.emit(Event::SettingsStatus("Введите сервисный ключ".into()));
+            return;
+        }
+
+        let state = self.mirror.mirror_state(&key).await;
+
+        if state
+            .as_ref()
+            .map(|value| value.can_control)
+            .unwrap_or(false)
+        {
+            self.state.mirror_key = key;
+            save_state(&self.state);
+            self.emit(Event::SettingsStatus("Сервисный ключ принят".into()));
+            self.emit_mirror(state);
+        } else {
+            self.emit(Event::SettingsStatus(
+                "Сервисный ключ не принят сервером".into(),
+            ));
+        }
+    }
+
+    async fn set_mirror_mode(&mut self, mode: String) {
+        if !self.is_pl_host() {
+            self.emit(Event::SettingsStatus(
+                "Сервисный доступ доступен только на PL-1".into(),
+            ));
+            return;
+        }
+
+        let key = self.state.mirror_key.clone();
+        if key.is_empty() {
+            self.emit(Event::SettingsStatus(
+                "Сервисный ключ не подтверждён".into(),
+            ));
+            return;
+        }
+
+        let backend = self.mirror.clone();
+        match backend.set_mirror_mode(&key, &mode).await {
+            Ok(message) => {
+                self.emit(Event::SettingsStatus(message));
+                self.refresh_mirror().await;
+            }
+            Err(error) => self.emit(Event::SettingsStatus(error.to_string())),
+        }
+    }
+
+    async fn set_tor(&mut self, enabled: bool) {
+        if !self.is_pl_host() {
+            self.emit(Event::SettingsStatus(
+                "Сервисный доступ доступен только на PL-1".into(),
+            ));
+            return;
+        }
+
+        let key = self.state.mirror_key.clone();
+        if key.is_empty() {
+            self.emit(Event::SettingsStatus(
+                "Сервисный ключ не подтверждён".into(),
+            ));
+            return;
+        }
+
+        let backend = self.mirror.clone();
+        match backend.set_tor(&key, enabled).await {
+            Ok(message) => {
+                self.emit(Event::SettingsStatus(message));
+                self.refresh_mirror().await;
+            }
+            Err(error) => self.emit(Event::SettingsStatus(error.to_string())),
+        }
+    }
+
+    async fn run_self_test(&mut self) {
+        if !self.is_pl_host() {
+            self.emit(Event::SettingsStatus(
+                "Сервисный доступ доступен только на PL-1".into(),
+            ));
+            return;
+        }
+
+        let key = self.state.mirror_key.clone();
+        if key.is_empty() {
+            self.emit(Event::SettingsStatus(
+                "Сервисный ключ не подтверждён".into(),
+            ));
+            return;
+        }
+
+        self.emit(Event::SettingsStatus("Самодиагностика…".into()));
+        let backend = self.mirror.clone();
+        let report = backend.self_test(&key).await;
+
+        match report {
+            Some(report) => {
+                let rows: Vec<SelfTestRowView> = report
+                    .checks
+                    .into_iter()
+                    .map(|check| SelfTestRowView {
+                        name: if check.name.is_empty() {
+                            check.key
+                        } else {
+                            check.name
+                        },
+                        status: check.status,
+                        message: check.message,
+                        duration: format!("{} мс", check.duration_ms),
+                    })
+                    .collect();
+
+                let summary = format!(
+                    "Статус: {} · режим: {} · upstream: {} · {} мс",
+                    report.status, report.mode, report.upstream, report.duration_ms
+                );
+                self.emit(Event::SelfTest { rows, summary });
+                self.emit(Event::SettingsStatus("Самодиагностика завершена".into()));
+            }
+            None => self.emit(Event::SettingsStatus(
+                "Самодиагностика недоступна (ключ не принят)".into(),
+            )),
         }
     }
 

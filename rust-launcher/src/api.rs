@@ -20,15 +20,18 @@ pub struct Backend {
 pub struct AuthOutcome {
     pub session: Option<Session>,
     pub requires_2fa: bool,
+    /// The host refused the client with the "official launcher required" gate.
+    pub blocked: bool,
     pub message: String,
     pub errors: Vec<String>,
 }
 
 impl AuthOutcome {
-    fn failed(message: String, errors: Vec<String>, requires_2fa: bool) -> Self {
+    fn failed(message: String, errors: Vec<String>, requires_2fa: bool, blocked: bool) -> Self {
         Self {
             session: None,
             requires_2fa,
+            blocked,
             message,
             errors,
         }
@@ -52,6 +55,10 @@ impl Backend {
             client,
             base: format!("{}/", base.trim_end_matches('/')),
         }
+    }
+
+    pub fn base(&self) -> &str {
+        &self.base
     }
 
     pub fn client(&self) -> &reqwest::Client {
@@ -114,6 +121,7 @@ impl Backend {
                     return Ok(AuthOutcome {
                         session: Some(session),
                         requires_2fa: false,
+                        blocked: false,
                         message: String::new(),
                         errors: Vec::new(),
                     });
@@ -124,13 +132,16 @@ impl Backend {
                 format!("Некорректный ответ сервера: {raw}"),
                 errors,
                 false,
+                false,
             ));
         }
 
+        let blocked = status == StatusCode::FORBIDDEN && message.contains("официальн");
         Ok(AuthOutcome::failed(
             message.clone(),
             errors,
             message.to_lowercase().contains("2fa"),
+            blocked,
         ))
     }
 
@@ -169,6 +180,7 @@ impl Backend {
                 return Ok(AuthOutcome {
                     session,
                     requires_2fa: false,
+                    blocked: false,
                     message: String::new(),
                     errors,
                 });
@@ -178,13 +190,16 @@ impl Backend {
                 format!("Некорректный ответ сервера: {raw}"),
                 errors,
                 false,
+                false,
             ));
         }
 
+        let blocked = status == StatusCode::FORBIDDEN && message.contains("официальн");
         Ok(AuthOutcome::failed(
             message.clone(),
             errors,
             message.to_lowercase().contains("2fa"),
+            blocked,
         ))
     }
 
@@ -272,6 +287,64 @@ impl Backend {
         }
     }
 
+    pub async fn optional_mods(
+        &self,
+        profile: &str,
+        token: &str,
+    ) -> Result<Vec<crate::model::OptionalMod>> {
+        let response = self
+            .client
+            .get(self.url(&format!(
+                "api/v1/profiles/{}/mods/optionals",
+                urlencoding(profile)
+            )))
+            .bearer_auth(token)
+            .send()
+            .await?;
+
+        let (status, parsed, raw) = self
+            .send_json::<Vec<crate::model::OptionalMod>>(response)
+            .await;
+
+        if !status.is_success() {
+            return Err(anyhow!(
+                "{}",
+                parsed
+                    .as_ref()
+                    .and_then(|value| value.message.clone())
+                    .filter(|message| !message.is_empty())
+                    .unwrap_or_else(|| format!(
+                        "Не удалось загрузить моды: HTTP {} ({raw})",
+                        status.as_u16()
+                    ))
+            ));
+        }
+
+        Ok(parsed.and_then(|value| value.data).unwrap_or_default())
+    }
+
+    pub async fn optional_mods_details(&self, token: &str) -> Vec<crate::model::ModDetails> {
+        let Ok(response) = self
+            .client
+            .get(self.url("api/v1/mods/details"))
+            .bearer_auth(token)
+            .send()
+            .await
+        else {
+            return Vec::new();
+        };
+
+        let (status, parsed, _) = self
+            .send_json::<Vec<crate::model::ModDetails>>(response)
+            .await;
+
+        if status.is_success() {
+            parsed.and_then(|value| value.data).unwrap_or_default()
+        } else {
+            Vec::new()
+        }
+    }
+
     pub async fn mirror_mode(&self, key: &str) -> Option<String> {
         let mut request = self.client.get(self.url("api/v1/mirror/mode"));
         if !key.trim().is_empty() {
@@ -285,6 +358,87 @@ impl Backend {
 
         let parsed: ApiResponse<MirrorResponse> = response.json().await.ok()?;
         parsed.data.and_then(|value| value.mode)
+    }
+
+    pub async fn mirror_state(&self, key: &str) -> Option<crate::model::MirrorState> {
+        let mut request = self.client.get(self.url("api/v1/mirror/mode"));
+        if !key.trim().is_empty() {
+            request = request.header("X-Mirror-Control-Key", key.trim());
+        }
+
+        let response = request.send().await.ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+
+        let parsed: ApiResponse<crate::model::MirrorState> = response.json().await.ok()?;
+        parsed.data
+    }
+
+    pub async fn set_mirror_mode(&self, key: &str, mode: &str) -> Result<String> {
+        let response = self
+            .client
+            .put(self.url("api/v1/mirror/mode"))
+            .header("X-Mirror-Control-Key", key.trim())
+            .json(&serde_json::json!({ "mode": mode }))
+            .send()
+            .await?;
+
+        self.mirror_action_result(response, "Не удалось переключить режим")
+            .await
+    }
+
+    pub async fn set_tor(&self, key: &str, enabled: bool) -> Result<String> {
+        let response = self
+            .client
+            .put(self.url("api/v1/mirror/tor"))
+            .header("X-Mirror-Control-Key", key.trim())
+            .json(&serde_json::json!({ "enabled": enabled }))
+            .send()
+            .await?;
+
+        self.mirror_action_result(response, "Не удалось изменить маршрутизацию через Tor")
+            .await
+    }
+
+    async fn mirror_action_result(
+        &self,
+        response: reqwest::Response,
+        fallback: &str,
+    ) -> Result<String> {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        let message = serde_json::from_str::<ApiResponse<serde_json::Value>>(&text)
+            .ok()
+            .and_then(|value| value.message)
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| fallback.to_string());
+
+        if status.is_success() {
+            Ok(message)
+        } else if matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
+            Err(anyhow!("Сервисный ключ не принят сервером"))
+        } else {
+            Err(anyhow!(message))
+        }
+    }
+
+    pub async fn self_test(&self, key: &str) -> Option<crate::model::SelfTestReport> {
+        let response = self
+            .client
+            .get(self.url("api/v1/mirror/selftest"))
+            .header("X-Mirror-Control-Key", key.trim())
+            .timeout(Duration::from_secs(60))
+            .send()
+            .await
+            .ok()?;
+
+        if !response.status().is_success() {
+            return None;
+        }
+
+        let parsed: ApiResponse<crate::model::SelfTestReport> = response.json().await.ok()?;
+        parsed.data
     }
 
     pub async fn is_reachable(&self) -> bool {
@@ -310,6 +464,20 @@ impl Backend {
             Ok(true)
         )
     }
+}
+
+fn urlencoding(value: &str) -> String {
+    let mut result = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                result.push(byte as char)
+            }
+            b' ' => result.push_str("%20"),
+            _ => result.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    result
 }
 
 fn session_from_player(player: Player, fallback_login: &str) -> Option<Session> {

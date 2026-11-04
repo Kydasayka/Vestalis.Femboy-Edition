@@ -59,6 +59,13 @@ fn main() -> anyhow::Result<()> {
 
     runtime.spawn(Worker::new(state, event_tx).run(command_rx));
 
+    let splash_ui = ui.as_weak();
+    slint::Timer::single_shot(Duration::from_millis(1400), move || {
+        if let Some(ui) = splash_ui.upgrade() {
+            ui.set_splash(false);
+        }
+    });
+
     let timer = slint::Timer::default();
     let ui_weak = ui.as_weak();
     timer.start(
@@ -94,12 +101,43 @@ fn initialize_ui(ui: &AppWindow, state: &Persisted) {
     apply_settings(ui, &state.settings, hwid::total_ram_mb());
 }
 
+#[link(name = "winmm")]
+extern "system" {
+    fn PlaySoundW(sound: *const u8, module: isize, flags: u32) -> i32;
+}
+
+enum Sound {
+    Click,
+    Toggle,
+}
+
+fn play_sound(ui: &AppWindow, sound: Sound) {
+    if !ui.get_set_sounds() {
+        return;
+    }
+
+    const SND_ASYNC: u32 = 0x0001;
+    const SND_NODEFAULT: u32 = 0x0002;
+    const SND_MEMORY: u32 = 0x0004;
+
+    let data: &[u8] = match sound {
+        Sound::Click => include_bytes!("../assets/click.wav"),
+        Sound::Toggle => include_bytes!("../assets/toggle.wav"),
+    };
+
+    // The WAV bytes are embedded in the binary and live for the whole process.
+    unsafe {
+        PlaySoundW(data.as_ptr(), 0, SND_MEMORY | SND_ASYNC | SND_NODEFAULT);
+    }
+}
+
 fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Command>) {
     ui.on_login_clicked({
         let tx = tx.clone();
         let ui = ui.as_weak();
         move || {
             let Some(ui) = ui.upgrade() else { return };
+            play_sound(&ui, Sound::Click);
             let login = ui.get_login().to_string();
             let password = ui.get_password().to_string();
             let _ = tx.send(Command::Login { login, password });
@@ -111,6 +149,7 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         let ui = ui.as_weak();
         move || {
             let Some(ui) = ui.upgrade() else { return };
+            play_sound(&ui, Sound::Click);
             let _ = tx.send(Command::Verify2Fa {
                 code: ui.get_twofa().to_string(),
             });
@@ -119,31 +158,46 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
 
     ui.on_offline_clicked({
         let tx = tx.clone();
+        let ui = ui.as_weak();
         move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
             let _ = tx.send(Command::Offline);
         }
     });
 
     ui.on_hwid_toggled({
         let tx = tx.clone();
+        let ui = ui.as_weak();
         move |enabled| {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Toggle);
+            }
             let _ = tx.send(Command::SetHwid(enabled));
         }
     });
 
     ui.on_logout_clicked({
         let tx = tx.clone();
+        let ui = ui.as_weak();
         move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
             let _ = tx.send(Command::Logout);
         }
     });
 
     ui.on_settings_clicked({
         let ui = ui.as_weak();
+        let tx = tx.clone();
         move || {
             if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
                 ui.set_screen(2);
             }
+            let _ = tx.send(Command::RefreshMirror);
         }
     });
 
@@ -151,6 +205,7 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         let ui = ui.as_weak();
         move || {
             if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
                 ui.set_screen(1);
             }
         }
@@ -158,15 +213,59 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
 
     ui.on_play_clicked({
         let tx = tx.clone();
+        let ui = ui.as_weak();
         move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
             let _ = tx.send(Command::Play);
         }
     });
 
     ui.on_refresh_clicked({
         let tx = tx.clone();
+        let ui = ui.as_weak();
         move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
             let _ = tx.send(Command::Refresh);
+        }
+    });
+
+    ui.on_mods_clicked({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
+            let _ = tx.send(Command::OpenMods);
+        }
+    });
+
+    ui.on_mods_refresh_clicked({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
+            let _ = tx.send(Command::OpenMods);
+        }
+    });
+
+    ui.on_mod_toggled({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move |id, enabled| {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Toggle);
+            }
+            let _ = tx.send(Command::ToggleMod {
+                id: id as usize,
+                enabled,
+            });
         }
     });
 
@@ -175,6 +274,7 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         let ui = ui.as_weak();
         move |index| {
             if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
                 ui.set_server_index(index);
                 ui.set_server_host_label(
                     model::SERVERS
@@ -190,7 +290,11 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
 
     ui.on_profile_clicked({
         let tx = tx.clone();
+        let ui = ui.as_weak();
         move |index| {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
             let _ = tx.send(Command::SelectProfile(index as usize));
         }
     });
@@ -199,6 +303,7 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         let ui = ui.as_weak();
         move |delta| {
             if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
                 let xmx = ui.get_set_xmx();
                 let value = (ui.get_set_xms() + delta).clamp(512, xmx);
                 ui.set_set_xms(value);
@@ -210,6 +315,7 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         let ui = ui.as_weak();
         move |delta| {
             if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
                 let max = ui.get_max_ram().max(1024);
                 let value = (ui.get_set_xmx() + delta).clamp(1024, max);
                 let value = value.max(ui.get_set_xms());
@@ -223,6 +329,7 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         let ui = ui.as_weak();
         move || {
             let Some(ui) = ui.upgrade() else { return };
+            play_sound(&ui, Sound::Click);
 
             let width = ui
                 .get_set_width_text()
@@ -254,8 +361,67 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
 
     ui.on_check_backend_clicked({
         let tx = tx.clone();
+        let ui = ui.as_weak();
         move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
             let _ = tx.send(Command::CheckBackend);
+        }
+    });
+
+    ui.on_mirror_save_key({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move || {
+            let Some(ui) = ui.upgrade() else { return };
+            play_sound(&ui, Sound::Click);
+            let _ = tx.send(Command::SaveMirrorKey(ui.get_mirror_key().to_string()));
+        }
+    });
+
+    ui.on_mirror_clear_key({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+                ui.set_mirror_key("".into());
+            }
+            let _ = tx.send(Command::ClearMirrorKey);
+        }
+    });
+
+    ui.on_mirror_mode_clicked({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move |mode| {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
+            let _ = tx.send(Command::SetMirrorMode(mode.to_string()));
+        }
+    });
+
+    ui.on_mirror_tor_toggled({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move |enabled| {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Toggle);
+            }
+            let _ = tx.send(Command::SetTor(enabled));
+        }
+    });
+
+    ui.on_selftest_clicked({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
+            let _ = tx.send(Command::SelfTest);
         }
     });
 }
@@ -293,7 +459,54 @@ fn apply_event(ui: &AppWindow, event: Event) {
             }
         }
         Event::Selected(view) => select_view(ui, &view),
+        Event::Mods {
+            views,
+            enabled,
+            total,
+        } => {
+            let items: Vec<ModItem> = views
+                .into_iter()
+                .map(|view| ModItem {
+                    id: view.id as i32,
+                    name: view.name.into(),
+                    description: view.description.into(),
+                    enabled: view.enabled,
+                })
+                .collect();
+
+            ui.set_mods(ModelRc::new(VecModel::from(items)));
+            ui.set_mods_enabled(enabled as i32);
+            ui.set_mods_total(total as i32);
+        }
         Event::CanPlay(value) => ui.set_can_play(value),
+        Event::MirrorState {
+            key,
+            mode,
+            upstream,
+            can_control,
+            tor_enabled,
+            tor_available,
+        } => {
+            ui.set_mirror_key(key.into());
+            ui.set_mirror_mode(mode.into());
+            ui.set_mirror_upstream(upstream.into());
+            ui.set_mirror_can_control(can_control);
+            ui.set_mirror_tor(tor_enabled);
+            ui.set_mirror_tor_available(tor_available);
+        }
+        Event::SelfTest { rows, summary } => {
+            let items: Vec<SelfTestItem> = rows
+                .into_iter()
+                .map(|row| SelfTestItem {
+                    name: row.name.into(),
+                    status: row.status.into(),
+                    message: row.message.into(),
+                    duration: row.duration.into(),
+                })
+                .collect();
+            ui.set_selftest(ModelRc::new(VecModel::from(items)));
+            ui.set_selftest_summary(summary.into());
+        }
         Event::News(news) => {
             let items: Vec<NewsItem> = news
                 .into_iter()

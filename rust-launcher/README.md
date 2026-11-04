@@ -20,9 +20,16 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   authlib endpoint rewrite for the active server, and removal of the authlib
   agent in offline mode.
 - Settings: install folder, RAM, window size/fullscreen, JVM args, HWID
-  sending, interface sounds flag.
-- Backend mode badge (`ЗЕРКАЛО` / `ПРОКСИ` / `ОСНОВНОЙ` / `ОНЛАЙН`), mirror
-  mode probe, and a manual backend check.
+  sending, interface sounds, backend check.
+- Service access card (**PL-1 only**): service key, mirror/proxy switching,
+  Tor routing and backend self-test (`/api/v1/mirror/*`).
+- Mods page: optional mods from `/api/v1/profiles/{name}/mods/optionals`,
+  enable/disable by renaming `.jar` ↔ `.jar.disabled`.
+- Interface sounds from the original assets, custom borderless window with
+  caption buttons and resize handles, and a branded start screen.
+- Profiles are refreshed every 90 s and asynchronously after the first load
+  (a lightweight substitute for the C# SignalR `RefreshProfiles` event).
+- Backend mode badge (`ЗЕРКАЛО` / `ПРОКСИ` / `ОСНОВНОЙ` / `ОНЛАЙН` / `ОФФЛАЙН`).
 
 ## Requirements (Windows)
 
@@ -87,23 +94,27 @@ so an existing C# installation does not re-hash its whole 16k-file client.
 
 - The auth endpoints require `X-HWID` on every request. When the HWID toggle
   is off, a fresh random identifier is generated per request.
-- The RU/EU deployments currently answer unauthenticated/non-official clients
-  with `403` and an "unofficial client" message. PL-1 accepts the same API and
-  is therefore the default. Other hosts remain selectable.
+- The RU/EU sign-in endpoint can answer `403` with an "official launcher
+  required" gate for some networks/accounts. When that exact response arrives,
+  the launcher retries the sign-in through the PL-1 mirror and remembers that
+  the session was issued there (badge `ЗЕРКАЛО`, status line on the main page).
+  Profiles are then fetched from the mirror; if the selected host accepts the
+  mirror token, the launcher switches back to it automatically. This makes
+  RU/EU usable without hiding the fact that the mirror is involved.
+- PL-1 accepts the same API and is the default host.
 - The API speaks camelCase JSON; request bodies for sign-in keep the PascalCase
   names used by the C# client.
-- Mirror control (`X-Mirror-Control-Key`, mode switching, Tor, selftest) is
-  read-only in this MVP: the badge reads `/api/v1/mirror/mode`, but there is no
-  service-key UI yet.
+- Mirror control is intentionally limited to PL-1: RU/EU answer `404` for
+  `/api/v1/mirror/*`, so the card is hidden for them in the UI and guarded in
+  the worker.
 
 ## Known gaps / next steps
 
-1. SignalR live profile refresh (currently manual “Обновить” or the 45 s
-   backend probe; profiles are loaded on sign-in/refresh).
-2. Optional-mods page and `.disabled` toggle UI (the download layer already
-   respects `-optional-mod.jar` and keeps new optional mods disabled).
-3. Sound playback (the setting is persisted but `rodio` is not wired yet).
-4. Skins/marketplace pages, Discord RPC, Sentry, custom window chrome and the
-   splash morph from the Avalonia build.
-5. Mirror service key, mode switch, Tor toggle and selftest.
-6. Installer and code signing.
+1. True SignalR connection (the 90 s refresh is a lightweight substitute).
+2. Localisation (ru/en/zh): the Rust UI currently ships Russian strings.
+3. Skins/marketplace pages, Discord RPC and Sentry.
+4. The exact splash-to-window morph of the Avalonia build (the Rust build uses
+   a branded start overlay).
+5. Installer and code signing.
+6. Optional mods that are not downloaded yet: the mods page asks the user to
+   launch the game once instead of downloading the missing file on the spot.

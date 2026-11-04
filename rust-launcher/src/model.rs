@@ -16,6 +16,10 @@ pub const SERVERS: [(&str, &str); 4] = [
 // the safe default; other hosts stay selectable.
 pub const DEFAULT_HOST: &str = SERVERS[3].1;
 
+/// Local mirror used when a main deployment rejects sign-in with the
+/// "official launcher required" gate. Its upstream is the RU-2 backend.
+pub const MIRROR_HOST: &str = SERVERS[3].1;
+
 pub fn server_index(host: &str) -> usize {
     let normalized = host.trim_end_matches('/');
     SERVERS
@@ -120,6 +124,10 @@ pub struct Persisted {
     pub user: Option<Session>,
     pub saved_login: Option<SavedLogin>,
     pub last_profile: Option<String>,
+    /// The session was issued through the mirror because the selected host is
+    /// gated for this client/IP.
+    pub auth_via_mirror: bool,
+    pub mirror_key: String,
 }
 
 impl Default for Persisted {
@@ -130,6 +138,8 @@ impl Default for Persisted {
             user: None,
             saved_login: None,
             last_profile: None,
+            auth_via_mirror: false,
+            mirror_key: String::new(),
         }
     }
 }
@@ -224,11 +234,76 @@ pub struct Player {
     pub texture_skin_url: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OptionalMod {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModDetails {
+    #[serde(default)]
+    pub key: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub description: String,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MirrorResponse {
     #[serde(default)]
     pub mode: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MirrorState {
+    #[serde(default)]
+    pub mode: String,
+    #[serde(default)]
+    pub upstream: Option<String>,
+    #[serde(default)]
+    pub can_control: bool,
+    #[serde(default)]
+    pub tor_enabled: bool,
+    #[serde(default)]
+    pub tor_available: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelfTestCheck {
+    #[serde(default)]
+    pub key: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub message: String,
+    #[serde(default)]
+    pub duration_ms: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelfTestReport {
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub mode: String,
+    #[serde(default)]
+    pub upstream: String,
+    #[serde(default)]
+    pub duration_ms: i64,
+    #[serde(default)]
+    pub checks: Vec<SelfTestCheck>,
 }
 
 #[derive(Serialize)]

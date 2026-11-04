@@ -19,6 +19,20 @@ export struct NewsItem {
     date: string,
 }
 
+export struct ModItem {
+    id: int,
+    name: string,
+    description: string,
+    enabled: bool,
+}
+
+export struct SelfTestItem {
+    name: string,
+    status: string,
+    message: string,
+    duration: string,
+}
+
 component Chip inherits Rectangle {
     in property <string> label;
     in property <bool> active: false;
@@ -117,6 +131,30 @@ component TextField inherits Rectangle {
     }
 }
 
+component CaptionButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> close: false;
+    callback clicked();
+
+    width: 34px;
+    height: 26px;
+    border-radius: 6px;
+    background: area.has-hover ? (close ? #c42b1c : #23232b) : transparent;
+
+    area := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    Text {
+        text: root.label;
+        color: area.has-hover ? #ffffff : #9a9aa6;
+        font-size: 13px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
 component Toggle inherits Rectangle {
     in-out property <bool> checked;
     callback toggled(bool);
@@ -150,9 +188,13 @@ export component AppWindow inherits Window {
     width: 1180px;
     height: 640px;
     background: #0d0d10;
+    no-frame: true;
+    resize-border-width: 6px;
+    default-font-family: "Segoe UI";
 
     // ---- login / global state -------------------------------------------
     in-out property <int> screen: 0;
+    in-out property <bool> splash: true;
     in-out property <string> app-version: "";
     in-out property <string> login: "";
     in-out property <string> password: "";
@@ -175,6 +217,9 @@ export component AppWindow inherits Window {
     in-out property <string> selected-online: "";
     in-out property <image> selected-icon;
     in-out property <[NewsItem]> news: [];
+    in-out property <[ModItem]> mods: [];
+    in-out property <int> mods-enabled: 0;
+    in-out property <int> mods-total: 0;
     in-out property <bool> can-play: false;
 
     in-out property <bool> progress-visible: false;
@@ -200,6 +245,15 @@ export component AppWindow inherits Window {
     in-out property <int> max-ram: 16384;
     in-out property <string> settings-status: "";
 
+    in-out property <string> mirror-key: "";
+    in-out property <string> mirror-mode: "";
+    in-out property <string> mirror-upstream: "";
+    in-out property <bool> mirror-can-control: false;
+    in-out property <bool> mirror-tor: false;
+    in-out property <bool> mirror-tor-available: false;
+    in-out property <[SelfTestItem]> selftest: [];
+    in-out property <string> selftest-summary: "";
+
     callback login-clicked();
     callback verify-clicked();
     callback offline-clicked();
@@ -209,19 +263,28 @@ export component AppWindow inherits Window {
     callback back-clicked();
     callback play-clicked();
     callback refresh-clicked();
+    callback mods-clicked();
+    callback mods-refresh-clicked();
+    callback mod-toggled(int, bool);
     callback server-clicked(int);
     callback profile-clicked(int);
     callback save-settings-clicked();
     callback check-backend-clicked();
     callback adjust-xms(int);
     callback adjust-xmx(int);
+    callback mirror-save-key();
+    callback mirror-clear-key();
+    callback mirror-mode-clicked(string);
+    callback mirror-tor-toggled(bool);
+    callback selftest-clicked();
 
     // =====================================================================
     // LOGIN
     // =====================================================================
     if screen == 0: Rectangle {
         width: 100%;
-        height: 100%;
+        y: 34px;
+        height: root.height - 34px;
         background: #0e0e11;
 
         Image {
@@ -382,7 +445,8 @@ export component AppWindow inherits Window {
     // =====================================================================
     if screen == 1: Rectangle {
         width: 100%;
-        height: 100%;
+        y: 34px;
+        height: root.height - 34px;
         background: #0d0d10;
 
         Image {
@@ -762,6 +826,12 @@ export component AppWindow inherits Window {
                         height: 52px;
                         clicked => { root.refresh-clicked(); }
                     }
+                    ActionButton {
+                        label: "Моды";
+                        width: 110px;
+                        height: 52px;
+                        clicked => { root.mods-clicked(); }
+                    }
                     Rectangle { horizontal-stretch: 1; }
                 }
             }
@@ -773,7 +843,8 @@ export component AppWindow inherits Window {
     // =====================================================================
     if screen == 2: Rectangle {
         width: 100%;
-        height: 100%;
+        y: 34px;
+        height: root.height - 34px;
         background: #0d0d10;
 
         VerticalLayout {
@@ -996,7 +1067,145 @@ export component AppWindow inherits Window {
                                     spacing: 8px;
                                     ActionButton {
                                         label: "Проверить";
+                                        width: 160px;
                                         clicked => { root.check-backend-clicked(); }
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            visible: root.server-index == 3;
+                            border-radius: 14px;
+                            background: #121217e6;
+                            border-width: 1px;
+                            border-color: #24242c;
+                            height: mirror-layout.preferred-height + 40px;
+
+                            mirror-layout := VerticalLayout {
+                                padding: 20px;
+                                spacing: 10px;
+                                Text { text: "Сервисный доступ · PL-1"; color: #ffffff; font-size: 17px; font-weight: 700; }
+                                Text {
+                                    text: "Ключ хранится локально и не входит в сборку. С ним доступны переключение режима, Tor и самодиагностика.";
+                                    color: #8a8a96;
+                                    font-size: 11px;
+                                    wrap: word-wrap;
+                                }
+
+                                TextField {
+                                    text <=> root.mirror-key;
+                                    placeholder: "X-Mirror-Control-Key";
+                                    password: true;
+                                }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    ActionButton {
+                                        label: "Сохранить ключ";
+                                        width: 150px;
+                                        clicked => { root.mirror-save-key(); }
+                                    }
+                                    ActionButton {
+                                        label: "Удалить";
+                                        width: 100px;
+                                        clicked => { root.mirror-clear-key(); }
+                                    }
+                                }
+
+                                Text {
+                                    text: "Режим: " + (root.mirror-mode.is-empty ? "неизвестен" : root.mirror-mode)
+                                        + (root.mirror-upstream.is-empty ? "" : " · upstream: " + root.mirror-upstream);
+                                    color: #b9b9c4;
+                                    font-size: 11px;
+                                    wrap: word-wrap;
+                                }
+
+                                if root.mirror-can-control: VerticalLayout {
+                                    spacing: 8px;
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        ActionButton {
+                                            label: "Зеркало";
+                                            width: 110px;
+                                            primary: root.mirror-mode == "local";
+                                            clicked => { root.mirror-mode-clicked("local"); }
+                                        }
+                                        ActionButton {
+                                            label: "Прокси";
+                                            width: 110px;
+                                            primary: root.mirror-mode == "proxy";
+                                            clicked => { root.mirror-mode-clicked("proxy"); }
+                                        }
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 10px;
+                                        Text {
+                                            text: "Запросы к основному бэкенду через Tor";
+                                            color: #b9b9c4;
+                                            font-size: 11px;
+                                            vertical-alignment: center;
+                                            horizontal-stretch: 1;
+                                            visible: root.mirror-tor-available;
+                                        }
+                                        Toggle {
+                                            checked: root.mirror-tor;
+                                            visible: root.mirror-tor-available;
+                                            toggled(v) => { root.mirror-tor-toggled(v); }
+                                        }
+                                    }
+                                    ActionButton {
+                                        label: "Самодиагностика";
+                                        width: 170px;
+                                        clicked => { root.selftest-clicked(); }
+                                    }
+                                }
+
+                                if !root.selftest-summary.is-empty: Text {
+                                    text: root.selftest-summary;
+                                    color: #a78bfa;
+                                    font-size: 11px;
+                                    wrap: word-wrap;
+                                }
+
+                                for row in root.selftest: Rectangle {
+                                    height: row-layout.preferred-height + 16px;
+                                    border-radius: 8px;
+                                    background: #0f0f14;
+                                    border-width: 1px;
+                                    border-color: row.status == "ok" ? #1f4a2c
+                                        : row.status == "warn" ? #5a3d12 : #5a1f1f;
+                                    row-layout := HorizontalLayout {
+                                        padding: 8px;
+                                        spacing: 8px;
+                                        Text {
+                                            text: row.status == "ok" ? "ОК" : row.status == "warn" ? "ВНИМАНИЕ" : "ОШИБКА";
+                                            color: row.status == "ok" ? #6ee7a0 : row.status == "warn" ? #fbbf24 : #f87171;
+                                            font-size: 10px;
+                                            font-weight: 700;
+                                            width: 70px;
+                                            vertical-alignment: center;
+                                        }
+                                        Text {
+                                            text: row.name;
+                                            color: #e4e4ee;
+                                            font-size: 11px;
+                                            font-weight: 600;
+                                            width: 140px;
+                                            vertical-alignment: center;
+                                        }
+                                        Text {
+                                            text: row.message;
+                                            color: #85858f;
+                                            font-size: 10px;
+                                            horizontal-stretch: 1;
+                                            wrap: word-wrap;
+                                        }
+                                        Text {
+                                            text: row.duration;
+                                            color: #66666f;
+                                            font-size: 10px;
+                                            vertical-alignment: center;
+                                        }
                                     }
                                 }
                             }
@@ -1021,6 +1230,202 @@ export component AppWindow inherits Window {
                     font-size: 11px;
                     vertical-alignment: center;
                 }
+            }
+        }
+    }
+
+    // =====================================================================
+    // MODS
+    // =====================================================================
+    if screen == 3: Rectangle {
+        width: 100%;
+        y: 34px;
+        height: root.height - 34px;
+        background: #0d0d10;
+
+        VerticalLayout {
+            padding: 24px;
+            spacing: 14px;
+
+            HorizontalLayout {
+                spacing: 12px;
+                ActionButton {
+                    label: "← Назад";
+                    width: 120px;
+                    clicked => { root.back-clicked(); }
+                }
+                Text {
+                    text: "Моды";
+                    color: #ffffff;
+                    font-size: 26px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: root.mods-enabled + " из " + root.mods-total + " включено";
+                    color: #8a8a96;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                ActionButton {
+                    label: "Обновить";
+                    width: 130px;
+                    clicked => { root.mods-refresh-clicked(); }
+                }
+            }
+
+            Text {
+                text: "Опциональные моды. Выключенные файлы хранятся с суффиксом .disabled.";
+                color: #6f6f7a;
+                font-size: 11px;
+                wrap: word-wrap;
+            }
+
+            if root.mods-total == 0: Text {
+                text: "Для этого профиля нет опциональных модов.";
+                color: #8a8a96;
+                font-size: 13px;
+            }
+
+            ScrollView {
+                vertical-stretch: 1;
+                VerticalLayout {
+                    spacing: 8px;
+                    for m in root.mods: Rectangle {
+                        height: mod-row.preferred-height + 18px;
+                        border-radius: 12px;
+                        background: #121217e6;
+                        border-width: 1px;
+                        border-color: m.enabled ? #3a1d40 : #23232b;
+
+                        mod-row := HorizontalLayout {
+                            padding: 14px;
+                            spacing: 12px;
+
+                            VerticalLayout {
+                                spacing: 4px;
+                                horizontal-stretch: 1;
+                                Text {
+                                    text: m.name;
+                                    color: #ededf2;
+                                    font-size: 14px;
+                                    font-weight: 600;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    text: m.description;
+                                    color: #85858f;
+                                    font-size: 11px;
+                                    wrap: word-wrap;
+                                    visible: !m.description.is-empty;
+                                }
+                            }
+
+                            Toggle {
+                                checked: m.enabled;
+                                toggled(v) => { root.mod-toggled(m.id, v); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Branded start screen. The real window is already behind it, so the
+    // hand-over is instant once the first backend requests are in flight.
+    if root.splash: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: #0b0b0e;
+
+        Image {
+            source: @image-url("../assets/background.jpg");
+            width: 100%;
+            height: 100%;
+            image-fit: cover;
+            opacity: 0.18;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 10px;
+
+            HorizontalLayout {
+                alignment: center;
+                spacing: 14px;
+                Image {
+                    source: @image-url("../assets/logo.svg");
+                    width: 64px;
+                    height: 64px;
+                }
+                Text {
+                    text: "Vestalis";
+                    color: #ffffff;
+                    font-size: 56px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+            }
+            Text {
+                text: "Femboy Edition";
+                color: #d8b4fe;
+                font-size: 16px;
+                horizontal-alignment: center;
+            }
+            Rectangle { height: 18px; }
+            Rectangle {
+                width: 260px;
+                height: 4px;
+                border-radius: 2px;
+                background: @linear-gradient(90deg, #6d28d9 0%, #e879f9 50%, #6d28d9 100%);
+            }
+            Text {
+                text: "Загрузка…";
+                color: #777783;
+                font-size: 11px;
+                horizontal-alignment: center;
+            }
+        }
+    }
+
+    // Custom title bar (the window uses no-frame).
+    Rectangle {
+        y: 0;
+        width: 100%;
+        height: 34px;
+        background: #0a0a0df5;
+        border-width: 0px;
+
+        WindowMoveArea { }
+
+        HorizontalLayout {
+            padding-left: 12px;
+            padding-right: 6px;
+            spacing: 6px;
+
+            Text {
+                text: "Vestalis Launcher";
+                color: #66666f;
+                font-size: 11px;
+                vertical-alignment: center;
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            CaptionButton {
+                label: "–";
+                clicked => { root.minimized = true; }
+            }
+            CaptionButton {
+                label: "□";
+                clicked => { root.maximized = !root.maximized; }
+            }
+            CaptionButton {
+                label: "✕";
+                close: true;
+                clicked => { root.close(); }
             }
         }
     }
