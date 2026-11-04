@@ -15,8 +15,8 @@ namespace Gml.Launcher.Views;
 
 public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
 {
-    private static readonly TimeSpan IntroDuration = TimeSpan.FromMilliseconds(240);
-    private static readonly TimeSpan IntroDelay = TimeSpan.Zero;
+    private static readonly TimeSpan IntroDuration = TimeSpan.FromMilliseconds(220);
+    private static readonly TimeSpan IntroDelay = TimeSpan.FromMilliseconds(240);
 
     public MainWindow()
     {
@@ -26,42 +26,6 @@ public partial class MainWindow : ReactiveWindow<MainWindowViewModel>
 #if DEBUG
         this.AttachDevTools();
 #endif
-    }
-
-    /// <summary>
-    /// Hides the content before the window is shown, so it can fade in after the splash
-    /// instead of flashing at full opacity.
-    /// </summary>
-    public void PrepareIntro()
-    {
-        if (Content is Visual content)
-            content.Opacity = 0;
-    }
-
-    /// <summary>
-    /// Grows the launcher content out of the splash while it fades in.
-    /// </summary>
-    public Task PlayIntroAsync()
-    {
-        // MainWindow loads its XAML via AvaloniaXamlLoader, so the created controls are only
-        // reachable through Content (there are no generated x:Name fields).
-        if (Content is not Control root)
-            return Task.CompletedTask;
-
-        return RevealAsync(root);
-    }
-
-    private static async Task RevealAsync(Control root)
-    {
-        // Give the splash a moment to grow into this window before the content fades in.
-        await Task.Delay(IntroDelay);
-
-        await WindowTransitions.FadeAndScaleAsync(root,
-            fromOpacity: 0,
-            toOpacity: 1,
-            fromScale: 0.99,
-            toScale: 1,
-            IntroDuration);
     }
 
     protected override void OnDataContextChanged(EventArgs e)

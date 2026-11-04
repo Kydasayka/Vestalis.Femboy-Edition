@@ -21,8 +21,9 @@ public partial class SplashScreen : ReactiveWindow<SplashScreenViewModel>
     private static readonly TimeSpan ShimmerDuration = TimeSpan.FromSeconds(1.6);
     private static readonly TimeSpan ShimmerFrame = TimeSpan.FromMilliseconds(32);
 
-    // The loading card dissolves into the launcher window instead of popping away.
-    private static readonly TimeSpan DissolveDuration = TimeSpan.FromMilliseconds(260);
+    // The loading card grows to the launcher bounds, then dissolves into the launcher.
+    private static readonly TimeSpan GrowDuration = TimeSpan.FromMilliseconds(420);
+    private static readonly TimeSpan FadeDuration = TimeSpan.FromMilliseconds(200);
 
     private readonly DispatcherTimer _shimmerTimer = new() { Interval = ShimmerFrame };
     private readonly LinearGradientBrush? _editionBrush;
@@ -57,16 +58,32 @@ public partial class SplashScreen : ReactiveWindow<SplashScreenViewModel>
     /// Turns the loading card into the launcher window: the window expands to the launcher
     /// bounds first, then the card fades out while the launcher content fades in.
     /// </summary>
-    public Task PlayOutroAsync()
+    /// <summary>
+    /// Turns the loading card into the launcher window. The splash window jumps to the launcher
+    /// rect instantly and the card is scaled down to its original size, then grows back to 100%
+    /// while dissolving — no per-frame window resizing, so the content never lags behind.
+    /// </summary>
+    /// <summary>
+    /// Grows the loading card to the launcher window bounds. The launcher is shown afterwards,
+    /// so nothing of it peeks around the card while it expands.
+    /// </summary>
+    public Task GrowToWindowAsync(MainWindow targetWindow)
     {
         _shimmerTimer.Stop();
 
-        return WindowTransitions.FadeAndScaleAsync(RootBorder,
-            fromOpacity: 1,
-            toOpacity: 0,
-            fromScale: 1,
-            toScale: 1.04,
-            DissolveDuration);
+        return WindowTransitions.MorphBoundsAsync(this,
+            targetWindow.Position,
+            targetWindow.Width,
+            targetWindow.Height,
+            GrowDuration);
+    }
+
+    /// <summary>
+    /// Dissolves the card to reveal the launcher underneath.
+    /// </summary>
+    public Task FadeOutAsync()
+    {
+        return WindowTransitions.FadeAsync(RootBorder, 1, 0, FadeDuration);
     }
 
     /// <summary>
