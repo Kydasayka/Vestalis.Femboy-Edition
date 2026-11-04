@@ -16,8 +16,10 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reactive.Concurrency;
+using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 
 namespace Gml.Launcher.ViewModels;
 
@@ -63,6 +65,12 @@ public class MainWindowViewModel : WindowViewModelBase, IScreen
         RxApp.MainThreadScheduler.Schedule(TimeSpan.FromSeconds(2), CheckBackend);
 
         RxApp.MainThreadScheduler.Schedule(TimeSpan.FromSeconds(4), CheckSystem);
+
+        // Keep the backend mode badge in sync without blocking startup.
+        RxApp.MainThreadScheduler.Schedule(TimeSpan.FromSeconds(3), () => _ = RefreshBackendModeAsync());
+        Observable.Interval(TimeSpan.FromSeconds(20))
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(__ => _ = RefreshBackendModeAsync());
     }
 
     public INotificationMessageManager Manager { get; } = new NotificationMessageManager();
@@ -72,6 +80,14 @@ public class MainWindowViewModel : WindowViewModelBase, IScreen
     public IReadOnlyList<GmlServer> Servers { get; }
 
     [Reactive] public bool IsServerSwitchInProgress { get; private set; }
+
+    [Reactive] public bool IsBackendModeVisible { get; private set; }
+
+    [Reactive] public string BackendModeLabel { get; private set; } = string.Empty;
+
+    [Reactive] public string BackendModeHint { get; private set; } = string.Empty;
+
+    [Reactive] public IBrush BackendModeBrush { get; private set; } = Brushes.Gray;
 
     public GmlServer SelectedServer
     {
@@ -115,6 +131,7 @@ public class MainWindowViewModel : WindowViewModelBase, IScreen
             await _storageService.SetAsync<ILauncherUser?>(StorageConstants.User, null);
             await _autoLoginService.ClearCredentialsAsync();
             await _backendChecker.UpdateBackendStatus();
+            await RefreshBackendModeAsync();
 
             // Error reporting is configured from the backend, so it has to follow the switch as
             // well instead of keeping the DSN of the server the launcher started with. The refresh
@@ -191,6 +208,7 @@ public class MainWindowViewModel : WindowViewModelBase, IScreen
             .Queue();
 
         bool backendInactive = await _backendChecker.BackendIsActive();
+        await RefreshBackendModeAsync();
 
         Manager.Dismiss(CheckMessage);
         button.IsEnabled = true;
@@ -242,6 +260,46 @@ public class MainWindowViewModel : WindowViewModelBase, IScreen
                 .Dismiss()
                 .WithDelay(TimeSpan.FromSeconds(10))
                 .Queue();
+        }
+    }
+
+    private async Task RefreshBackendModeAsync()
+    {
+        var mode = await _backendChecker.GetBackendModeAsync();
+
+        if (Dispatcher.UIThread.CheckAccess())
+            ApplyBackendMode(mode);
+        else
+            Dispatcher.UIThread.Post(() => ApplyBackendMode(mode));
+    }
+
+    private void ApplyBackendMode(string? mode)
+    {
+        switch (mode?.ToLowerInvariant())
+        {
+            case "proxy":
+                IsBackendModeVisible = true;
+                BackendModeLabel = "ПРОКСИ";
+                BackendModeHint = "Запросы уходят напрямую на основной бэкенд";
+                BackendModeBrush = new SolidColorBrush(Color.Parse("#D9822B"));
+                break;
+            case "local":
+                IsBackendModeVisible = true;
+                BackendModeLabel = "ЗЕРКАЛО";
+                BackendModeHint = "Ответы берутся из локального кэша VDS";
+                BackendModeBrush = new SolidColorBrush(Color.Parse("#2E9E5B"));
+                break;
+            case "direct":
+                IsBackendModeVisible = true;
+                BackendModeLabel = "ОСНОВНОЙ";
+                BackendModeHint = "Лаунчер подключён к основному бэкенду напрямую";
+                BackendModeBrush = new SolidColorBrush(Color.Parse("#3B82F6"));
+                break;
+            default:
+                IsBackendModeVisible = false;
+                BackendModeLabel = string.Empty;
+                BackendModeHint = string.Empty;
+                break;
         }
     }
 }

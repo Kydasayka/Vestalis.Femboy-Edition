@@ -7,4 +7,6 @@ public interface IBackendChecker
     Task<bool> BackendIsActive();
     Task UpdateBackendStatus();
     bool IsOffline { get; }
+    string? BackendMode { get; }
+    Task<string?> GetBackendModeAsync();
 }

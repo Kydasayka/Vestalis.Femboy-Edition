@@ -85,6 +85,12 @@ Start-Process 'src\Gml.Launcher\bin\Debug\net8.0\Gml.Launcher.exe'
 - **Трассировка запуска** — `Gml.Client.Interfaces/Helpers/LaunchTrace.cs`, включается
   переменной окружения `GML_LAUNCH_TRACE=1`, пишет в
   `%LOCALAPPDATA%\Gml.Launcher\launch-trace.log`. По умолчанию выключена.
+- **Индикатор режима бэкенда.** `IBackendChecker.GetBackendModeAsync` раз в 20 с дергает
+  `GET /api/v1/mirror/mode` (у основного бэкенда такого эндпоинта нет — тогда режим
+  `direct`). `MainWindowViewModel` красит бейдж в правом верхнем углу: `ЗЕРКАЛО`
+  (local, зелёный), `ПРОКСИ` (proxy, оранжевый), `ОСНОВНОЙ` (direct, синий). Ошибки
+  сети не должны валить лаунчер: бейдж просто скрывается. Значение хранится в
+  `GlobalVariables.BackendMode`, в `data.db` не пишется.
 - **Git.** Сабмодуль коммитится отдельно, потом обновляется указатель в корне
   (`git add src/Gml.Client`). Локальные правки хостов в `ResourceKeysDictionary.cs`
   не коммитить без просьбы.
