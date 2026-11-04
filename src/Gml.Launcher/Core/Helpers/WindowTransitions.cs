@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Animation;
@@ -7,7 +6,6 @@ using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Styling;
-using Avalonia.Threading;
 
 namespace Gml.Launcher.Core.Helpers;
 
@@ -138,82 +136,7 @@ public static class WindowTransitions
     private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter,
         int x, int y, int width, int height, uint flags);
 
-    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
-    private static extern bool GetWindowRect(IntPtr window, out WindowRect rect);
-
-    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-    private struct WindowRect
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
     [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr window, int attribute,
         ref uint value, int size);
-
-    /// <summary>
-    /// Grows the splash window to the real window rectangle of the launcher (including the
-    /// system frame/shadow margin), so no sliver of the launcher stays uncovered.
-    /// </summary>
-    public static Task MorphToWindowAsync(Window window, Window target, TimeSpan duration)
-    {
-        var handle = target.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
-
-        if (OperatingSystem.IsWindows() && handle != IntPtr.Zero && GetWindowRect(handle, out var rect))
-        {
-            var scaling = target.RenderScaling > 0 ? target.RenderScaling : 1d;
-
-            return MorphBoundsAsync(window,
-                new PixelPoint(rect.Left, rect.Top),
-                (rect.Right - rect.Left) / scaling,
-                (rect.Bottom - rect.Top) / scaling,
-                duration);
-        }
-
-        return MorphBoundsAsync(window, target.Position, target.Width, target.Height, duration);
-    }
-
-    /// <summary>
-    /// Grows the splash window to the bounds of the launcher window, so the small loading
-    /// card visibly turns into the launcher instead of being replaced by it.
-    /// </summary>
-    public static async Task MorphBoundsAsync(Window window,
-        PixelPoint targetPosition,
-        double targetWidth,
-        double targetHeight,
-        TimeSpan duration)
-    {
-        var startPosition = window.Position;
-        var startWidth = window.Width;
-        var startHeight = window.Height;
-
-        var stopwatch = Stopwatch.StartNew();
-        var completion = new TaskCompletionSource();
-
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
-
-        timer.Tick += (_, _) =>
-        {
-            var progress = Math.Clamp(stopwatch.Elapsed.TotalMilliseconds / duration.TotalMilliseconds, 0, 1);
-            var eased = 1 - Math.Pow(1 - progress, 3);
-
-            window.Width = startWidth + (targetWidth - startWidth) * eased;
-            window.Height = startHeight + (targetHeight - startHeight) * eased;
-            window.Position = new PixelPoint(
-                (int)Math.Round(startPosition.X + (targetPosition.X - startPosition.X) * eased),
-                (int)Math.Round(startPosition.Y + (targetPosition.Y - startPosition.Y) * eased));
-
-            if (progress < 1)
-                return;
-
-            timer.Stop();
-            completion.TrySetResult();
-        };
-
-        timer.Start();
-        await completion.Task;
-    }
 }

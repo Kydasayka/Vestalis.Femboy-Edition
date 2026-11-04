@@ -21,10 +21,8 @@ public partial class SplashScreen : ReactiveWindow<SplashScreenViewModel>
     private static readonly TimeSpan ShimmerDuration = TimeSpan.FromSeconds(1.6);
     private static readonly TimeSpan ShimmerFrame = TimeSpan.FromMilliseconds(32);
 
-    // The card grows into the launcher window, then dissolves into it.
-    private static readonly TimeSpan MorphDuration = TimeSpan.FromMilliseconds(520);
-    private static readonly TimeSpan MorphHold = TimeSpan.FromMilliseconds(300);
-    private static readonly TimeSpan DissolveDuration = TimeSpan.FromMilliseconds(220);
+    // The loading card dissolves into the launcher window instead of popping away.
+    private static readonly TimeSpan DissolveDuration = TimeSpan.FromMilliseconds(260);
 
     private readonly DispatcherTimer _shimmerTimer = new() { Interval = ShimmerFrame };
     private readonly LinearGradientBrush? _editionBrush;
@@ -59,21 +57,16 @@ public partial class SplashScreen : ReactiveWindow<SplashScreenViewModel>
     /// Turns the loading card into the launcher window: the window expands to the launcher
     /// bounds first, then the card fades out while the launcher content fades in.
     /// </summary>
-    public async Task PlayOutroAsync(MainWindow targetWindow)
+    public Task PlayOutroAsync()
     {
         _shimmerTimer.Stop();
 
-        var morph = WindowTransitions.MorphToWindowAsync(this, targetWindow, MorphDuration);
-
-        await Task.Delay(MorphHold);
-
-        await Task.WhenAll(morph,
-            WindowTransitions.FadeAndScaleAsync(RootBorder,
-                fromOpacity: 1,
-                toOpacity: 0,
-                fromScale: 1,
-                toScale: 1.02,
-                DissolveDuration));
+        return WindowTransitions.FadeAndScaleAsync(RootBorder,
+            fromOpacity: 1,
+            toOpacity: 0,
+            fromScale: 1,
+            toScale: 1.04,
+            DissolveDuration);
     }
 
     /// <summary>
