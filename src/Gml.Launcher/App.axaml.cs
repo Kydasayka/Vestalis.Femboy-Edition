@@ -32,12 +32,15 @@ public partial class App : Application
             };
 
             desktop.MainWindow = splashScreen;
-            await splashViewModel.InitializeAsync();
 
-            // The launcher must not steal focus from whatever the user is watching, but it still
-            // has to be visible, so it is raised in the z-order without being activated.
+            // The lifetime shows the window right after this method yields, so raise it once the
+            // window exists: visible on top, but still without stealing focus.
+            await Task.Yield();
             WindowTransitions.RaiseWithoutActivation(splashScreen);
 
+            await splashViewModel.InitializeAsync();
+
+            // Same for the launcher window that replaces the splash.
             var mainWindow = splashScreen.GetMainWindow();
             mainWindow.PrepareIntro();
             desktop.MainWindow = mainWindow;

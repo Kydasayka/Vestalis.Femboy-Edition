@@ -101,6 +101,28 @@ public static class WindowTransitions
 
         // HWND_TOP, keep position and size, do not activate.
         SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow);
+        HideSystemBorder(handle);
+    }
+
+    /// <summary>
+    /// Windows 11 paints a thin matte/accent border around windows. The launcher draws its own
+    /// rounded surface, so that border is switched off (ignored on older Windows).
+    /// </summary>
+    private static void HideSystemBorder(IntPtr handle)
+    {
+        const int DwmwaBorderColor = 34;
+        const uint DwmColorNone = 0xFFFFFFFE;
+
+        var color = DwmColorNone;
+
+        try
+        {
+            DwmSetWindowAttribute(handle, DwmwaBorderColor, ref color, sizeof(uint));
+        }
+        catch (DllNotFoundException)
+        {
+            // dwmapi is always present on Windows; nothing to do on other platforms.
+        }
     }
 
     private const uint SwpNoSize = 0x0001;
@@ -111,6 +133,10 @@ public static class WindowTransitions
     [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter,
         int x, int y, int width, int height, uint flags);
+
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr window, int attribute,
+        ref uint value, int size);
 
     /// <summary>
     /// Grows the splash window to the bounds of the launcher window, so the small loading
