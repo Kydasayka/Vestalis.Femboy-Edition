@@ -59,15 +59,11 @@ public partial class SplashScreen : ReactiveWindow<SplashScreenViewModel>
     /// Turns the loading card into the launcher window: the window expands to the launcher
     /// bounds first, then the card fades out while the launcher content fades in.
     /// </summary>
-    public async Task PlayOutroAsync(PixelPoint targetPosition, double targetWidth, double targetHeight)
+    public async Task PlayOutroAsync(MainWindow targetWindow)
     {
         _shimmerTimer.Stop();
 
-        var morph = WindowTransitions.MorphBoundsAsync(this,
-            targetPosition,
-            targetWidth,
-            targetHeight,
-            MorphDuration);
+        var morph = WindowTransitions.MorphToWindowAsync(this, targetWindow, MorphDuration);
 
         await Task.Delay(MorphHold);
 

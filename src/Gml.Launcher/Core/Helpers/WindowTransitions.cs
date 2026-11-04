@@ -138,9 +138,43 @@ public static class WindowTransitions
     private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter,
         int x, int y, int width, int height, uint flags);
 
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool GetWindowRect(IntPtr window, out WindowRect rect);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct WindowRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
     [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr window, int attribute,
         ref uint value, int size);
+
+    /// <summary>
+    /// Grows the splash window to the real window rectangle of the launcher (including the
+    /// system frame/shadow margin), so no sliver of the launcher stays uncovered.
+    /// </summary>
+    public static Task MorphToWindowAsync(Window window, Window target, TimeSpan duration)
+    {
+        var handle = target.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+
+        if (OperatingSystem.IsWindows() && handle != IntPtr.Zero && GetWindowRect(handle, out var rect))
+        {
+            var scaling = target.RenderScaling > 0 ? target.RenderScaling : 1d;
+
+            return MorphBoundsAsync(window,
+                new PixelPoint(rect.Left, rect.Top),
+                (rect.Right - rect.Left) / scaling,
+                (rect.Bottom - rect.Top) / scaling,
+                duration);
+        }
+
+        return MorphBoundsAsync(window, target.Position, target.Width, target.Height, duration);
+    }
 
     /// <summary>
     /// Grows the splash window to the bounds of the launcher window, so the small loading
