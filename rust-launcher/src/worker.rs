@@ -149,8 +149,12 @@ pub struct Worker {
 
 impl Worker {
     pub fn new(state: Persisted, tx: UnboundedSender<Event>) -> Self {
-        let backend = Backend::new(&state.server_host);
-        let mirror = Backend::new(MIRROR_HOST);
+        let secret = (!state.settings.client_secret.trim().is_empty())
+            .then(|| state.settings.client_secret.clone())
+            .or_else(|| std::env::var("VESTALIS_CLIENT_SECRET").ok())
+            .filter(|value| !value.trim().is_empty());
+        let backend = Backend::new(&state.server_host).with_client(secret.clone(), String::new());
+        let mirror = Backend::new(MIRROR_HOST).with_client(secret, String::new());
         let via_mirror = state.auth_via_mirror;
         Self {
             tx,
@@ -309,6 +313,9 @@ impl Worker {
     }
 
     async fn startup(&mut self) {
+        let hwid = hwid::hwid_for(&self.state.settings);
+        self.backend.set_hwid(hwid.clone());
+        self.mirror.set_hwid(hwid);
         self.spawn_check();
 
         if let Some(session) = self.state.user.clone() {
@@ -366,6 +373,8 @@ impl Worker {
         self.emit(Event::LoginError(String::new()));
 
         let hwid = hwid::hwid_for(&self.state.settings);
+        self.backend.set_hwid(hwid.clone());
+        self.mirror.set_hwid(hwid.clone());
         info!(login = %login, "sign-in requested");
         let result = self
             .signin_with_fallback(&login, &password, &code, &hwid)
@@ -459,7 +468,13 @@ impl Worker {
         self.state.last_profile = None;
         save_state(&self.state);
 
-        self.backend = Backend::new(host);
+        let secret = (!self.state.settings.client_secret.trim().is_empty())
+            .then(|| self.state.settings.client_secret.clone())
+            .or_else(|| std::env::var("VESTALIS_CLIENT_SECRET").ok())
+            .filter(|value| !value.trim().is_empty());
+        let hwid = hwid::hwid_for(&self.state.settings);
+        self.backend = Backend::new(host).with_client(secret.clone(), hwid.clone());
+        self.mirror.set_client(secret, hwid);
         self.via_mirror = false;
         self.state.auth_via_mirror = false;
         self.offline = false;
@@ -1207,6 +1222,14 @@ impl Worker {
 
         self.state.settings = settings.clone();
         save_state(&self.state);
+
+        let secret = (!settings.client_secret.trim().is_empty())
+            .then(|| settings.client_secret.clone())
+            .or_else(|| std::env::var("VESTALIS_CLIENT_SECRET").ok())
+            .filter(|value| !value.trim().is_empty());
+        let hwid = self.backend.client_hwid().to_string();
+        self.backend.set_client(secret.clone(), hwid.clone());
+        self.mirror.set_client(secret, hwid);
 
         self.emit(Event::Settings { settings, max_ram });
         self.emit(Event::SettingsStatus("Сохранено".into()));

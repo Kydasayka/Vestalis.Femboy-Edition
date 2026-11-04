@@ -319,10 +319,9 @@ async fn download_once(
     current: &str,
 ) -> Result<()> {
     let url = backend.file_url(hash);
+    let request = backend.client().get(&url).timeout(Duration::from_secs(600));
     let response = backend
-        .client()
-        .get(&url)
-        .timeout(Duration::from_secs(600))
+        .sign(request, backend.client_hwid())
         .send()
         .await
         .with_context(|| format!("GET {url}"))?

@@ -53,6 +53,8 @@ pub struct Settings {
     pub xms: u32,
     pub xmx: u32,
     pub custom_jvm: String,
+    /// Shared HMAC key for `X-Client-Signature` (issued by the project).
+    pub client_secret: String,
     pub send_hwid: bool,
     pub sounds: bool,
     pub install_dir: String,
@@ -67,6 +69,7 @@ impl Default for Settings {
             xms: 2048,
             xmx: 8192,
             custom_jvm: String::new(),
+            client_secret: String::new(),
             send_hwid: true,
             sounds: true,
             install_dir: app_dir().to_string_lossy().into_owned(),

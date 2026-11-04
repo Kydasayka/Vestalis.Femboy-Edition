@@ -261,10 +261,15 @@ cargo clippy --all-targets -- -D warnings
 - Сервисный доступ (ключ, режимы `local/proxy`, Tor, selftest) — **только PL-1**:
   RU/EU отдают 404 на `/api/v1/mirror/*`, карточка скрыта, команды в воркере
   дополнительно проверяют хост.
-- Если RU/EU отвечают на signin `403 «Требуется запуск через официальный лаунчер»`,
-  воркер повторяет вход через PL-1 и помечает сессию как зеркальную (бейдж
-  `ЗЕРКАЛО`). Токен зеркала сначала пробуется на выбранном хосте; если он его
-  принимает, данные снова идут напрямую.
+- Официальные RU/EU требуют `X-Client-Signature`:
+  `HMAC-SHA256(secret, "{unixSeconds}:{guidN}:{hwid}:Vestalis")`, заголовок
+  `unixSeconds:guidN:hexDigest`. Ключ выдаёт проект, он вводится в
+  Настройки → «Ключ подписи клиента» и лежит в `state.json`; **в исходники и
+  git его не класть**. Без ключа — `403`, тогда работает fallback на PL-1
+  (бейдж `ЗЕРКАЛО`), но зеркальная сессия не подходит официальным серверам.
+- `OsArchitecture` в `/profiles/info` обязан быть `"64"` (как в C#:
+  `ToString().ToLower().Replace("x","")`). С `"x64"` бэкенд отдаёт пустой
+  профиль (`state=Error`, `files=[]`), и запуск падает с «Java не найдена».
 - Данные: `%APPDATA%\Vestalis\rust-launcher\state.json`,
   кэш `%LOCALAPPDATA%\Vestalis\validation-cache-rust.json`,
   логи `%LOCALAPPDATA%\Vestalis\logs\launcher.log.<date>`.

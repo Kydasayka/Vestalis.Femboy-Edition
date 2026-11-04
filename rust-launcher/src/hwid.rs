@@ -96,11 +96,13 @@ pub fn os_type() -> &'static str {
 }
 
 pub fn os_architecture() -> &'static str {
+    // Must match the C# launcher: OSArchitecture.ToString().ToLower().Replace("x", "").
+    // The backend returns an empty/error profile for "x64" but full data for "64".
     if cfg!(target_arch = "x86_64") {
-        "x64"
+        "64"
     } else if cfg!(target_arch = "aarch64") {
         "arm64"
     } else {
-        "x86"
+        "86"
     }
 }

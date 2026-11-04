@@ -349,6 +349,7 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
                 xms: ui.get_set_xms() as u32,
                 xmx: ui.get_set_xmx() as u32,
                 custom_jvm: ui.get_set_custom_jvm().to_string(),
+                client_secret: ui.get_set_client_secret().to_string(),
                 send_hwid: ui.get_set_send_hwid(),
                 sounds: ui.get_set_sounds(),
                 install_dir: ui.get_set_install_dir().to_string(),
@@ -587,6 +588,7 @@ fn apply_settings(ui: &AppWindow, settings: &Settings, max_ram: u64) {
     ui.set_set_height_text(settings.game_height.to_string().into());
     ui.set_set_fullscreen(settings.fullscreen);
     ui.set_set_custom_jvm(settings.custom_jvm.clone().into());
+    ui.set_set_client_secret(settings.client_secret.clone().into());
     ui.set_set_send_hwid(settings.send_hwid);
     ui.set_set_sounds(settings.sounds);
     ui.set_max_ram(max_ram.min(i32::MAX as u64) as i32);

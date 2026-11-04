@@ -8,6 +8,10 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
 
 - Sign-in with login/password, 2FA challenge, saved credentials and silent
   token validation (`/api/v1/integrations/auth/signin`, `/checkToken`).
+- Official RU/EU backends: every request is signed with
+  `X-Client-Signature` (HMAC-SHA256). The key is **not** in the repository; it
+  is entered in Settings → «Ключ подписи клиента» and stored locally in
+  `state.json`.
 - Server selector (RU-1, RU-2, EU-1, PL-1). Switching a server drops the
   session, exactly like the C# launcher.
 - Profiles and news from the backend, with icons, version badges and online
@@ -81,7 +85,7 @@ No blocking I/O happens in a Slint callback.
 
 | What | Where |
 | --- | --- |
-| Settings/session | `%APPDATA%\Vestalis\rust-launcher\state.json` |
+| Settings/session/client-signature key | `%APPDATA%\Vestalis\rust-launcher\state.json` |
 | Game files | `%APPDATA%\Vestalis` (same as the C# launcher) |
 | SHA-1 cache | `%LOCALAPPDATA%\Vestalis\validation-cache-rust.json` |
 | Logs | `%LOCALAPPDATA%\Vestalis\logs\launcher.log.<date>` |
@@ -94,14 +98,16 @@ so an existing C# installation does not re-hash its whole 16k-file client.
 
 - The auth endpoints require `X-HWID` on every request. When the HWID toggle
   is off, a fresh random identifier is generated per request.
-- The RU/EU sign-in endpoint can answer `403` with an "official launcher
-  required" gate for some networks/accounts. When that exact response arrives,
-  the launcher retries the sign-in through the PL-1 mirror and remembers that
-  the session was issued there (badge `ЗЕРКАЛО`, status line on the main page).
-  Profiles are then fetched from the mirror; if the selected host accepts the
-  mirror token, the launcher switches back to it automatically. This makes
-  RU/EU usable without hiding the fact that the mirror is involved.
-- PL-1 accepts the same API and is the default host.
+- Official hosts require a valid `X-Client-Signature`:
+  `HMAC-SHA256(secret, "{unixSeconds}:{guidN}:{hwid}:Vestalis")`, sent as
+  `unixSeconds:guidN:hexDigest`. Without the project-issued key the host answers
+  `403 «Требуется запуск через официальный лаунчер»` before credential checks.
+  In that case the launcher can fall back to the PL-1 mirror (badge `ЗЕРКАЛО`);
+  a mirror session is not accepted by the official RU/EU servers.
+- `OsArchitecture` must be `"64"` (not `"x64"`): the backend returns an empty
+  profile with `state=Error` for `"x64"` but the full launch manifest for `"64"`.
+- PL-1 accepts the same API and is the default host. The client-signature key
+  is launcher-wide, not per server.
 - The API speaks camelCase JSON; request bodies for sign-in keep the PascalCase
   names used by the C# client.
 - Mirror control is intentionally limited to PL-1: RU/EU answer `404` for

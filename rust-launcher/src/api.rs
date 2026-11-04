@@ -2,9 +2,14 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
+use hmac::{Hmac, Mac};
 use reqwest::header::{HeaderValue, AUTHORIZATION};
 use reqwest::StatusCode;
 use serde::de::DeserializeOwned;
+use sha2::Sha256;
+use uuid::Uuid;
+
+type HmacSha256 = Hmac<Sha256>;
 
 use crate::model::{
     ApiResponse, LoginRequest, MirrorResponse, News, Player, Profile, ProfileInfo,
@@ -15,6 +20,8 @@ use crate::model::{
 pub struct Backend {
     client: reqwest::Client,
     base: String,
+    client_secret: Option<String>,
+    hwid: String,
 }
 
 pub struct AuthOutcome {
@@ -54,11 +61,59 @@ impl Backend {
         Self {
             client,
             base: format!("{}/", base.trim_end_matches('/')),
+            client_secret: None,
+            hwid: String::new(),
         }
+    }
+
+    pub fn with_client(mut self, secret: Option<String>, hwid: String) -> Self {
+        self.client_secret = secret.filter(|value| !value.trim().is_empty());
+        self.hwid = hwid;
+        self
+    }
+
+    pub fn set_client(&mut self, secret: Option<String>, hwid: String) {
+        self.client_secret = secret.filter(|value| !value.trim().is_empty());
+        self.hwid = hwid;
+    }
+
+    pub fn set_hwid(&mut self, hwid: String) {
+        self.hwid = hwid;
     }
 
     pub fn base(&self) -> &str {
         &self.base
+    }
+
+    pub fn client_hwid(&self) -> &str {
+        &self.hwid
+    }
+
+    /// `X-Client-Signature` from the official client:
+    /// HMAC-SHA256(secret, "{unixSeconds}:{guidN}:{hwid}:Vestalis"),
+    /// sent as "{unixSeconds}:{guidN}:{hexDigest}".
+    fn signature(&self, hwid: &str) -> Option<String> {
+        let secret = self.client_secret.as_deref()?;
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_secs()
+            .to_string();
+        let nonce = Uuid::new_v4().simple().to_string();
+        let message = format!("{timestamp}:{nonce}:{}:Vestalis", hwid.trim());
+
+        let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).ok()?;
+        mac.update(message.as_bytes());
+        let digest = hex::encode(mac.finalize().into_bytes());
+
+        Some(format!("{timestamp}:{nonce}:{digest}"))
+    }
+
+    pub fn sign(&self, request: reqwest::RequestBuilder, hwid: &str) -> reqwest::RequestBuilder {
+        match self.signature(hwid) {
+            Some(value) => request.header("X-Client-Signature", value),
+            None => request,
+        }
     }
 
     pub fn client(&self) -> &reqwest::Client {
@@ -97,13 +152,12 @@ impl Backend {
             two_factor_code: code,
         };
 
-        let response = self
+        let request = self
             .client
             .post(self.url("api/v1/integrations/auth/signin"))
             .header("X-HWID", hwid)
-            .json(&request)
-            .send()
-            .await?;
+            .json(&request);
+        let response = self.sign(request, hwid).send().await?;
 
         let (status, parsed, raw) = self.send_json::<Player>(response).await;
         let message = parsed
@@ -146,15 +200,14 @@ impl Backend {
     }
 
     pub async fn check_token(&self, token: &str, hwid: &str) -> Result<AuthOutcome> {
-        let response = self
+        let request = self
             .client
             .post(self.url("api/v1/integrations/auth/checkToken"))
             .header("X-HWID", hwid)
             .json(&TokenRequest {
                 access_token: token,
-            })
-            .send()
-            .await?;
+            });
+        let response = self.sign(request, hwid).send().await?;
 
         let (status, parsed, raw) = self.send_json::<Player>(response).await;
         let message = parsed
@@ -204,12 +257,11 @@ impl Backend {
     }
 
     pub async fn profiles(&self, token: &str) -> Result<Vec<Profile>> {
-        let response = self
+        let request = self
             .client
             .get(self.url("api/v1/profiles"))
-            .bearer_auth(token)
-            .send()
-            .await?;
+            .bearer_auth(token);
+        let response = self.sign(request, &self.hwid).send().await?;
 
         let (status, parsed, raw) = self.send_json::<Vec<Profile>>(response).await;
 
@@ -235,16 +287,15 @@ impl Backend {
         token: &str,
         request: &ProfileInfoRequest<'_>,
     ) -> Result<Option<ProfileInfo>> {
-        let response = self
+        let request = self
             .client
             .post(self.url("api/v1/profiles/info"))
             .header(
                 AUTHORIZATION,
                 HeaderValue::from_str(token).unwrap_or(HeaderValue::from_static("")),
             )
-            .json(request)
-            .send()
-            .await?;
+            .json(request);
+        let response = self.sign(request, &self.hwid).send().await?;
 
         let (status, parsed, raw) = self.send_json::<ProfileInfo>(response).await;
 
@@ -270,12 +321,8 @@ impl Backend {
     }
 
     pub async fn news(&self) -> Vec<News> {
-        let Ok(response) = self
-            .client
-            .get(self.url("api/v1/integrations/news/list"))
-            .send()
-            .await
-        else {
+        let request = self.client.get(self.url("api/v1/integrations/news/list"));
+        let Ok(response) = self.sign(request, &self.hwid).send().await else {
             return Vec::new();
         };
 
@@ -292,15 +339,14 @@ impl Backend {
         profile: &str,
         token: &str,
     ) -> Result<Vec<crate::model::OptionalMod>> {
-        let response = self
+        let request = self
             .client
             .get(self.url(&format!(
                 "api/v1/profiles/{}/mods/optionals",
                 urlencoding(profile)
             )))
-            .bearer_auth(token)
-            .send()
-            .await?;
+            .bearer_auth(token);
+        let response = self.sign(request, &self.hwid).send().await?;
 
         let (status, parsed, raw) = self
             .send_json::<Vec<crate::model::OptionalMod>>(response)
@@ -324,13 +370,11 @@ impl Backend {
     }
 
     pub async fn optional_mods_details(&self, token: &str) -> Vec<crate::model::ModDetails> {
-        let Ok(response) = self
+        let request = self
             .client
             .get(self.url("api/v1/mods/details"))
-            .bearer_auth(token)
-            .send()
-            .await
-        else {
+            .bearer_auth(token);
+        let Ok(response) = self.sign(request, &self.hwid).send().await else {
             return Vec::new();
         };
 
@@ -351,7 +395,7 @@ impl Backend {
             request = request.header("X-Mirror-Control-Key", key.trim());
         }
 
-        let response = request.send().await.ok()?;
+        let response = self.sign(request, &self.hwid).send().await.ok()?;
         if !response.status().is_success() {
             return None;
         }
@@ -366,7 +410,7 @@ impl Backend {
             request = request.header("X-Mirror-Control-Key", key.trim());
         }
 
-        let response = request.send().await.ok()?;
+        let response = self.sign(request, &self.hwid).send().await.ok()?;
         if !response.status().is_success() {
             return None;
         }
@@ -376,26 +420,24 @@ impl Backend {
     }
 
     pub async fn set_mirror_mode(&self, key: &str, mode: &str) -> Result<String> {
-        let response = self
+        let request = self
             .client
             .put(self.url("api/v1/mirror/mode"))
             .header("X-Mirror-Control-Key", key.trim())
-            .json(&serde_json::json!({ "mode": mode }))
-            .send()
-            .await?;
+            .json(&serde_json::json!({ "mode": mode }));
+        let response = self.sign(request, &self.hwid).send().await?;
 
         self.mirror_action_result(response, "Не удалось переключить режим")
             .await
     }
 
     pub async fn set_tor(&self, key: &str, enabled: bool) -> Result<String> {
-        let response = self
+        let request = self
             .client
             .put(self.url("api/v1/mirror/tor"))
             .header("X-Mirror-Control-Key", key.trim())
-            .json(&serde_json::json!({ "enabled": enabled }))
-            .send()
-            .await?;
+            .json(&serde_json::json!({ "enabled": enabled }));
+        let response = self.sign(request, &self.hwid).send().await?;
 
         self.mirror_action_result(response, "Не удалось изменить маршрутизацию через Tor")
             .await
@@ -424,14 +466,12 @@ impl Backend {
     }
 
     pub async fn self_test(&self, key: &str) -> Option<crate::model::SelfTestReport> {
-        let response = self
+        let request = self
             .client
             .get(self.url("api/v1/mirror/selftest"))
             .header("X-Mirror-Control-Key", key.trim())
-            .timeout(Duration::from_secs(60))
-            .send()
-            .await
-            .ok()?;
+            .timeout(Duration::from_secs(60));
+        let response = self.sign(request, &self.hwid).send().await.ok()?;
 
         if !response.status().is_success() {
             return None;
@@ -442,22 +482,19 @@ impl Backend {
     }
 
     pub async fn is_reachable(&self) -> bool {
-        if let Ok(response) = self
-            .client
-            .get(&self.base)
-            .timeout(Duration::from_secs(6))
-            .send()
-            .await
-        {
+        let request = self.client.get(&self.base).timeout(Duration::from_secs(6));
+        if let Ok(response) = self.sign(request, &self.hwid).send().await {
             if response.status().is_success() {
                 return true;
             }
         }
 
+        let request = self
+            .client
+            .get(self.url("health"))
+            .timeout(Duration::from_secs(6));
         matches!(
-            self.client
-                .get(self.url("health"))
-                .timeout(Duration::from_secs(6))
+            self.sign(request, &self.hwid)
                 .send()
                 .await
                 .map(|response| response.status().is_success()),
