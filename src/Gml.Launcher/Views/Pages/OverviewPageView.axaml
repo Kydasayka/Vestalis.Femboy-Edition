@@ -77,7 +77,6 @@
                 <components:ServerInfo x:Name="ProfileHost"
                                        Grid.Column="0"
                                        Grid.Row="2"
-                                       ClipToBounds="True"
                                        Classes.Animated="{Binding ListViewModel.HasSelectedItem}"
                                        PlayCommand="{Binding PlayCommand}"
                                        SettingsCommand="{Binding GoSettingsCommand}"
@@ -92,8 +91,8 @@
                                        State="{Binding ListViewModel.SelectedProfile.State, FallbackValue={x:Null}}"
                                        CreateDate="{Binding ListViewModel.SelectedProfile.CreateDate, FallbackValue={x:Null}}"
                                        Status="{x:Static lang:Resources.Available}"
-                                       VerticalAlignment="Center"
-                                       HorizontalAlignment="Left">
+                                       VerticalAlignment="Stretch"
+                                       HorizontalAlignment="Stretch">
 
                     <!-- Switching the profile slides the new one in, so the change reads as a switch. -->
                     <components:ServerInfo.RenderTransform>

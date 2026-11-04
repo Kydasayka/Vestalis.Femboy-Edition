@@ -71,6 +71,10 @@ public partial class SplashScreen : ReactiveWindow<SplashScreenViewModel>
     {
         _shimmerTimer.Stop();
 
+        // The brand lockup dissolves as the card starts growing: once the card is launcher-sized
+        // the content would look stretched, and the hand-over reads cleaner with an empty surface.
+        _ = WindowTransitions.FadeAsync(CardContent, 1, 0, TimeSpan.FromMilliseconds(180));
+
         return WindowTransitions.MorphBoundsAsync(this,
             targetWindow.Position,
             targetWindow.Width,

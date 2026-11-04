@@ -47,7 +47,7 @@
             CornerRadius="15">
 
         <Grid>
-            <StackPanel VerticalAlignment="Center">
+            <StackPanel x:Name="CardContent" VerticalAlignment="Center">
                 <!-- Icon + wordmark lockup; the icon spans the wordmark line, the pair stays
                      narrower than the progress bar below. -->
                 <Grid ColumnDefinitions="Auto,*" Margin="22,0">
