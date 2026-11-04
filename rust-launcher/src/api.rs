@@ -45,8 +45,8 @@ impl Backend {
             .connect_timeout(Duration::from_secs(10))
             .user_agent(
                 "Gml.Launcher-Client-GmlClientManager/1.0 \
-                 (OS: Microsoft Windows 10.0.26100; OSArchitecture: X64; \
-                 ProcessArchitecture: X64; FrameworkDescription: .NET 8.0; .NET: 8.0;)",
+                 (OS: Microsoft Windows 10.0.26200; OSArchitecture: X64; \
+                 ProcessArchitecture: X64; FrameworkDescription: .NET 8.0.28; .NET: 8.0.28;)",
             )
             .build()
             .unwrap_or_default();
