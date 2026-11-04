@@ -53,7 +53,7 @@ public partial class App : Application
             try
             {
                 await Task.WhenAll(
-                    splashScreen.PlayOutroAsync(mainWindow),
+                    splashScreen.PlayOutroAsync(),
                     mainWindow.PlayIntroAsync());
             }
             catch (Exception exception)

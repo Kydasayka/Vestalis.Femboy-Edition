@@ -181,6 +181,15 @@ dotnet publish 'src\Gml.Launcher\Gml.Launcher.csproj' -c Release -r win-x64 `
   `data.checks[]` (`key`, `name`, `status`, `message`, `durationMs`). Статусы строк:
   `ok` → «ОК» зелёный, `warn` → «ВНИМАНИЕ» оранжевый, иначе «ОШИБКА» красный.
   Без ключа сервер отвечает 403 — это не ошибка кода, а ожидаемое поведение.
+- **Главное окно без системной рамки.** `MainWindow` объявлен с `SystemDecorations="None"` и
+  **без** `ExtendClientAreaToDecorationsHint`: этот флаг заставлял DWM рисовать тень вокруг
+  окна, которая на ярком фоне выглядела как матовая серая обводка. Кнопки
+  свернуть/развернуть/закрыть свои (`Button.CaptionButton`), обработчики `MinimizeClick`/
+  `MaximizeClick`/`CloseClick`. Ресайз за края и углы сделан вручную: `BeginResizeDrag` по
+  8 зонам (`HitTestEdge`, хват 6 px), курсор меняется в `OnPointerMoved`. У корневого `Border`
+  стоит `Margin="-5"`, чтобы контент перекрывал невидимую 5-пиксельную рамку окна — без этого
+  страницы получают меньше высоты и низ наезжает на кнопки. Не возвращать
+  `ExtendClientAreaToDecorationsHint` и не убирать отрицательный margin.
 - **Брендинг окна загрузки.** Сплэш сделан типографикой: закруглённый тяжёлый шрифт Fredoka One
   (`Assets/Fonts/FredokaOne-Regular.ttf`, OFL рядом — статичные веса берутся из истории
   google/fonts, актуальный `Fredoka` там только вариативный, а Avalonia вес варианта не
