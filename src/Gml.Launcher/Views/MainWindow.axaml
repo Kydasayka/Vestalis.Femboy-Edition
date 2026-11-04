@@ -15,17 +15,53 @@
         Height="600"
         MinHeight="600"
         CanResize="True"
+        SystemDecorations="None"
         Closed="WindowClosed"
         x:Class="Gml.Launcher.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Background="Transparent"
-        ExtendClientAreaToDecorationsHint="True"
         WindowStartupLocation="CenterScreen"
         ShowActivated="False"
         TransparencyLevelHint="Transparent"
         TransparencyBackgroundFallback="Transparent"
         Icon="/Assets/Images/logo.ico"
         Title="Gml.Launcher">
+
+    <Window.Styles>
+        <!--
+            The window is borderless (no system decorations), so the caption buttons are drawn
+            here. Keeping them custom also means Windows does not paint its drop shadow around
+            the launcher, which used to look like a matte outline on bright backgrounds.
+        -->
+        <Style Selector="Button.CaptionButton">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Foreground" Value="#B4B4B4" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <Style Selector="Button.CaptionButton:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#22FFFFFF" />
+            <Setter Property="TextBlock.Foreground" Value="#FFFFFF" />
+        </Style>
+
+        <Style Selector="Button.CaptionButton.Close:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#C42B1C" />
+            <Setter Property="TextBlock.Foreground" Value="#FFFFFF" />
+        </Style>
+    </Window.Styles>
 
     <Grid>
         <Border CornerRadius="5" ClipToBounds="True">
@@ -78,6 +114,28 @@
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"
                         Margin="0,48,20,0" />
+
+                    <!-- Custom caption buttons (the window has no system decorations). -->
+                    <StackPanel ZIndex="30"
+                                Orientation="Horizontal"
+                                Spacing="2"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
+                                Margin="0,8,10,0">
+                        <Button Classes="CaptionButton"
+                                Content="&#xE921;"
+                                Click="MinimizeClick"
+                                ToolTip.Tip="Свернуть" />
+                        <Button Classes="CaptionButton"
+                                Content="&#xE922;"
+                                Click="MaximizeClick"
+                                ToolTip.Tip="Развернуть" />
+                        <Button Classes="CaptionButton"
+                                Classes.Close="True"
+                                Content="&#xE8BB;"
+                                Click="CloseClick"
+                                ToolTip.Tip="Закрыть" />
+                    </StackPanel>
 
                     <!-- Backend mode badge: local mirror vs transparent proxy -->
                     <Border ZIndex="11"
