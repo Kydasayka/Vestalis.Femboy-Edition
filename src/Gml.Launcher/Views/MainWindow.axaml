@@ -21,6 +21,7 @@
         Background="Transparent"
         ExtendClientAreaToDecorationsHint="True"
         WindowStartupLocation="CenterScreen"
+        ShowActivated="False"
         TransparencyLevelHint="AcrylicBlur"
         TransparencyBackgroundFallback="Transparent"
         Icon="/Assets/Images/logo.ico"

@@ -11,6 +11,7 @@
         Height="210"
         WindowStartupLocation="CenterScreen"
         SystemDecorations="None"
+        ShowActivated="False"
         Background="Transparent"
         TransparencyLevelHint="Transparent"
         TransparencyBackgroundFallback="Transparent"
@@ -18,26 +19,75 @@
         x:DataType="viewModels:SplashScreenViewModel"
         Title="Gml.Launcher">
 
-    <Border Background="{DynamicResource FrameBackgroundColor}"
-            BorderBrush="{DynamicResource FrameBackgroundBorderColor}"
-            BorderThickness="1"
+    <Window.Resources>
+        <!-- Soft, heavy rounded wordmark font (Fredoka One, OFL). -->
+        <FontFamily x:Key="BrandFont">avares://Gml.Launcher/Assets/Fonts#Fredoka One</FontFamily>
+
+        <!--
+            Pastel launcher palette in a cyclic gradient. The code-behind slides it across the
+            "Femboy Edition" label; the repeat spread makes the loop seamless. The stops are
+            deliberately close in brightness: the sweep should read as a soft glow, not a flare.
+        -->
+        <LinearGradientBrush x:Key="EditionShimmerBrush"
+                             StartPoint="0%, 50%"
+                             EndPoint="100%, 50%"
+                             SpreadMethod="Repeat">
+            <GradientStop Offset="0" Color="#D97BD2" />
+            <GradientStop Offset="0.25" Color="#E795DE" />
+            <GradientStop Offset="0.5" Color="#F0B6EA" />
+            <GradientStop Offset="0.75" Color="#C9A0EA" />
+            <GradientStop Offset="1" Color="#D97BD2" />
+        </LinearGradientBrush>
+    </Window.Resources>
+
+    <!-- No border: the card is just the rounded window surface, no matte outline. -->
+    <Border x:Name="RootBorder"
+            Background="{DynamicResource FrameBackgroundColor}"
             ClipToBounds="True"
             CornerRadius="15">
 
         <Grid>
             <StackPanel VerticalAlignment="Center">
-                <components:LogoComponent Classes="TextLogo"
-                                          HorizontalAlignment="Center" />
+                <!-- Icon + wordmark lockup; the pair spans the window width. -->
+                <Grid ColumnDefinitions="Auto,*" Margin="20,0">
+                    <Svg Path="/Assets/Images/logo.svg"
+                         Width="46"
+                         Height="46"
+                         Margin="0,10,10,0"
+                         VerticalAlignment="Top" />
+
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Vestalis"
+                                   FontFamily="{StaticResource BrandFont}"
+                                   FontSize="70"
+                                   HorizontalAlignment="Stretch"
+                                   TextAlignment="Center"
+                                   LineHeight="74"
+                                   Foreground="{StaticResource HeadlineColor}" />
+
+                        <!-- About half the width of the wordmark, tucked under its right edge. -->
+                        <TextBlock Text="Femboy Edition"
+                                   FontFamily="{StaticResource BrandFont}"
+                                   FontSize="18"
+                                   HorizontalAlignment="Right"
+                                   Margin="0,-2,1,0"
+                                   LineHeight="22"
+                                   Foreground="{StaticResource EditionShimmerBrush}" />
+                    </StackPanel>
+                </Grid>
 
                 <ProgressBar IsIndeterminate="{Binding InfinityLoading}"
                              Value="{Binding Progress}"
                              Maximum="100"
                              Classes="ProgressBar"
-                             Margin="60, 20"
+                             Background="#1C1C1C"
+                             Margin="28, 16, 28, 10"
                              Height="1"
                              VerticalAlignment="Bottom" />
 
                 <TextBlock Text="{Binding StatusText}"
+                           FontSize="11"
+                           Opacity="0.85"
                            HorizontalAlignment="Center"
                            Foreground="{DynamicResource ContentColor}" />
             </StackPanel>

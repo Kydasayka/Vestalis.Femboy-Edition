@@ -181,6 +181,26 @@ dotnet publish 'src\Gml.Launcher\Gml.Launcher.csproj' -c Release -r win-x64 `
   `data.checks[]` (`key`, `name`, `status`, `message`, `durationMs`). Статусы строк:
   `ok` → «ОК» зелёный, `warn` → «ВНИМАНИЕ» оранжевый, иначе «ОШИБКА» красный.
   Без ключа сервер отвечает 403 — это не ошибка кода, а ожидаемое поведение.
+- **Брендинг окна загрузки.** Сплэш сделан типографикой: закруглённый тяжёлый шрифт Fredoka One
+  (`Assets/Fonts/FredokaOne-Regular.ttf`, OFL рядом — статичные веса берутся из истории
+  google/fonts, актуальный `Fredoka` там только вариативный, а Avalonia вес варианта не
+  выбирает). Слева иконка `logo.svg` (46 px), `Vestalis` белым на всю оставшуюся ширину
+  (кегль 70), `Femboy Edition` — по ширине примерно половина надписи (кегль 18), прижата к
+  правому краю. У карточки **нет** `BorderBrush` (была матовая серая обводка), фон —
+  `FrameBackgroundColor`. Переливание — `LinearGradientBrush` с `SpreadMethod="Repeat"`, который
+  `DispatcherTimer` (32 мс, цикл 1.6 с) сдвигает через `StartPoint`/`EndPoint`; таймер
+  останавливается по `Closed`. Пастельная палитра и медленный цикл — намеренно: яркий/быстрый
+  градиент выглядел навязчиво.
+- **Переход сплэш → лаунчер и запуск в фоне.** `App.OnFrameworkInitializationCompleted` создаёт
+  главное окно с `PrepareIntro()` (контент `Opacity = 0`), показывает его и запускает морфинг:
+  окно сплэша реально растягивается до границ окна лаунчера (`MorphBoundsAsync`, 520 мс, шаг
+  16 мс через `DispatcherTimer`), затем карточка растворяется, а контент лаунчера проявляется
+  (`Core/Helpers/WindowTransitions.cs`). Фаза `MainWindow` — `AvaloniaXamlLoader.Load(this)`,
+  поэтому x:Name-полей нет, контент берётся через `Content`. Оба окна объявлены с
+  `ShowActivated="False"` и поднимаются в z-order через `RaiseWithoutActivation`
+  (`SetWindowPos` с `SWP_NOACTIVATE`), чтобы лаунчер было видно, но фокус оставался у
+  приложения пользователя. Главное окно само скрывается примерно через 5 с после старта —
+  так было и до перехода, это не регрессия.
 - **Локализация карточки сервисного доступа.** Тексты карточки и сообщения
   `MirrorControlService`/`SettingsPageViewModel` захардкожены по-русски в axaml и коде,
   а не через `Resources.*` (в отличие от остального UI). При добавлении языков это
