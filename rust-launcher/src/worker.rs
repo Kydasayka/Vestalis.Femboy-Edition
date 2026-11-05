@@ -8,6 +8,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tracing::{error, info};
 
 use crate::api::Backend;
+use crate::discord::DiscordRpc;
 use crate::files::{sync_profile, SyncProgress};
 use crate::hwid;
 use crate::launch;
@@ -145,6 +146,7 @@ pub struct Worker {
     offline: bool,
     busy: bool,
     pending_login: (String, String),
+    discord: Option<DiscordRpc>,
 }
 
 impl Worker {
@@ -169,6 +171,7 @@ impl Worker {
             offline: false,
             busy: false,
             pending_login: (String::new(), String::new()),
+            discord: None,
         }
     }
 
@@ -454,6 +457,10 @@ impl Worker {
         self.selected = 0;
         self.emit(Event::LoggedOut);
         self.emit(Event::Screen(0));
+
+        if let Some(rpc) = &self.discord {
+            rpc.set_state("В лаунчере");
+        }
     }
 
     async fn select_server(&mut self, index: usize) {
@@ -618,6 +625,36 @@ impl Worker {
         if let Some(view) = self.views.get(self.selected) {
             self.emit(Event::Selected(view.clone()));
         }
+
+        self.ensure_discord();
+        self.update_discord_presence();
+    }
+
+    fn ensure_discord(&mut self) {
+        if self.discord.is_none() && !self.offline {
+            self.discord = Some(DiscordRpc::start());
+        }
+    }
+
+    fn update_discord_presence(&self) {
+        let Some(rpc) = &self.discord else {
+            return;
+        };
+
+        let state = self
+            .profiles
+            .get(self.selected)
+            .map(|profile| {
+                profile
+                    .display_name
+                    .clone()
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or_else(|| profile.name.clone())
+            })
+            .map(|name| format!("В лаунчере: {name}"))
+            .unwrap_or_else(|| "В лаунчере".to_string());
+
+        rpc.set_state(state);
     }
 
     async fn load_offline(&mut self) {
@@ -667,6 +704,7 @@ impl Worker {
         self.state.last_profile = Some(view.name.clone());
         save_state(&self.state);
         self.emit(Event::Selected(view));
+        self.update_discord_presence();
     }
 
     async fn play(&mut self) {
@@ -713,6 +751,17 @@ impl Worker {
             "launch requested"
         );
 
+        if let Some(rpc) = &self.discord {
+            rpc.set_state(format!(
+                "Играет: {}",
+                profile
+                    .display_name
+                    .clone()
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or_else(|| profile.name.clone())
+            ));
+        }
+
         self.emit(Event::Error(String::new()));
         self.emit(Event::MainStatus(String::new()));
         self.emit(Event::Progress {
@@ -732,12 +781,23 @@ impl Worker {
                 return;
             };
             let session = self.state.user.as_ref().expect("token implies user");
+            let (window_width, window_height) = if settings.fullscreen {
+                hwid::screen_size()
+            } else {
+                (settings.game_width, settings.game_height)
+            };
+            info!(
+                window_width,
+                window_height,
+                fullscreen = settings.fullscreen,
+                "profile resolution"
+            );
             let request = ProfileInfoRequest {
                 user_name: &session.name,
                 profile_name: &profile.name,
                 user_access_token: &token,
-                window_width: settings.game_width,
-                window_height: settings.game_height,
+                window_width,
+                window_height,
                 game_address: "",
                 game_port: 0,
                 is_full_screen: settings.fullscreen,

@@ -7,15 +7,19 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod api;
+mod discord;
 mod files;
 mod hwid;
 mod launch;
 mod model;
 mod storage;
+mod window;
 mod worker;
 
 slint::include_modules!();
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::time::Duration;
 
 use base64::Engine;
@@ -59,12 +63,27 @@ fn main() -> anyhow::Result<()> {
 
     runtime.spawn(Worker::new(state, event_tx).run(command_rx));
 
+    // Animate the splash progress bar to the end, then keep it on screen for a
+    // short beat instead of cutting away mid-animation.
     let splash_ui = ui.as_weak();
-    slint::Timer::single_shot(Duration::from_millis(1400), move || {
-        if let Some(ui) = splash_ui.upgrade() {
-            ui.set_splash(false);
-        }
-    });
+    let splash_started = std::time::Instant::now();
+    let splash_duration = 1.8_f32;
+    let splash_timer = slint::Timer::default();
+    splash_timer.start(
+        slint::TimerMode::Repeated,
+        Duration::from_millis(30),
+        move || {
+            let elapsed = splash_started.elapsed().as_secs_f32();
+            let progress = (elapsed / splash_duration).clamp(0.0, 1.0);
+
+            if let Some(ui) = splash_ui.upgrade() {
+                ui.set_splash_progress(progress);
+                if elapsed >= splash_duration + 0.25 {
+                    ui.set_splash(false);
+                }
+            }
+        },
+    );
 
     let timer = slint::Timer::default();
     let ui_weak = ui.as_weak();
@@ -423,6 +442,37 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
                 play_sound(&ui, Sound::Click);
             }
             let _ = tx.send(Command::SelfTest);
+        }
+    });
+
+    // Borderless windows maximize over the taskbar. Keep the window inside the
+    // Windows work area instead and remember the previous rectangle.
+    let restore_rect: Rc<RefCell<Option<window::Rect>>> = Rc::new(RefCell::new(None));
+    ui.on_maximize_clicked({
+        let ui = ui.as_weak();
+        let restore_rect = restore_rect.clone();
+        move || {
+            let Some(ui) = ui.upgrade() else { return };
+            play_sound(&ui, Sound::Click);
+
+            let Some(handle) = window::find_launcher_window() else {
+                return;
+            };
+
+            let previous = restore_rect.borrow_mut().take();
+
+            if let Some(rect) = previous {
+                window::set_rect(handle, rect);
+                ui.set_window_maximized(false);
+            } else {
+                if let Some(current) = window::window_rect(handle) {
+                    *restore_rect.borrow_mut() = Some(current);
+                }
+                if let Some(area) = window::work_area() {
+                    window::set_rect(handle, area);
+                    ui.set_window_maximized(true);
+                }
+            }
         }
     });
 }

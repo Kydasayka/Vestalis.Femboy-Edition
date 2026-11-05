@@ -270,6 +270,13 @@ cargo clippy --all-targets -- -D warnings
 - `OsArchitecture` в `/profiles/info` обязан быть `"64"` (как в C#:
   `ToString().ToLower().Replace("x","")`). С `"x64"` бэкенд отдаёт пустой
   профиль (`state=Error`, `files=[]`), и запуск падает с «Java не найдена».
+- Полноэкранный запуск передаёт разрешение монитора (`GetSystemMetrics`), а не
+  900×600 — иначе игра растягивается. Кнопка «развернуть» у безрамочного окна
+  сделана через Win32 `SetWindowPos` по `SPI_GETWORKAREA`: стандартный
+  `maximized` накрывал панель задач.
+- Discord RPC — свой минимальный IPC-клиент (`src/discord.rs`, named pipe
+  `discord-ipc-*`, handshake + `SET_ACTIVITY`), client id/ассеты как в C#.
+- Иконка exe встраивается `winres` из `assets/logo.ico` в `build.rs`.
 - Данные: `%APPDATA%\Vestalis\rust-launcher\state.json`,
   кэш `%LOCALAPPDATA%\Vestalis\validation-cache-rust.json`,
   логи `%LOCALAPPDATA%\Vestalis\logs\launcher.log.<date>`.

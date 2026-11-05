@@ -30,7 +30,12 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
 - Mods page: optional mods from `/api/v1/profiles/{name}/mods/optionals`,
   enable/disable by renaming `.jar` ↔ `.jar.disabled`.
 - Interface sounds from the original assets, custom borderless window with
-  caption buttons and resize handles, and a branded start screen.
+  caption buttons and resize handles, and an animated branded start screen.
+  The maximize button fits the Windows work area, so the taskbar stays usable.
+- Discord Rich Presence (same client ID/assets/details as the C# launcher).
+- Native taskbar/Explorer icon embedded into the executable.
+- Fullscreen launches use the monitor's native resolution instead of the
+  900×600 window size, so the game is not stretched.
 - Profiles are refreshed every 90 s and asynchronously after the first load
   (a lightweight substitute for the C# SignalR `RefreshProfiles` event).
 - Backend mode badge (`ЗЕРКАЛО` / `ПРОКСИ` / `ОСНОВНОЙ` / `ОНЛАЙН` / `ОФФЛАЙН`).
@@ -70,6 +75,8 @@ rust-launcher/
 │  ├─ worker.rs         async worker: commands, auth flow, launch orchestration
 │  ├─ files.rs          manifest validation + parallel downloads
 │  ├─ launch.rs         JVM argument rewriting and process spawn
+│  ├─ discord.rs        minimal Discord IPC rich presence
+│  ├─ window.rs         Win32 work-area maximize for the borderless window
 │  ├─ storage.rs        state.json + validation cache (legacy C# cache import)
 │  ├─ hwid.rs           Windows HWID, RAM, OS info
 │  └─ model.rs          settings, session, API DTOs
@@ -118,9 +125,9 @@ so an existing C# installation does not re-hash its whole 16k-file client.
 
 1. True SignalR connection (the 90 s refresh is a lightweight substitute).
 2. Localisation (ru/en/zh): the Rust UI currently ships Russian strings.
-3. Skins/marketplace pages, Discord RPC and Sentry.
+3. Skins/marketplace pages and Sentry.
 4. The exact splash-to-window morph of the Avalonia build (the Rust build uses
-   a branded start overlay).
+   an animated branded start overlay).
 5. Installer and code signing.
 6. Optional mods that are not downloaded yet: the mods page asks the user to
    launch the game once instead of downloading the missing file on the spot.

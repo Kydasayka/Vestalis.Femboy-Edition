@@ -20,7 +20,7 @@ pub fn load_state() -> Persisted {
     let path = state_path();
     fs::read_to_string(&path)
         .ok()
-        .and_then(|text| serde_json::from_str(&text).ok())
+        .and_then(|text| serde_json::from_str(text.trim_start_matches('\u{feff}')).ok())
         .unwrap_or_default()
 }
 

@@ -95,6 +95,27 @@ pub fn os_type() -> &'static str {
     "3" // Gml.Web.Api.Domains.System.OsType.Windows
 }
 
+#[cfg(windows)]
+#[link(name = "user32")]
+extern "system" {
+    fn GetSystemMetrics(index: i32) -> i32;
+}
+
+/// Native display size. Used for the game's fullscreen launch arguments so the
+/// backend does not build a 3:2 window resolution that gets stretched to 16:9.
+pub fn screen_size() -> (u32, u32) {
+    #[cfg(windows)]
+    unsafe {
+        let width = GetSystemMetrics(0); // SM_CXSCREEN
+        let height = GetSystemMetrics(1); // SM_CYSCREEN
+        if width > 0 && height > 0 {
+            return (width as u32, height as u32);
+        }
+    }
+
+    (1920, 1080)
+}
+
 pub fn os_architecture() -> &'static str {
     // Must match the C# launcher: OSArchitecture.ToString().ToLower().Replace("x", "").
     // The backend returns an empty/error profile for "x64" but full data for "64".

@@ -195,6 +195,8 @@ export component AppWindow inherits Window {
     // ---- login / global state -------------------------------------------
     in-out property <int> screen: 0;
     in-out property <bool> splash: true;
+    in-out property <float> splash-progress: 0;
+    in-out property <bool> window-maximized: false;
     in-out property <string> app-version: "";
     in-out property <string> login: "";
     in-out property <string> password: "";
@@ -278,6 +280,7 @@ export component AppWindow inherits Window {
     callback mirror-mode-clicked(string);
     callback mirror-tor-toggled(bool);
     callback selftest-clicked();
+    callback maximize-clicked();
 
     // =====================================================================
     // LOGIN
@@ -1364,6 +1367,8 @@ export component AppWindow inherits Window {
             alignment: center;
             spacing: 10px;
 
+            Rectangle { height: 90px; }
+
             HorizontalLayout {
                 alignment: center;
                 spacing: 14px;
@@ -1387,11 +1392,24 @@ export component AppWindow inherits Window {
                 horizontal-alignment: center;
             }
             Rectangle { height: 18px; }
-            Rectangle {
-                width: 260px;
-                height: 4px;
-                border-radius: 2px;
-                background: @linear-gradient(90deg, #6d28d9 0%, #e879f9 50%, #6d28d9 100%);
+            HorizontalLayout {
+                alignment: center;
+
+                Rectangle {
+                    width: 260px;
+                    height: 4px;
+                    border-radius: 2px;
+                    background: #22222a;
+
+                    Rectangle {
+                        x: 0;
+                        y: 0;
+                        width: parent.width * root.splash-progress;
+                        height: 100%;
+                        border-radius: 2px;
+                        background: @linear-gradient(90deg, #6d28d9 0%, #e879f9 50%, #6d28d9 100%);
+                    }
+                }
             }
             Text {
                 text: "Загрузка…";
@@ -1431,8 +1449,8 @@ export component AppWindow inherits Window {
                 clicked => { root.minimized = true; }
             }
             CaptionButton {
-                label: "□";
-                clicked => { root.maximized = !root.maximized; }
+                label: root.window-maximized ? "❐" : "□";
+                clicked => { root.maximize-clicked(); }
             }
             CaptionButton {
                 label: "✕";
