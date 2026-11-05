@@ -578,6 +578,7 @@ impl Worker {
         match result {
             Ok(profiles) => {
                 self.apply_profiles(profiles);
+                self.ensure_discord().await;
                 let news = backend.news().await;
                 self.emit(Event::News(map_news(&news)));
             }
@@ -626,14 +627,23 @@ impl Worker {
             self.emit(Event::Selected(view.clone()));
         }
 
-        self.ensure_discord();
         self.update_discord_presence();
     }
 
-    fn ensure_discord(&mut self) {
-        if self.discord.is_none() && !self.offline {
-            self.discord = Some(DiscordRpc::start());
+    async fn ensure_discord(&mut self) {
+        if self.discord.is_some() || self.offline {
+            return;
         }
+
+        let token = self.token();
+        let backend = self.data_backend().clone();
+        let config = match token {
+            Some(token) => backend.discord_config(&token).await.unwrap_or_default(),
+            None => crate::model::DiscordConfig::default(),
+        };
+
+        self.discord = Some(DiscordRpc::start(config));
+        self.update_discord_presence();
     }
 
     fn update_discord_presence(&self) {

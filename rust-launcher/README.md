@@ -31,9 +31,14 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   enable/disable by renaming `.jar` ↔ `.jar.disabled`.
 - Interface sounds from the original assets, custom borderless window with
   caption buttons and resize handles, and an animated branded start screen.
-  The maximize button fits the Windows work area, so the taskbar stays usable.
-- Discord Rich Presence (same client ID/assets/details as the C# launcher).
-- Native taskbar/Explorer icon embedded into the executable.
+  The maximize button animates to the Windows work area, so the taskbar stays
+  usable. Screen changes, buttons, profile rows and the download bar animate.
+- Discord Rich Presence (client ID/assets/details from
+  `/api/v1/integrations/discord`, with a retry after the READY handshake).
+- Native taskbar/Explorer icon embedded into the executable, plus `WM_SETICON`
+  and the same AppUserModelID as the C# launcher.
+- The settings tree is pre-built and fades in, so opening it does not wait for
+  a first-time layout.
 - Fullscreen launches use the monitor's native resolution instead of the
   900×600 window size, so the game is not stretched.
 - Profiles are refreshed every 90 s and asynchronously after the first load

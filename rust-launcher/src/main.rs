@@ -31,6 +31,8 @@ use crate::storage::load_state;
 use crate::worker::{Command, Event, ProfileView, Worker};
 
 fn main() -> anyhow::Result<()> {
+    window::set_app_user_model_id();
+
     let log_dir = model::local_app_dir().join("logs");
     let _ = std::fs::create_dir_all(&log_dir);
     let file_appender = tracing_appender::rolling::daily(&log_dir, "launcher.log");
@@ -84,6 +86,12 @@ fn main() -> anyhow::Result<()> {
             }
         },
     );
+
+    slint::Timer::single_shot(Duration::from_millis(350), || {
+        if let Some(handle) = window::find_launcher_window() {
+            window::apply_icon(handle);
+        }
+    });
 
     let timer = slint::Timer::default();
     let ui_weak = ui.as_weak();
@@ -214,7 +222,7 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         move || {
             if let Some(ui) = ui.upgrade() {
                 play_sound(&ui, Sound::Click);
-                ui.set_screen(2);
+                switch_screen(&ui, 2);
             }
             let _ = tx.send(Command::RefreshMirror);
         }
@@ -225,7 +233,7 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         move || {
             if let Some(ui) = ui.upgrade() {
                 play_sound(&ui, Sound::Click);
-                ui.set_screen(1);
+                switch_screen(&ui, 1);
             }
         }
     });
@@ -462,14 +470,17 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
             let previous = restore_rect.borrow_mut().take();
 
             if let Some(rect) = previous {
-                window::set_rect(handle, rect);
+                if let Some(current) = window::window_rect(handle) {
+                    window::animate_to(handle, current, rect);
+                }
                 ui.set_window_maximized(false);
             } else {
-                if let Some(current) = window::window_rect(handle) {
+                let current = window::window_rect(handle);
+                if let Some(current) = current {
                     *restore_rect.borrow_mut() = Some(current);
                 }
-                if let Some(area) = window::work_area() {
-                    window::set_rect(handle, area);
+                if let (Some(area), Some(current)) = (window::work_area(), current) {
+                    window::animate_to(handle, current, area);
                     ui.set_window_maximized(true);
                 }
             }
@@ -479,7 +490,7 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
 
 fn apply_event(ui: &AppWindow, event: Event) {
     match event {
-        Event::Screen(screen) => ui.set_screen(screen),
+        Event::Screen(screen) => switch_screen(ui, screen),
         Event::Busy(busy) => ui.set_busy(busy),
         Event::LoginError(message) => ui.set_error_text(message.into()),
         Event::TwoFa => {
@@ -618,6 +629,18 @@ fn apply_event(ui: &AppWindow, event: Event) {
             ui.set_progress_visible(false);
         }
     }
+}
+
+fn switch_screen(ui: &AppWindow, screen: i32) {
+    ui.set_screen_opacity(0.0);
+    ui.set_screen(screen);
+
+    let ui = ui.as_weak();
+    slint::Timer::single_shot(Duration::from_millis(20), move || {
+        if let Some(ui) = ui.upgrade() {
+            ui.set_screen_opacity(1.0);
+        }
+    });
 }
 
 fn select_view(ui: &AppWindow, view: &ProfileView) {

@@ -275,8 +275,14 @@ cargo clippy --all-targets -- -D warnings
   сделана через Win32 `SetWindowPos` по `SPI_GETWORKAREA`: стандартный
   `maximized` накрывал панель задач.
 - Discord RPC — свой минимальный IPC-клиент (`src/discord.rs`, named pipe
-  `discord-ipc-*`, handshake + `SET_ACTIVITY`), client id/ассеты как в C#.
-- Иконка exe встраивается `winres` из `assets/logo.ico` в `build.rs`.
+  `discord-ipc-*`, handshake + `SET_ACTIVITY`). Client ID/ассеты берутся из
+  `/api/v1/integrations/discord`, после READY активность отправляется повторно.
+- Иконка exe встраивается `winres` из `assets/logo.ico` в `build.rs`; окну
+  дополнительно ставится `WM_SETICON`, а процессу — тот же AppUserModelID, что
+  в C# (`Vestalis.FemboyEdition.Launcher`).
+- Настройки собраны в Slint-дереве постоянно (`visible: screen == 2`), поэтому
+  открываются без холодного layout; переходы экранов/кнопки/строки профилей
+  анимированы. Разворот окна — плавный `animate_to` по work area.
 - Данные: `%APPDATA%\Vestalis\rust-launcher\state.json`,
   кэш `%LOCALAPPDATA%\Vestalis\validation-cache-rust.json`,
   логи `%LOCALAPPDATA%\Vestalis\logs\launcher.log.<date>`.

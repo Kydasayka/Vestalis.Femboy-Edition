@@ -257,6 +257,38 @@ pub struct ModDetails {
     pub description: String,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordConfig {
+    #[serde(default)]
+    pub client_id: String,
+    #[serde(default)]
+    pub details: String,
+    #[serde(default)]
+    pub large_image_key: String,
+    #[serde(default)]
+    pub large_image_text: String,
+    #[serde(default)]
+    pub small_image_key: String,
+    #[serde(default)]
+    pub small_image_text: String,
+}
+
+impl Default for DiscordConfig {
+    fn default() -> Self {
+        // Current project application; the backend endpoint normally overrides
+        // this with the same values.
+        Self {
+            client_id: "1451929413431070901".to_string(),
+            details: "Проект Vestalis".to_string(),
+            large_image_key: "large".to_string(),
+            large_image_text: "vestalis.xyz".to_string(),
+            small_image_key: "small".to_string(),
+            small_image_text: "Vestalis Femboy Edition".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MirrorResponse {

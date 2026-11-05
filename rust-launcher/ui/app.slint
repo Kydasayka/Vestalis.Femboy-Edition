@@ -44,6 +44,8 @@ component Chip inherits Rectangle {
     border-width: 1px;
     border-color: active ? #e879f9 : #2c2c34;
     background: active ? #3b0d42 : (area.has-hover ? #1c1c23 : #141418);
+    animate background { duration: 130ms; easing: ease-out; }
+    animate border-color { duration: 130ms; }
 
     area := TouchArea {
         width: parent.width;
@@ -77,6 +79,7 @@ component ActionButton inherits Rectangle {
     background: !available ? #17171c
         : area.has-hover ? (primary ? #d946ef : #23232b)
         : (primary ? #a21caf : #1a1a20);
+    animate background { duration: 130ms; easing: ease-out; }
 
     area := TouchArea {
         enabled: root.available;
@@ -185,8 +188,9 @@ component Toggle inherits Rectangle {
 
 export component AppWindow inherits Window {
     title: "Vestalis Launcher";
-    width: 1180px;
-    height: 640px;
+    preferred-width: 1180px;
+    preferred-height: 640px;
+    icon: @image-url("../assets/logo.png");
     background: #0d0d10;
     no-frame: true;
     resize-border-width: 6px;
@@ -197,6 +201,7 @@ export component AppWindow inherits Window {
     in-out property <bool> splash: true;
     in-out property <float> splash-progress: 0;
     in-out property <bool> window-maximized: false;
+    in-out property <float> screen-opacity: 1;
     in-out property <string> app-version: "";
     in-out property <string> login: "";
     in-out property <string> password: "";
@@ -289,6 +294,8 @@ export component AppWindow inherits Window {
         width: 100%;
         y: 34px;
         height: root.height - 34px;
+        opacity: root.screen-opacity;
+        animate opacity { duration: 180ms; easing: ease-out; }
         background: #0e0e11;
 
         Image {
@@ -451,6 +458,8 @@ export component AppWindow inherits Window {
         width: 100%;
         y: 34px;
         height: root.height - 34px;
+        opacity: root.screen-opacity;
+        animate opacity { duration: 180ms; easing: ease-out; }
         background: #0d0d10;
 
         Image {
@@ -567,6 +576,8 @@ export component AppWindow inherits Window {
                                     : row-area.has-hover ? #191920 : #00000000;
                                 border-width: 1px;
                                 border-color: p.id == root.selected-index ? #a21caf : #00000000;
+                                animate background { duration: 140ms; easing: ease-out; }
+                                animate border-color { duration: 140ms; }
 
                                 row-area := TouchArea {
                                     mouse-cursor: pointer;
@@ -788,6 +799,7 @@ export component AppWindow inherits Window {
                             height: 100%;
                             border-radius: 3px;
                             background: @linear-gradient(90deg, #a21caf 0%, #c084fc 100%);
+                            animate width { duration: 160ms; easing: ease-out; }
                         }
                     }
                     Text {
@@ -845,10 +857,13 @@ export component AppWindow inherits Window {
     // =====================================================================
     // SETTINGS
     // =====================================================================
-    if screen == 2: Rectangle {
+    Rectangle {
+        visible: screen == 2;
         width: 100%;
         y: 34px;
         height: root.height - 34px;
+        opacity: root.screen-opacity;
+        animate opacity { duration: 180ms; easing: ease-out; }
         background: #0d0d10;
 
         VerticalLayout {
@@ -1256,6 +1271,8 @@ export component AppWindow inherits Window {
         width: 100%;
         y: 34px;
         height: root.height - 34px;
+        opacity: root.screen-opacity;
+        animate opacity { duration: 180ms; easing: ease-out; }
         background: #0d0d10;
 
         VerticalLayout {
