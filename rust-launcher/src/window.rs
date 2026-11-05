@@ -27,6 +27,7 @@ extern "system" {
     ) -> isize;
     fn GetSystemMetrics(index: i32) -> i32;
     fn SendMessageW(window: isize, message: u32, wparam: usize, lparam: isize) -> isize;
+    fn ShowWindow(window: isize, command: i32) -> i32;
     fn SetWindowPos(
         window: isize,
         insert_after: isize,
@@ -57,8 +58,8 @@ const LR_SHARED: u32 = 0x8000;
 const WM_SETICON: u32 = 0x0080;
 const ICON_SMALL: usize = 0;
 const ICON_BIG: usize = 1;
-const SM_CXSMICON: i32 = 49;
-const SM_CYSMICON: i32 = 50;
+const SM_CXICON: i32 = 11;
+const SM_CYICON: i32 = 12;
 
 /// Same explicit AppUserModelID as the C# launcher, so Windows keeps one
 /// taskbar group and uses the right icon/shortcut identity.
@@ -102,17 +103,12 @@ pub fn apply_icon(window: isize) {
     let resource = 1usize as *const u16;
 
     unsafe {
-        let big = LoadImageW(module, resource, IMAGE_ICON, 0, 0, LR_SHARED);
-        let small_width = GetSystemMetrics(SM_CXSMICON);
-        let small_height = GetSystemMetrics(SM_CYSMICON);
-        let small = LoadImageW(
-            module,
-            resource,
-            IMAGE_ICON,
-            small_width,
-            small_height,
-            LR_SHARED,
-        );
+        // Use the 32px (or DPI-scaled) frame for both sizes. Loading the small
+        // icon at 16px and letting the taskbar upscale it looked soapy.
+        let width = GetSystemMetrics(SM_CXICON);
+        let height = GetSystemMetrics(SM_CYICON);
+        let big = LoadImageW(module, resource, IMAGE_ICON, width, height, LR_SHARED);
+        let small = LoadImageW(module, resource, IMAGE_ICON, width, height, LR_SHARED);
 
         if big != 0 {
             SendMessageW(window, WM_SETICON, ICON_BIG, big);
@@ -146,6 +142,14 @@ pub fn animate_to(window: isize, from: Rect, to: Rect) {
 
 fn lerp(from: i32, to: i32, t: f32) -> i32 {
     (from as f32 + (to - from) as f32 * t).round() as i32
+}
+
+pub fn minimize_launcher() {
+    if let Some(handle) = find_launcher_window() {
+        unsafe {
+            ShowWindow(handle, 6); // SW_MINIMIZE
+        }
+    }
 }
 
 pub fn set_rect(window: isize, rect: Rect) {

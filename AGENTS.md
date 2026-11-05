@@ -274,12 +274,17 @@ cargo clippy --all-targets -- -D warnings
   900×600 — иначе игра растягивается. Кнопка «развернуть» у безрамочного окна
   сделана через Win32 `SetWindowPos` по `SPI_GETWORKAREA`: стандартный
   `maximized` накрывал панель задач.
-- Discord RPC — свой минимальный IPC-клиент (`src/discord.rs`, named pipe
-  `discord-ipc-*`, handshake + `SET_ACTIVITY`). Client ID/ассеты берутся из
-  `/api/v1/integrations/discord`, после READY активность отправляется повторно.
+- Discord RPC — крейт `discord-rich-presence` в `src/discord.rs` (named pipe,
+  READY, `SET_ACTIVITY`). Значения как в C# `ApiProcedures`: client id
+  `1558556890605162577`, details «Продам гараж…», assets `logo2`/`logo`,
+  state «Сидит в лаунчере» / `Играет в "Surv10"`.
 - Иконка exe встраивается `winres` из `assets/logo.ico` в `build.rs`; окну
-  дополнительно ставится `WM_SETICON`, а процессу — тот же AppUserModelID, что
-  в C# (`Vestalis.FemboyEdition.Launcher`).
+  дополнительно ставится `WM_SETICON` (32px/DPI-фрейм для обоих размеров), а
+  процессу — тот же AppUserModelID, что в C#
+  (`Vestalis.FemboyEdition.Launcher`). `assets/logo.ico`/`logo.png` генерируются
+  вектором из `logo.svg` через `cargo run --example make_icon`.
+- В настройках есть «Скрывать лаунчер при запуске игры» (`hide_on_launch`):
+  после spawn процесса окно сворачивается (`ShowWindow(SW_MINIMIZE)`).
 - Настройки собраны в Slint-дереве постоянно (`visible: screen == 2`), поэтому
   открываются без холодного layout; переходы экранов/кнопки/строки профилей
   анимированы. Разворот окна — плавный `animate_to` по work area.

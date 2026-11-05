@@ -33,14 +33,17 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   caption buttons and resize handles, and an animated branded start screen.
   The maximize button animates to the Windows work area, so the taskbar stays
   usable. Screen changes, buttons, profile rows and the download bar animate.
-- Discord Rich Presence (client ID/assets/details from
-  `/api/v1/integrations/discord`, with a retry after the READY handshake).
+- Discord Rich Presence with the same application ID, assets and texts as the
+  C# launcher (`ApiProcedures.UpdateDiscordRpcState`): states «Сидит в
+  лаунчере» / «Играет в "profile"», details «Продам гараж…», logo2/logo.
 - Native taskbar/Explorer icon embedded into the executable, plus `WM_SETICON`
   and the same AppUserModelID as the C# launcher.
 - The settings tree is pre-built and fades in, so opening it does not wait for
   a first-time layout.
 - Fullscreen launches use the monitor's native resolution instead of the
   900×600 window size, so the game is not stretched.
+- Optional «Скрывать лаунчер при запуске игры» in Settings → Окно игры
+  (minimizes the launcher once the game process starts).
 - Profiles are refreshed every 90 s and asynchronously after the first load
   (a lightweight substitute for the C# SignalR `RefreshProfiles` event).
 - Backend mode badge (`ЗЕРКАЛО` / `ПРОКСИ` / `ОСНОВНОЙ` / `ОНЛАЙН` / `ОФФЛАЙН`).

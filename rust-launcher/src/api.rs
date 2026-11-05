@@ -404,21 +404,6 @@ impl Backend {
         parsed.data.and_then(|value| value.mode)
     }
 
-    pub async fn discord_config(&self, token: &str) -> Option<crate::model::DiscordConfig> {
-        let request = self
-            .client
-            .get(self.url("api/v1/integrations/discord"))
-            .bearer_auth(token);
-        let response = self.sign(request, &self.hwid).send().await.ok()?;
-
-        if !response.status().is_success() {
-            return None;
-        }
-
-        let parsed: ApiResponse<crate::model::DiscordConfig> = response.json().await.ok()?;
-        parsed.data
-    }
-
     pub async fn mirror_state(&self, key: &str) -> Option<crate::model::MirrorState> {
         let mut request = self.client.get(self.url("api/v1/mirror/mode"));
         if !key.trim().is_empty() {

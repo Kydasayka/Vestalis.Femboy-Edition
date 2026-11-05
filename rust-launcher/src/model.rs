@@ -57,6 +57,8 @@ pub struct Settings {
     pub client_secret: String,
     pub send_hwid: bool,
     pub sounds: bool,
+    /// Minimize the launcher as soon as the game process starts.
+    pub hide_on_launch: bool,
     pub install_dir: String,
 }
 
@@ -72,6 +74,7 @@ impl Default for Settings {
             client_secret: String::new(),
             send_hwid: true,
             sounds: true,
+            hide_on_launch: true,
             install_dir: app_dir().to_string_lossy().into_owned(),
         }
     }
@@ -276,15 +279,15 @@ pub struct DiscordConfig {
 
 impl Default for DiscordConfig {
     fn default() -> Self {
-        // Current project application; the backend endpoint normally overrides
-        // this with the same values.
+        // Exactly the values used by the C# launcher in ApiProcedures.
         Self {
-            client_id: "1451929413431070901".to_string(),
-            details: "Проект Vestalis".to_string(),
-            large_image_key: "large".to_string(),
-            large_image_text: "vestalis.xyz".to_string(),
-            small_image_key: "small".to_string(),
-            small_image_text: "Vestalis Femboy Edition".to_string(),
+            client_id: "1558556890605162577".to_string(),
+            details: "Продам гараж с чулочками, по поводу покупки - пишите в ЛС. Myaw >w<"
+                .to_string(),
+            large_image_key: "logo2".to_string(),
+            large_image_text: "~Nya~".to_string(),
+            small_image_key: "logo".to_string(),
+            small_image_text: "Vestalis FemBoy Edition".to_string(),
         }
     }
 }

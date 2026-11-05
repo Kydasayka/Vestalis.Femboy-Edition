@@ -379,6 +379,7 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
                 client_secret: ui.get_set_client_secret().to_string(),
                 send_hwid: ui.get_set_send_hwid(),
                 sounds: ui.get_set_sounds(),
+                hide_on_launch: ui.get_set_hide_on_launch(),
                 install_dir: ui.get_set_install_dir().to_string(),
             };
 
@@ -607,6 +608,12 @@ fn apply_event(ui: &AppWindow, event: Event) {
         }
         Event::SettingsStatus(status) => ui.set_settings_status(status.into()),
         Event::MainStatus(status) => ui.set_main_status(status.into()),
+        Event::GameStarted { pid, hide } => {
+            ui.set_main_status(format!("Игра запущена (PID {pid})").into());
+            if hide {
+                window::minimize_launcher();
+            }
+        }
         Event::Error(message) => {
             if !message.is_empty() {
                 error!(%message, "worker error");
@@ -664,6 +671,7 @@ fn apply_settings(ui: &AppWindow, settings: &Settings, max_ram: u64) {
     ui.set_set_client_secret(settings.client_secret.clone().into());
     ui.set_set_send_hwid(settings.send_hwid);
     ui.set_set_sounds(settings.sounds);
+    ui.set_set_hide_on_launch(settings.hide_on_launch);
     ui.set_max_ram(max_ram.min(i32::MAX as u64) as i32);
 }
 

@@ -250,6 +250,7 @@ export component AppWindow inherits Window {
     in-out property <string> set-client-secret: "";
     in-out property <bool> set-send-hwid: true;
     in-out property <bool> set-sounds: true;
+    in-out property <bool> set-hide-on-launch: true;
     in-out property <int> max-ram: 16384;
     in-out property <string> settings-status: "";
 
@@ -1012,6 +1013,21 @@ export component AppWindow inherits Window {
                                     TextField { text <=> root.set-width-text; numeric: true; horizontal-stretch: 1; }
                                     Text { text: "×"; color: #6d6d79; vertical-alignment: center; }
                                     TextField { text <=> root.set-height-text; numeric: true; horizontal-stretch: 1; }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Text {
+                                        text: "Скрывать лаунчер при запуске игры";
+                                        color: #b9b9c4;
+                                        font-size: 12px;
+                                        vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                    }
+                                    Toggle {
+                                        checked: root.set-hide-on-launch;
+                                        toggled(v) => { root.set-hide-on-launch = v; }
+                                    }
                                 }
                             }
                         }

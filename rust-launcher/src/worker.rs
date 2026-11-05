@@ -129,6 +129,10 @@ pub enum Event {
     },
     SettingsStatus(String),
     MainStatus(String),
+    GameStarted {
+        pid: u32,
+        hide: bool,
+    },
     Error(String),
     LoggedOut,
 }
@@ -635,14 +639,7 @@ impl Worker {
             return;
         }
 
-        let token = self.token();
-        let backend = self.data_backend().clone();
-        let config = match token {
-            Some(token) => backend.discord_config(&token).await.unwrap_or_default(),
-            None => crate::model::DiscordConfig::default(),
-        };
-
-        self.discord = Some(DiscordRpc::start(config));
+        self.discord = Some(DiscordRpc::start(crate::model::DiscordConfig::default()));
         self.update_discord_presence();
     }
 
@@ -651,20 +648,7 @@ impl Worker {
             return;
         };
 
-        let state = self
-            .profiles
-            .get(self.selected)
-            .map(|profile| {
-                profile
-                    .display_name
-                    .clone()
-                    .filter(|value| !value.trim().is_empty())
-                    .unwrap_or_else(|| profile.name.clone())
-            })
-            .map(|name| format!("В лаунчере: {name}"))
-            .unwrap_or_else(|| "В лаунчере".to_string());
-
-        rpc.set_state(state);
+        rpc.set_state("Сидит в лаунчере");
     }
 
     async fn load_offline(&mut self) {
@@ -762,14 +746,7 @@ impl Worker {
         );
 
         if let Some(rpc) = &self.discord {
-            rpc.set_state(format!(
-                "Играет: {}",
-                profile
-                    .display_name
-                    .clone()
-                    .filter(|value| !value.trim().is_empty())
-                    .unwrap_or_else(|| profile.name.clone())
-            ));
+            rpc.set_state(format!("Играет в \"{}\"", profile.name));
         }
 
         self.emit(Event::Error(String::new()));
@@ -912,7 +889,10 @@ impl Worker {
                     text: String::new(),
                     speed: String::new(),
                 });
-                self.emit(Event::MainStatus(format!("Игра запущена (PID {pid})")));
+                self.emit(Event::GameStarted {
+                    pid,
+                    hide: settings.hide_on_launch,
+                });
             }
             Err(error) => {
                 error!(%error, "launch failed");

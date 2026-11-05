@@ -15,6 +15,7 @@ i-slint-core = { version = "1.18.1", features = ["svg"], default-features = fals
 
 anyhow = "1"
 thiserror = "2"
+discord-rich-presence = "0.2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "process", "sync", "time", "io-util"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream", "gzip"] }
 serde = { version = "1", features = ["derive"] }
@@ -38,6 +39,9 @@ tracing-appender = "0.2"
 [build-dependencies]
 slint-build = "1.8"
 winres = "0.1"
+
+[dev-dependencies]
+resvg = "0.48"
 
 [profile.release]
 lto = "thin"
