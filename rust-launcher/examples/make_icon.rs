@@ -4,19 +4,30 @@ use resvg::tiny_skia;
 use resvg::usvg;
 
 fn main() {
-    let source = fs::read_to_string("assets/logo.svg").expect("read logo.svg");
-    let svg_open = source.find("<svg").expect("svg element");
-    let start = source[svg_open..].find('>').expect("svg start") + svg_open + 1;
-    let end = source.rfind("</svg>").expect("svg end");
-    let inner = &source[start..end];
-
-    // White cat head on a dark rounded tile: readable at 16-32 px on the taskbar.
-    let wrapped = format!(
-        r##"<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-<rect width="256" height="256" rx="56" fill="#15151b"/>
-<g transform="translate(27.5 27.5) scale(3.0)">{inner}</g>
-</svg>"##
-    );
+    // A clean vector cat face instead of the traced logo: the traced path has
+    // a square backing that showed up as a thin frame on the taskbar, and its
+    // details disappeared at 16 px. This design is a rounded gradient tile
+    // with a soft white cat, no outline, and large eyes that survive scaling.
+    let wrapped = r##"<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#a855f7"/>
+    <stop offset="0.55" stop-color="#d946ef"/>
+    <stop offset="1" stop-color="#ec4899"/>
+  </linearGradient>
+  <linearGradient id="fur" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#fdf4ff"/>
+  </linearGradient>
+</defs>
+<rect width="256" height="256" rx="60" fill="url(#bg)"/>
+<path d="M64 110 L52 38 Q50 29 58 34 L120 72 Z" fill="url(#fur)"/>
+<path d="M192 110 L204 38 Q206 29 198 34 L136 72 Z" fill="url(#fur)"/>
+<path d="M128 60 C178 60 214 92 214 138 C214 184 178 212 128 212 C78 212 42 184 42 138 C42 92 78 60 128 60 Z" fill="url(#fur)"/>
+<ellipse cx="96" cy="132" rx="14" ry="18" fill="#3b0764"/>
+<ellipse cx="160" cy="132" rx="14" ry="18" fill="#3b0764"/>
+<path d="M128 158 L139 169 L117 169 Z" fill="#f472b6"/>
+</svg>"##;
 
     let tree = usvg::Tree::from_data(wrapped.as_bytes(), &usvg::Options::default())
         .expect("parse icon svg");

@@ -44,6 +44,21 @@ pub fn local_app_dir() -> PathBuf {
         .join("Vestalis")
 }
 
+/// Cached head render for the signed-in player. The key is the account UUID,
+/// so two accounts with the same name cannot overwrite each other.
+pub fn avatar_path(uuid: &str) -> PathBuf {
+    let safe: String = uuid
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .collect();
+    let key = if safe.is_empty() {
+        "player".to_string()
+    } else {
+        safe
+    };
+    local_app_dir().join("avatars").join(format!("{key}.png"))
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
@@ -113,6 +128,18 @@ impl Session {
             .map(|c| c.to_uppercase().to_string())
             .unwrap_or_else(|| "?".into())
     }
+}
+
+/// `GET /api/v1/users/info/{name}` payload with the player's skin location.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerTexture {
+    #[serde(default)]
+    pub texture_skin_guid: String,
+    #[serde(default)]
+    pub external_texture_skin_url: Option<String>,
+    #[serde(default)]
+    pub full_skin_url: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

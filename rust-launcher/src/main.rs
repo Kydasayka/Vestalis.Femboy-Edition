@@ -24,7 +24,7 @@ use std::time::Duration;
 
 use base64::Engine;
 use slint::{ModelRc, VecModel};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::model::{Persisted, Settings};
 use crate::storage::load_state;
@@ -80,7 +80,11 @@ fn main() -> anyhow::Result<()> {
 
             if let Some(ui) = splash_ui.upgrade() {
                 ui.set_splash_progress(progress);
-                if elapsed >= splash_duration + 0.25 {
+                // Auto-login can take a few seconds on a slow backend; keep the
+                // branded screen until it finishes so the login form never
+                // flashes, with a hard fallback for a hung request.
+                if elapsed >= splash_duration + 0.25 && (ui.get_startup_ready() || elapsed >= 20.0)
+                {
                     ui.set_splash(false);
                 }
             }
@@ -92,6 +96,19 @@ fn main() -> anyhow::Result<()> {
             window::apply_icon(handle);
         }
     });
+
+    ui.set_countdown_text(countdown_text().into());
+    let countdown_ui = ui.as_weak();
+    let countdown_timer = slint::Timer::default();
+    countdown_timer.start(
+        slint::TimerMode::Repeated,
+        Duration::from_secs(30),
+        move || {
+            if let Some(ui) = countdown_ui.upgrade() {
+                ui.set_countdown_text(countdown_text().into());
+            }
+        },
+    );
 
     let timer = slint::Timer::default();
     let ui_weak = ui.as_weak();
@@ -118,11 +135,31 @@ fn initialize_ui(ui: &AppWindow, state: &Persisted) {
     ui.set_screen(0);
     ui.set_progress_visible(false);
     ui.set_show_2fa(false);
-    ui.set_server_index(model::server_index(&state.server_host) as i32);
+    let server_index = model::server_index(&state.server_host);
+    ui.set_server_index(server_index as i32);
+    ui.set_server_label(model::SERVERS[server_index].0.into());
     ui.set_server_host_label(state.server_host.clone().into());
+    ui.set_is_kydasay(
+        state
+            .user
+            .as_ref()
+            .map(|session| session.name.eq_ignore_ascii_case("Kydasay"))
+            .unwrap_or(false),
+    );
 
     if let Some(saved) = &state.saved_login {
         ui.set_login(saved.login.clone().into());
+    }
+
+    // Show the cached head immediately on startup instead of the initial.
+    if let Some(user) = &state.user {
+        let path = model::avatar_path(&user.uuid);
+        if path.exists() {
+            if let Ok(image) = slint::Image::load_from_path(&path) {
+                ui.set_user_avatar(image);
+                ui.set_has_avatar(true);
+            }
+        }
     }
 
     apply_settings(ui, &state.settings, hwid::total_ram_mb());
@@ -303,13 +340,10 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
             if let Some(ui) = ui.upgrade() {
                 play_sound(&ui, Sound::Click);
                 ui.set_server_index(index);
-                ui.set_server_host_label(
-                    model::SERVERS
-                        .get(index as usize)
-                        .map(|(_, host)| (*host).to_string())
-                        .unwrap_or_default()
-                        .into(),
-                );
+                if let Some((label, host)) = model::SERVERS.get(index as usize) {
+                    ui.set_server_label((*label).into());
+                    ui.set_server_host_label((*host).into());
+                }
             }
             let _ = tx.send(Command::SelectServer(index as usize));
         }
@@ -385,17 +419,6 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
 
             ui.set_settings_status("Сохранение…".into());
             let _ = tx.send(Command::SaveSettings(settings));
-        }
-    });
-
-    ui.on_check_backend_clicked({
-        let tx = tx.clone();
-        let ui = ui.as_weak();
-        move || {
-            if let Some(ui) = ui.upgrade() {
-                play_sound(&ui, Sound::Click);
-            }
-            let _ = tx.send(Command::CheckBackend);
         }
     });
 
@@ -500,11 +523,20 @@ fn apply_event(ui: &AppWindow, event: Event) {
             ui.set_error_text("Введите код из приложения-аутентификатора".into());
         }
         Event::Auth { name, initial } => {
+            ui.set_is_kydasay(name.eq_ignore_ascii_case("Kydasay"));
             ui.set_user_name(name.into());
             ui.set_user_initial(initial.into());
             ui.set_show_2fa(false);
             ui.set_error_text("".into());
         }
+        Event::Avatar(path) => match slint::Image::load_from_path(std::path::Path::new(&path)) {
+            Ok(image) => {
+                ui.set_user_avatar(image);
+                ui.set_has_avatar(true);
+            }
+            Err(error) => warn!(%error, "failed to load avatar"),
+        },
+        Event::Ready => ui.set_startup_ready(true),
         Event::Profiles { views, selected } => {
             let items: Vec<ProfileItem> = views.iter().map(profile_item).collect();
             ui.set_profiles(ModelRc::new(VecModel::from(items)));
@@ -602,6 +634,16 @@ fn apply_event(ui: &AppWindow, event: Event) {
             ui.set_backend_mode(label.into());
             ui.set_backend_mode_visible(visible);
             ui.set_backend_mode_color(backend_color(&color));
+
+            if visible {
+                ui.set_backend_mode_expanded(true);
+                let ui = ui.as_weak();
+                slint::Timer::single_shot(Duration::from_secs(3), move || {
+                    if let Some(ui) = ui.upgrade() {
+                        ui.set_backend_mode_expanded(false);
+                    }
+                });
+            }
         }
         Event::Settings { settings, max_ram } => {
             apply_settings(ui, &settings, max_ram);
@@ -622,8 +664,11 @@ fn apply_event(ui: &AppWindow, event: Event) {
         }
         Event::LoggedOut => {
             ui.set_screen(0);
+            ui.set_is_kydasay(false);
             ui.set_user_name("".into());
             ui.set_user_initial("?".into());
+            ui.set_has_avatar(false);
+            ui.set_user_avatar(slint::Image::default());
             ui.set_profiles(ModelRc::new(VecModel::from(Vec::<ProfileItem>::new())));
             ui.set_news(ModelRc::new(VecModel::from(Vec::<NewsItem>::new())));
             ui.set_selected_index(-1);
@@ -636,6 +681,28 @@ fn apply_event(ui: &AppWindow, event: Event) {
             ui.set_progress_visible(false);
         }
     }
+}
+
+fn countdown_text() -> String {
+    use chrono::{Datelike, Local, TimeZone};
+
+    let now = Local::now();
+    let year = if now.month() == 12 {
+        now.year() + 1
+    } else {
+        now.year()
+    };
+    let target = Local
+        .with_ymd_and_hms(year, 12, 1, 0, 0, 0)
+        .single()
+        .unwrap_or(now);
+    let diff = target - now;
+
+    let days = diff.num_days();
+    let hours = diff.num_hours() % 24;
+    let minutes = diff.num_minutes() % 60;
+
+    format!("До конца недрочабря: {days} д {hours} ч {minutes} мин")
 }
 
 fn switch_screen(ui: &AppWindow, screen: i32) {

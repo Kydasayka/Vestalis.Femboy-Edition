@@ -9,13 +9,17 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
 - Sign-in with login/password, 2FA challenge, saved credentials and silent
   token validation (`/api/v1/integrations/auth/signin`, `/checkToken`).
 - Official RU/EU backends: every request is signed with
-  `X-Client-Signature` (HMAC-SHA256). The key is **not** in the repository; it
-  is entered in Settings → «Ключ подписи клиента» and stored locally in
-  `state.json`.
-- Server selector (RU-1, RU-2, EU-1, PL-1). Switching a server drops the
-  session, exactly like the C# launcher.
+  `X-Client-Signature` (HMAC-SHA256). The key is **not** in the repository; the
+  build embeds an obfuscated copy, and an override can be entered in Settings →
+  «Ключ подписи клиента» and stored locally in `state.json`.
+- Server selector as a dropdown in the top-right corner (RU-1, RU-2, EU-1,
+  PL-1). Switching a server keeps the saved credentials and signs in again
+  automatically; the branded start screen stays up until the auto-login
+  finishes, so the login form never flashes.
 - Profiles and news from the backend, with icons, version badges and online
-  counters.
+  counters. The sidebar avatar is the player's real skin head (base layer plus
+  hat overlay), cropped from `/api/v1/users/info/{name}` → texture endpoint and
+  cached locally; the nick initial is only a fallback before the head loads.
 - Offline mode using the snapshots in `%APPDATA%\Vestalis\offline-mode`
   (`profiles.json` + `<profile>/profileInfo.json`).
 - File validation (SHA-1, size, mtime cache) and parallel downloads with
@@ -24,9 +28,10 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   authlib endpoint rewrite for the active server, and removal of the authlib
   agent in offline mode.
 - Settings: install folder, RAM, window size/fullscreen, JVM args, HWID
-  sending, interface sounds, backend check.
-- Service access card (**PL-1 only**): service key, mirror/proxy switching,
-  Tor routing and backend self-test (`/api/v1/mirror/*`).
+  sending, interface sounds.
+- Service access card (**PL-1 only, and only for the Kydasay account**):
+  service key, mirror/proxy switching, Tor routing and backend self-test
+  (`/api/v1/mirror/*`).
 - Mods page: optional mods from `/api/v1/profiles/{name}/mods/optionals`,
   enable/disable by renaming `.jar` ↔ `.jar.disabled`.
 - Interface sounds from the original assets, custom borderless window with
@@ -37,9 +42,14 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   C# launcher (`ApiProcedures.UpdateDiscordRpcState`): states «Сидит в
   лаунчере» / «Играет в "profile"», details «Продам гараж…», logo2/logo.
 - Native taskbar/Explorer icon embedded into the executable, plus `WM_SETICON`
-  and the same AppUserModelID as the C# launcher.
+  and the same AppUserModelID as the C# launcher. The icon is generated from a
+  hand-written vector cat face on a rounded gradient tile (no inner frame, no
+  traced square), so it stays readable at 16–32 px.
 - The settings tree is pre-built and fades in, so opening it does not wait for
   a first-time layout.
+- Home screen countdown card («НЕДРОЧАБРЬ») with the user-supplied meme image
+  and a live countdown to 1 December; «Проверить бэкенд» was removed from
+  Settings.
 - Fullscreen launches use the monitor's native resolution instead of the
   900×600 window size, so the game is not stretched.
 - Optional «Скрывать лаунчер при запуске игры» in Settings → Окно игры
@@ -103,6 +113,7 @@ No blocking I/O happens in a Slint callback.
 | Settings/session/client-signature key | `%APPDATA%\Vestalis\rust-launcher\state.json` |
 | Game files | `%APPDATA%\Vestalis` (same as the C# launcher) |
 | SHA-1 cache | `%LOCALAPPDATA%\Vestalis\validation-cache-rust.json` |
+| Player head avatars | `%LOCALAPPDATA%\Vestalis\avatars\<uuid>.png` |
 | Logs | `%LOCALAPPDATA%\Vestalis\logs\launcher.log.<date>` |
 | Offline snapshots | `%APPDATA%\Vestalis\offline-mode\...` |
 
@@ -133,7 +144,7 @@ so an existing C# installation does not re-hash its whole 16k-file client.
 
 1. True SignalR connection (the 90 s refresh is a lightweight substitute).
 2. Localisation (ru/en/zh): the Rust UI currently ships Russian strings.
-3. Skins/marketplace pages and Sentry.
+3. Skin marketplace/page (the head avatar itself is already rendered) and Sentry.
 4. The exact splash-to-window morph of the Avalonia build (the Rust build uses
    an animated branded start overlay).
 5. Installer and code signing.

@@ -33,39 +33,6 @@ export struct SelfTestItem {
     duration: string,
 }
 
-component Chip inherits Rectangle {
-    in property <string> label;
-    in property <bool> active: false;
-    callback clicked();
-
-    height: 30px;
-    width: text.preferred-width + 28px;
-    border-radius: 8px;
-    border-width: 1px;
-    border-color: active ? #e879f9 : #2c2c34;
-    background: active ? #3b0d42 : (area.has-hover ? #1c1c23 : #141418);
-    animate background { duration: 130ms; easing: ease-out; }
-    animate border-color { duration: 130ms; }
-
-    area := TouchArea {
-        width: parent.width;
-        height: parent.height;
-        mouse-cursor: pointer;
-        clicked => { root.clicked(); }
-    }
-
-    text := Text {
-        width: parent.width;
-        height: parent.height;
-        text: root.label;
-        color: root.active ? #f5d0fe : #a7a7b4;
-        font-size: 11px;
-        font-weight: 600;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-    }
-}
-
 component ActionButton inherits Rectangle {
     in property <string> label;
     in property <bool> primary: false;
@@ -121,6 +88,17 @@ component TextField inherits Rectangle {
         input-type: root.password ? InputType.password : (root.numeric ? InputType.number : InputType.text);
         selection-background-color: #a21caf;
         accepted => { root.accepted(); }
+
+        // Slint's built-in shortcut lookup can miss Ctrl+V on a non-English
+        // layout; accept both the Latin and Cyrillic V keys.
+        key-pressed(event) => {
+            if event.modifiers.control
+                && (event.text == "v" || event.text == "V" || event.text == "м" || event.text == "М") {
+                self.paste();
+                return accept;
+            }
+            return reject;
+        }
     }
 
     if input.text.is-empty && !root.placeholder.is-empty: Text {
@@ -152,9 +130,37 @@ component CaptionButton inherits Rectangle {
     Text {
         text: root.label;
         color: area.has-hover ? #ffffff : #9a9aa6;
-        font-size: 13px;
+        font-size: 14px;
         horizontal-alignment: center;
         vertical-alignment: center;
+    }
+}
+
+component ServerMenuItem inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    callback clicked();
+
+    height: 34px;
+    border-radius: 7px;
+    background: active ? #3b0d42 : (area.has-hover ? #1f1f27 : transparent);
+
+    Text {
+        x: 10px;
+        width: parent.width - 12px;
+        height: parent.height;
+        text: root.label;
+        color: root.active ? #f5d0fe : #d0d0da;
+        font-size: 14px;
+        font-weight: root.active ? 600 : 400;
+        vertical-alignment: center;
+    }
+
+    area := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
     }
 }
 
@@ -210,12 +216,19 @@ export component AppWindow inherits Window {
     in-out property <bool> show-2fa: false;
     in-out property <string> twofa: "";
     in-out property <int> server-index: 0;
+    in-out property <string> server-label: "PL-1";
     in-out property <string> server-host-label: "";
+    in-out property <bool> server-menu-open: false;
+    in-out property <bool> is-kydasay: false;
+    in-out property <bool> startup-ready: false;
+    in-out property <string> countdown-text: "";
     in-out property <string> main-status: "";
 
     // ---- main ------------------------------------------------------------
     in-out property <string> user-name: "";
     in-out property <string> user-initial: "?";
+    in-out property <image> user-avatar;
+    in-out property <bool> has-avatar: false;
     in-out property <[ProfileItem]> profiles: [];
     in-out property <int> selected-index: -1;
     in-out property <string> selected-title: "Профиль не выбран";
@@ -237,6 +250,7 @@ export component AppWindow inherits Window {
 
     in-out property <string> backend-mode: "";
     in-out property <bool> backend-mode-visible: false;
+    in-out property <bool> backend-mode-expanded: true;
     in-out property <color> backend-mode-color: #2e9e5b;
 
     // ---- settings --------------------------------------------------------
@@ -341,17 +355,8 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                HorizontalLayout {
-                    spacing: 8px;
-                    alignment: center;
-                    ActionButton { label: "RU-1"; primary: root.server-index == 0; width: 82px; height: 34px; clicked => { root.server-clicked(0); } }
-                    ActionButton { label: "RU-2"; primary: root.server-index == 1; width: 82px; height: 34px; clicked => { root.server-clicked(1); } }
-                    ActionButton { label: "EU-1"; primary: root.server-index == 2; width: 82px; height: 34px; clicked => { root.server-clicked(2); } }
-                    ActionButton { label: "PL-1"; primary: root.server-index == 3; width: 82px; height: 34px; clicked => { root.server-clicked(3); } }
-                }
-
                 Rectangle {
-                    height: root.show-2fa ? 528px : 430px;
+                    height: root.show-2fa ? 590px : 485px;
                     border-radius: 16px;
                     background: #121216f2;
                     border-width: 1px;
@@ -370,7 +375,7 @@ export component AppWindow inherits Window {
                         Text {
                             text: "Войдите, чтобы играть на серверах Vestalis";
                             color: #85858f;
-                            font-size: 12px;
+                            font-size: 14px;
                         }
 
                         Rectangle { height: 4px; }
@@ -397,7 +402,7 @@ export component AppWindow inherits Window {
                             Text {
                                 text: "Отправлять HWID";
                                 color: #9a9aa6;
-                                font-size: 12px;
+                                font-size: 14px;
                                 vertical-alignment: center;
                                 horizontal-stretch: 1;
                             }
@@ -421,7 +426,7 @@ export component AppWindow inherits Window {
                         Text {
                             text: root.error-text;
                             color: #f87171;
-                            font-size: 12px;
+                            font-size: 14px;
                             wrap: word-wrap;
                             visible: !root.error-text.is-empty;
                         }
@@ -445,7 +450,7 @@ export component AppWindow inherits Window {
                 Text {
                     text: "v" + root.app-version;
                     color: #55555f;
-                    font-size: 11px;
+                    font-size: 14px;
                     horizontal-alignment: center;
                 }
             }
@@ -504,7 +509,7 @@ export component AppWindow inherits Window {
                         Text {
                             text: "Femboy";
                             color: #c084fc;
-                            font-size: 11px;
+                            font-size: 14px;
                             vertical-alignment: center;
                         }
                     }
@@ -521,8 +526,16 @@ export component AppWindow inherits Window {
                             Rectangle {
                                 width: 42px;
                                 height: 42px;
-                                border-radius: 21px;
+                                border-radius: 10px;
+                                clip: true;
                                 background: @linear-gradient(135deg, #a21caf 0%, #6d28d9 100%);
+                                Image {
+                                    source: root.user-avatar;
+                                    width: 100%;
+                                    height: 100%;
+                                    image-fit: cover;
+                                    visible: root.has-avatar;
+                                }
                                 Text {
                                     text: root.user-initial;
                                     color: #ffffff;
@@ -530,6 +543,7 @@ export component AppWindow inherits Window {
                                     font-weight: 700;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
+                                    visible: !root.has-avatar;
                                 }
                             }
                             VerticalLayout {
@@ -544,24 +558,16 @@ export component AppWindow inherits Window {
                                 Text {
                                     text: root.server-host-label;
                                     color: #777783;
-                                    font-size: 10px;
+                                    font-size: 14px;
                                 }
                             }
                         }
                     }
 
-                    HorizontalLayout {
-                        spacing: 5px;
-                        Chip { label: "RU-1"; active: root.server-index == 0; clicked => { root.server-clicked(0); } }
-                        Chip { label: "RU-2"; active: root.server-index == 1; clicked => { root.server-clicked(1); } }
-                        Chip { label: "EU-1"; active: root.server-index == 2; clicked => { root.server-clicked(2); } }
-                        Chip { label: "PL-1"; active: root.server-index == 3; clicked => { root.server-clicked(3); } }
-                    }
-
                     Text {
                         text: "ПРОФИЛИ";
                         color: #6d6d79;
-                        font-size: 10px;
+                        font-size: 14px;
                         font-weight: 700;
                         letter-spacing: 1.4px;
                     }
@@ -617,17 +623,64 @@ export component AppWindow inherits Window {
                                         Text {
                                             text: p.display-name;
                                             color: p.id == root.selected-index ? #ffffff : #d2d2dc;
-                                            font-size: 13px;
+                                            font-size: 14px;
                                             font-weight: 600;
                                             overflow: elide;
                                         }
                                         Text {
                                             text: p.subtitle;
                                             color: #74747f;
-                                            font-size: 10px;
+                                            font-size: 14px;
                                             overflow: elide;
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        height: 124px;
+                        border-radius: 14px;
+                        background: #121218e6;
+                        border-width: 1px;
+                        border-color: #2a2a34;
+
+                        HorizontalLayout {
+                            padding: 10px;
+                            spacing: 12px;
+
+                            Rectangle {
+                                width: 102px;
+                                height: 104px;
+                                border-radius: 12px;
+                                clip: true;
+                                background: #0b0b0f;
+
+                                Image {
+                                    source: @image-url("../assets/nedrochabr.png");
+                                    width: 100%;
+                                    height: 100%;
+                                    image-fit: cover;
+                                }
+                            }
+
+                            VerticalLayout {
+                                spacing: 4px;
+                                alignment: center;
+                                horizontal-stretch: 1;
+                                Text {
+                                    text: "НЕДРОЧАБРЬ";
+                                    color: #f0abfc;
+                                    font-size: 13px;
+                                    font-weight: 700;
+                                    letter-spacing: 1.2px;
+                                }
+                                Text {
+                                    text: root.countdown-text;
+                                    color: #b9b9c4;
+                                    font-size: 12px;
+                                    wrap: word-wrap;
                                 }
                             }
                         }
@@ -666,7 +719,7 @@ export component AppWindow inherits Window {
                         version-text := Text {
                             text: root.selected-version;
                             color: #b7b7c3;
-                            font-size: 11px;
+                            font-size: 14px;
                             font-weight: 600;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -683,7 +736,7 @@ export component AppWindow inherits Window {
                         online-text := Text {
                             text: root.selected-online;
                             color: #6ee7a0;
-                            font-size: 11px;
+                            font-size: 14px;
                             font-weight: 600;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -693,18 +746,26 @@ export component AppWindow inherits Window {
                     Rectangle { horizontal-stretch: 1; }
 
                     Rectangle {
-                        height: 26px;
-                        width: mode-text.preferred-width + 26px;
-                        border-radius: 9px;
+                        height: root.backend-mode-expanded ? 26px : 16px;
+                        width: root.backend-mode-expanded ? mode-text.preferred-width + 28px : 16px;
+                        border-radius: root.backend-mode-expanded ? 9px : 8px;
                         background: root.backend-mode-color;
                         visible: root.backend-mode-visible;
+                        animate width { duration: 220ms; easing: ease-out; }
+                        animate height { duration: 220ms; easing: ease-out; }
+                        animate border-radius { duration: 220ms; }
+                        animate background { duration: 220ms; }
+
                         mode-text := Text {
                             text: root.backend-mode;
                             color: #ffffff;
-                            font-size: 10px;
+                            font-size: 14px;
                             font-weight: 700;
                             horizontal-alignment: center;
                             vertical-alignment: center;
+                            visible: root.backend-mode-expanded;
+                            opacity: root.backend-mode-expanded ? 1 : 0;
+                            animate opacity { duration: 160ms; }
                         }
                     }
                 }
@@ -719,7 +780,7 @@ export component AppWindow inherits Window {
                 Text {
                     text: root.selected-description;
                     color: #9a9aa4;
-                    font-size: 13px;
+                    font-size: 14px;
                     wrap: word-wrap;
                     max-height: 58px;
                     overflow: elide;
@@ -730,7 +791,7 @@ export component AppWindow inherits Window {
                 Text {
                     text: "НОВОСТИ";
                     color: #6d6d79;
-                    font-size: 10px;
+                    font-size: 14px;
                     font-weight: 700;
                     letter-spacing: 1.4px;
                 }
@@ -758,13 +819,13 @@ export component AppWindow inherits Window {
                                 Text {
                                     text: n.body;
                                     color: #8c8c98;
-                                    font-size: 12px;
+                                    font-size: 14px;
                                     wrap: word-wrap;
                                 }
                                 Text {
                                     text: n.date;
                                     color: #5d5d68;
-                                    font-size: 10px;
+                                    font-size: 14px;
                                     visible: !n.date.is-empty;
                                 }
                             }
@@ -779,14 +840,14 @@ export component AppWindow inherits Window {
                         Text {
                             text: root.progress-title;
                             color: #e4e4ee;
-                            font-size: 12px;
+                            font-size: 14px;
                             font-weight: 600;
                         }
                         Rectangle { horizontal-stretch: 1; }
                         Text {
                             text: root.progress-speed;
                             color: #a78bfa;
-                            font-size: 11px;
+                            font-size: 14px;
                         }
                     }
                     Rectangle {
@@ -806,7 +867,7 @@ export component AppWindow inherits Window {
                     Text {
                         text: root.progress-text;
                         color: #7c7c88;
-                        font-size: 11px;
+                        font-size: 14px;
                         overflow: elide;
                     }
                 }
@@ -814,14 +875,14 @@ export component AppWindow inherits Window {
                 if !root.main-status.is-empty: Text {
                     text: root.main-status;
                     color: #6ee7a0;
-                    font-size: 12px;
+                    font-size: 14px;
                     wrap: word-wrap;
                 }
 
                 if !root.error-text.is-empty: Text {
                     text: root.error-text;
                     color: #f87171;
-                    font-size: 12px;
+                    font-size: 14px;
                     wrap: word-wrap;
                 }
 
@@ -889,7 +950,7 @@ export component AppWindow inherits Window {
                 Text {
                     text: root.settings-status;
                     color: #6ee7a0;
-                    font-size: 12px;
+                    font-size: 14px;
                     vertical-alignment: center;
                 }
             }
@@ -919,18 +980,18 @@ export component AppWindow inherits Window {
                                 Text {
                                     text: "Сколько оперативной памяти выделять игре. Всего в системе: " + root.max-ram + " МБ.";
                                     color: #8a8a96;
-                                    font-size: 12px;
+                                    font-size: 14px;
                                     wrap: word-wrap;
                                 }
 
                                 HorizontalLayout {
                                     spacing: 10px;
-                                    Text { text: "Минимум (Xms)"; color: #b9b9c4; font-size: 12px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Text { text: "Минимум (Xms)"; color: #b9b9c4; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
                                     ActionButton { label: "−"; width: 40px; clicked => { root.adjust-xms(-512); } }
                                     Text {
                                         text: root.set-xms + " МБ";
                                         color: #ffffff;
-                                        font-size: 13px;
+                                        font-size: 14px;
                                         font-weight: 600;
                                         width: 90px;
                                         horizontal-alignment: center;
@@ -941,12 +1002,12 @@ export component AppWindow inherits Window {
 
                                 HorizontalLayout {
                                     spacing: 10px;
-                                    Text { text: "Максимум (Xmx)"; color: #b9b9c4; font-size: 12px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Text { text: "Максимум (Xmx)"; color: #b9b9c4; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
                                     ActionButton { label: "−"; width: 40px; clicked => { root.adjust-xmx(-1024); } }
                                     Text {
                                         text: root.set-xmx + " МБ";
                                         color: #ffffff;
-                                        font-size: 13px;
+                                        font-size: 14px;
                                         font-weight: 600;
                                         width: 90px;
                                         horizontal-alignment: center;
@@ -971,7 +1032,7 @@ export component AppWindow inherits Window {
                                 Text {
                                     text: "Флаги добавляются перед classpath. Флаги -Xms/-Xmx здесь игнорируются.";
                                     color: #8a8a96;
-                                    font-size: 12px;
+                                    font-size: 14px;
                                     wrap: word-wrap;
                                 }
                                 TextField {
@@ -1001,7 +1062,7 @@ export component AppWindow inherits Window {
 
                                 HorizontalLayout {
                                     spacing: 10px;
-                                    Text { text: "Полноэкранный режим"; color: #b9b9c4; font-size: 12px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Text { text: "Полноэкранный режим"; color: #b9b9c4; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
                                     Toggle {
                                         checked: root.set-fullscreen;
                                         toggled(v) => { root.set-fullscreen = v; }
@@ -1020,7 +1081,7 @@ export component AppWindow inherits Window {
                                     Text {
                                         text: "Скрывать лаунчер при запуске игры";
                                         color: #b9b9c4;
-                                        font-size: 12px;
+                                        font-size: 14px;
                                         vertical-alignment: center;
                                         horizontal-stretch: 1;
                                     }
@@ -1044,7 +1105,7 @@ export component AppWindow inherits Window {
                                 spacing: 10px;
                                 Text { text: "Лаунчер"; color: #ffffff; font-size: 17px; font-weight: 700; }
 
-                                Text { text: "Папка установки"; color: #b9b9c4; font-size: 12px; }
+                                Text { text: "Папка установки"; color: #b9b9c4; font-size: 14px; }
                                 TextField {
                                     text <=> root.set-install-dir;
                                     placeholder: "%APPDATA%\\Vestalis";
@@ -1053,7 +1114,7 @@ export component AppWindow inherits Window {
                                 Text {
                                     text: "Ключ подписи клиента (X-Client-Signature)";
                                     color: #b9b9c4;
-                                    font-size: 12px;
+                                    font-size: 14px;
                                 }
                                 TextField {
                                     text <=> root.set-client-secret;
@@ -1063,7 +1124,7 @@ export component AppWindow inherits Window {
 
                                 HorizontalLayout {
                                     spacing: 10px;
-                                    Text { text: "Отправлять реальный HWID"; color: #b9b9c4; font-size: 12px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Text { text: "Отправлять реальный HWID"; color: #b9b9c4; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
                                     Toggle {
                                         checked: root.set-send-hwid;
                                         toggled(v) => { root.set-send-hwid = v; }
@@ -1071,7 +1132,7 @@ export component AppWindow inherits Window {
                                 }
                                 HorizontalLayout {
                                     spacing: 10px;
-                                    Text { text: "Звуки интерфейса"; color: #b9b9c4; font-size: 12px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Text { text: "Звуки интерфейса"; color: #b9b9c4; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
                                     Toggle {
                                         checked: root.set-sounds;
                                         toggled(v) => { root.set-sounds = v; }
@@ -1081,47 +1142,7 @@ export component AppWindow inherits Window {
                         }
 
                         Rectangle {
-                            border-radius: 14px;
-                            background: #121217e6;
-                            border-width: 1px;
-                            border-color: #24242c;
-                            height: backend-layout.preferred-height + 40px;
-
-                            backend-layout := VerticalLayout {
-                                padding: 20px;
-                                spacing: 10px;
-                                Text { text: "Бэкенд"; color: #ffffff; font-size: 17px; font-weight: 700; }
-                                Text {
-                                    text: root.server-host-label;
-                                    color: #8a8a96;
-                                    font-size: 12px;
-                                    wrap: word-wrap;
-                                }
-                                Text {
-                                    text: root.backend-mode.is-empty ? "Режим неизвестен" : "Режим: " + root.backend-mode;
-                                    color: #b9b9c4;
-                                    font-size: 12px;
-                                }
-                                HorizontalLayout {
-                                    spacing: 5px;
-                                    Chip { label: "RU-1"; active: root.server-index == 0; clicked => { root.server-clicked(0); } }
-                                    Chip { label: "RU-2"; active: root.server-index == 1; clicked => { root.server-clicked(1); } }
-                                    Chip { label: "EU-1"; active: root.server-index == 2; clicked => { root.server-clicked(2); } }
-                                    Chip { label: "PL-1"; active: root.server-index == 3; clicked => { root.server-clicked(3); } }
-                                }
-                                HorizontalLayout {
-                                    spacing: 8px;
-                                    ActionButton {
-                                        label: "Проверить";
-                                        width: 160px;
-                                        clicked => { root.check-backend-clicked(); }
-                                    }
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            visible: root.server-index == 3;
+                            visible: root.server-index == 3 && root.is-kydasay;
                             border-radius: 14px;
                             background: #121217e6;
                             border-width: 1px;
@@ -1135,7 +1156,7 @@ export component AppWindow inherits Window {
                                 Text {
                                     text: "Ключ хранится локально и не входит в сборку. С ним доступны переключение режима, Tor и самодиагностика.";
                                     color: #8a8a96;
-                                    font-size: 11px;
+                                    font-size: 14px;
                                     wrap: word-wrap;
                                 }
 
@@ -1162,7 +1183,7 @@ export component AppWindow inherits Window {
                                     text: "Режим: " + (root.mirror-mode.is-empty ? "неизвестен" : root.mirror-mode)
                                         + (root.mirror-upstream.is-empty ? "" : " · upstream: " + root.mirror-upstream);
                                     color: #b9b9c4;
-                                    font-size: 11px;
+                                    font-size: 14px;
                                     wrap: word-wrap;
                                 }
 
@@ -1188,7 +1209,7 @@ export component AppWindow inherits Window {
                                         Text {
                                             text: "Запросы к основному бэкенду через Tor";
                                             color: #b9b9c4;
-                                            font-size: 11px;
+                                            font-size: 14px;
                                             vertical-alignment: center;
                                             horizontal-stretch: 1;
                                             visible: root.mirror-tor-available;
@@ -1209,7 +1230,7 @@ export component AppWindow inherits Window {
                                 if !root.selftest-summary.is-empty: Text {
                                     text: root.selftest-summary;
                                     color: #a78bfa;
-                                    font-size: 11px;
+                                    font-size: 14px;
                                     wrap: word-wrap;
                                 }
 
@@ -1226,7 +1247,7 @@ export component AppWindow inherits Window {
                                         Text {
                                             text: row.status == "ok" ? "ОК" : row.status == "warn" ? "ВНИМАНИЕ" : "ОШИБКА";
                                             color: row.status == "ok" ? #6ee7a0 : row.status == "warn" ? #fbbf24 : #f87171;
-                                            font-size: 10px;
+                                            font-size: 14px;
                                             font-weight: 700;
                                             width: 70px;
                                             vertical-alignment: center;
@@ -1234,7 +1255,7 @@ export component AppWindow inherits Window {
                                         Text {
                                             text: row.name;
                                             color: #e4e4ee;
-                                            font-size: 11px;
+                                            font-size: 14px;
                                             font-weight: 600;
                                             width: 140px;
                                             vertical-alignment: center;
@@ -1242,14 +1263,14 @@ export component AppWindow inherits Window {
                                         Text {
                                             text: row.message;
                                             color: #85858f;
-                                            font-size: 10px;
+                                            font-size: 14px;
                                             horizontal-stretch: 1;
                                             wrap: word-wrap;
                                         }
                                         Text {
                                             text: row.duration;
                                             color: #66666f;
-                                            font-size: 10px;
+                                            font-size: 14px;
                                             vertical-alignment: center;
                                         }
                                     }
@@ -1273,7 +1294,7 @@ export component AppWindow inherits Window {
                 Text {
                     text: "v" + root.app-version;
                     color: #55555f;
-                    font-size: 11px;
+                    font-size: 14px;
                     vertical-alignment: center;
                 }
             }
@@ -1312,7 +1333,7 @@ export component AppWindow inherits Window {
                 Text {
                     text: root.mods-enabled + " из " + root.mods-total + " включено";
                     color: #8a8a96;
-                    font-size: 12px;
+                    font-size: 14px;
                     vertical-alignment: center;
                 }
                 Rectangle { horizontal-stretch: 1; }
@@ -1326,14 +1347,14 @@ export component AppWindow inherits Window {
             Text {
                 text: "Опциональные моды. Выключенные файлы хранятся с суффиксом .disabled.";
                 color: #6f6f7a;
-                font-size: 11px;
+                font-size: 14px;
                 wrap: word-wrap;
             }
 
             if root.mods-total == 0: Text {
                 text: "Для этого профиля нет опциональных модов.";
                 color: #8a8a96;
-                font-size: 13px;
+                font-size: 14px;
             }
 
             ScrollView {
@@ -1364,7 +1385,7 @@ export component AppWindow inherits Window {
                                 Text {
                                     text: m.description;
                                     color: #85858f;
-                                    font-size: 11px;
+                                    font-size: 14px;
                                     wrap: word-wrap;
                                     visible: !m.description.is-empty;
                                 }
@@ -1447,7 +1468,7 @@ export component AppWindow inherits Window {
             Text {
                 text: "Загрузка…";
                 color: #777783;
-                font-size: 11px;
+                font-size: 14px;
                 horizontal-alignment: center;
             }
         }
@@ -1471,14 +1492,45 @@ export component AppWindow inherits Window {
             Text {
                 text: "Vestalis Launcher";
                 color: #66666f;
-                font-size: 11px;
+                font-size: 14px;
                 vertical-alignment: center;
             }
 
             Rectangle { horizontal-stretch: 1; }
 
+            Rectangle {
+                width: 124px;
+                height: 26px;
+                border-radius: 7px;
+                background: root.server-menu-open ? #24242e : #17171d;
+                border-width: 1px;
+                border-color: root.server-menu-open ? #a21caf : #2c2c36;
+                animate background { duration: 120ms; }
+
+                Text {
+                    x: 10px;
+                    text: root.server-label;
+                    color: #e4e4ee;
+                    font-size: 14px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+                Text {
+                    x: parent.width - 18px;
+                    text: "v";
+                    color: #8a8a96;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                }
+
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.server-menu-open = !root.server-menu-open; }
+                }
+            }
+
             CaptionButton {
-                label: "–";
+                label: "-";
                 clicked => { root.minimized = true; }
             }
             CaptionButton {
@@ -1489,6 +1541,53 @@ export component AppWindow inherits Window {
                 label: "✕";
                 close: true;
                 clicked => { root.close(); }
+            }
+        }
+    }
+
+    if root.server-menu-open: Rectangle {
+        y: 34px;
+        width: 100%;
+        height: root.height - 34px;
+        background: #00000000;
+
+        TouchArea {
+            clicked => { root.server-menu-open = false; }
+        }
+    }
+
+    if root.server-menu-open: Rectangle {
+        x: root.width - 262px;
+        y: 38px;
+        width: 160px;
+        height: 150px;
+        border-radius: 10px;
+        background: #14141af5;
+        border-width: 1px;
+        border-color: #2c2c36;
+
+        VerticalLayout {
+            padding: 4px;
+            spacing: 2px;
+            ServerMenuItem {
+                label: "RU-1";
+                active: root.server-index == 0;
+                clicked => { root.server-menu-open = false; root.server-clicked(0); }
+            }
+            ServerMenuItem {
+                label: "RU-2";
+                active: root.server-index == 1;
+                clicked => { root.server-menu-open = false; root.server-clicked(1); }
+            }
+            ServerMenuItem {
+                label: "EU-1";
+                active: root.server-index == 2;
+                clicked => { root.server-menu-open = false; root.server-clicked(2); }
+            }
+            ServerMenuItem {
+                label: "PL-1";
+                active: root.server-index == 3;
+                clicked => { root.server-menu-open = false; root.server-clicked(3); }
             }
         }
     }

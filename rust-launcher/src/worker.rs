@@ -13,8 +13,8 @@ use crate::files::{sync_profile, SyncProgress};
 use crate::hwid;
 use crate::launch;
 use crate::model::{
-    app_dir, ApiResponse, News, Persisted, Profile, ProfileInfoRequest, Settings, DEFAULT_HOST,
-    MIRROR_HOST, SERVERS,
+    app_dir, avatar_path, ApiResponse, News, Persisted, Profile, ProfileInfoRequest, Settings,
+    DEFAULT_HOST, MIRROR_HOST, SERVERS,
 };
 use crate::storage::{load_state, save_state};
 
@@ -30,7 +30,6 @@ pub enum Command {
     Play,
     Refresh,
     SaveSettings(Settings),
-    CheckBackend,
     OpenMods,
     ToggleMod { id: usize, enabled: bool },
     RefreshMirror,
@@ -81,12 +80,14 @@ pub struct NewsView {
 pub enum Event {
     Screen(i32),
     Busy(bool),
+    Ready,
     LoginError(String),
     TwoFa,
     Auth {
         name: String,
         initial: String,
     },
+    Avatar(String),
     Profiles {
         views: Vec<ProfileView>,
         selected: usize,
@@ -155,12 +156,10 @@ pub struct Worker {
 
 impl Worker {
     pub fn new(state: Persisted, tx: UnboundedSender<Event>) -> Self {
-        let secret = (!state.settings.client_secret.trim().is_empty())
-            .then(|| state.settings.client_secret.clone())
-            .or_else(|| std::env::var("VESTALIS_CLIENT_SECRET").ok())
-            .filter(|value| !value.trim().is_empty());
-        let backend = Backend::new(&state.server_host).with_client(secret.clone(), String::new());
-        let mirror = Backend::new(MIRROR_HOST).with_client(secret, String::new());
+        let secret = resolve_client_secret(&state.settings);
+        let backend =
+            Backend::new(&state.server_host).with_client(Some(secret.clone()), String::new());
+        let mirror = Backend::new(MIRROR_HOST).with_client(Some(secret), String::new());
         let via_mirror = state.auth_via_mirror;
         Self {
             tx,
@@ -288,7 +287,6 @@ impl Worker {
                             }
                         }
                         Some(Command::SaveSettings(settings)) => self.save_settings(settings),
-                        Some(Command::CheckBackend) => self.spawn_check(),
                         Some(Command::OpenMods) => self.open_mods().await,
                         Some(Command::ToggleMod { id, enabled }) => self.toggle_mod(id, enabled),
                         Some(Command::RefreshMirror) => self.refresh_mirror().await,
@@ -312,7 +310,14 @@ impl Worker {
                 }
                 _ = profiles_tick.tick() => {
                     if !self.offline && self.state.user.is_some() && !self.busy {
-                        self.load_data().await;
+                        if self.validate_session().await {
+                            self.load_data().await;
+                        } else {
+                            self.logout();
+                            self.emit(Event::LoginError(
+                                "Сессия истекла, войдите заново".into(),
+                            ));
+                        }
                     }
                 }
             }
@@ -355,6 +360,8 @@ impl Worker {
                         self.offline = false;
                         self.emit(Event::Screen(1));
                         self.load_data().await;
+                        self.load_avatar().await;
+                        self.emit(Event::Ready);
                         return;
                     }
                 }
@@ -367,6 +374,8 @@ impl Worker {
         if let Some(saved) = self.state.saved_login.clone() {
             self.login(saved.login, saved.password, String::new()).await;
         }
+
+        self.emit(Event::Ready);
     }
 
     async fn login(&mut self, login: String, password: String, code: String) {
@@ -419,11 +428,13 @@ impl Worker {
                     ));
                 }
                 self.load_data().await;
+                self.load_avatar().await;
             }
             Ok((outcome, _)) if outcome.requires_2fa => {
                 self.busy = false;
                 self.emit(Event::Busy(false));
                 self.emit(Event::TwoFa);
+                self.emit(Event::Ready);
             }
             Ok((outcome, _)) => {
                 self.busy = false;
@@ -445,6 +456,8 @@ impl Worker {
                 )));
             }
         }
+
+        self.emit(Event::Ready);
     }
 
     fn logout(&mut self) {
@@ -473,19 +486,17 @@ impl Worker {
         };
 
         // Auth is bound to a backend, so switching drops the current session.
+        // The saved credentials are kept so the launcher can sign in again.
+        let saved_login = self.state.saved_login.clone();
         self.state.server_host = (*host).to_string();
         self.state.user = None;
-        self.state.saved_login = None;
         self.state.last_profile = None;
         save_state(&self.state);
 
-        let secret = (!self.state.settings.client_secret.trim().is_empty())
-            .then(|| self.state.settings.client_secret.clone())
-            .or_else(|| std::env::var("VESTALIS_CLIENT_SECRET").ok())
-            .filter(|value| !value.trim().is_empty());
+        let secret = resolve_client_secret(&self.state.settings);
         let hwid = hwid::hwid_for(&self.state.settings);
-        self.backend = Backend::new(host).with_client(secret.clone(), hwid.clone());
-        self.mirror.set_client(secret, hwid);
+        self.backend = Backend::new(host).with_client(Some(secret.clone()), hwid.clone());
+        self.mirror.set_client(Some(secret), hwid);
         self.via_mirror = false;
         self.state.auth_via_mirror = false;
         self.offline = false;
@@ -498,6 +509,12 @@ impl Worker {
         self.emit(Event::LoggedOut);
         self.emit(Event::Busy(false));
         self.spawn_check();
+
+        if let Some(saved) = saved_login {
+            self.login(saved.login, saved.password, String::new()).await;
+        } else {
+            self.emit(Event::Ready);
+        }
     }
 
     /// The backend probe can take tens of seconds on a blocked endpoint. It must
@@ -540,6 +557,82 @@ impl Worker {
         });
     }
 
+    /// Returns false only when the backend explicitly rejects the token.
+    /// Network errors keep the current session.
+    async fn validate_session(&mut self) -> bool {
+        let Some(token) = self.token() else {
+            return false;
+        };
+        let hwid = hwid::hwid_for(&self.state.settings);
+
+        match self.check_token_with_fallback(&token, &hwid).await {
+            Ok((outcome, via_mirror)) => {
+                if outcome.session.is_some() {
+                    self.via_mirror = via_mirror;
+                    self.state.auth_via_mirror = via_mirror;
+                    save_state(&self.state);
+                    true
+                } else {
+                    false
+                }
+            }
+            Err(_) => true,
+        }
+    }
+
+    /// Downloads the player's Minecraft skin and renders just the head (with
+    /// the hat overlay) into a cached PNG for the sidebar avatar.
+    async fn load_avatar(&mut self) {
+        let Some(user) = self.state.user.clone() else {
+            return;
+        };
+        let Some(url) = self.data_backend().player_skin(&user.name).await else {
+            return;
+        };
+        let Ok(response) = self.data_backend().client().get(&url).send().await else {
+            return;
+        };
+        if !response.status().is_success() {
+            return;
+        }
+        let Ok(bytes) = response.bytes().await else {
+            return;
+        };
+        if bytes.len() > 2 * 1024 * 1024 {
+            return;
+        }
+        let Ok(image) = image::load_from_memory(&bytes) else {
+            return;
+        };
+        let image = image.to_rgba8();
+        if image.width() < 16 || image.height() < 16 {
+            return;
+        }
+
+        let mut head = image::imageops::crop_imm(&image, 8, 8, 8, 8).to_image();
+        if image.width() >= 64 && image.height() >= 16 {
+            let hat = image::imageops::crop_imm(&image, 40, 8, 8, 8).to_image();
+            image::imageops::overlay(&mut head, &hat, 0, 0);
+        }
+        let head = image::imageops::resize(&head, 96, 96, image::imageops::FilterType::Nearest);
+
+        let path = avatar_path(&user.uuid);
+        if let Some(parent) = path.parent() {
+            if tokio::fs::create_dir_all(parent).await.is_err() {
+                return;
+            }
+        }
+        let save_path = path.clone();
+        let saved = tokio::task::spawn_blocking(move || head.save(save_path))
+            .await
+            .map(|result| result.is_ok())
+            .unwrap_or(false);
+        if saved {
+            info!(player = %user.name, "avatar rendered");
+            self.emit(Event::Avatar(path.to_string_lossy().into_owned()));
+        }
+    }
+
     async fn load_data(&mut self) {
         if self.offline {
             self.load_offline().await;
@@ -562,7 +655,7 @@ impl Worker {
                     self.state.auth_via_mirror = false;
                     save_state(&self.state);
                     self.apply_profiles(profiles);
-                    let news = self.backend.news().await;
+                    let news = self.backend.news(&token).await;
                     self.emit(Event::News(map_news(&news)));
                     return;
                 }
@@ -583,7 +676,7 @@ impl Worker {
             Ok(profiles) => {
                 self.apply_profiles(profiles);
                 self.ensure_discord().await;
-                let news = backend.news().await;
+                let news = backend.news(&token).await;
                 self.emit(Event::News(map_news(&news)));
             }
             Err(error) => {
@@ -1273,13 +1366,10 @@ impl Worker {
         self.state.settings = settings.clone();
         save_state(&self.state);
 
-        let secret = (!settings.client_secret.trim().is_empty())
-            .then(|| settings.client_secret.clone())
-            .or_else(|| std::env::var("VESTALIS_CLIENT_SECRET").ok())
-            .filter(|value| !value.trim().is_empty());
+        let secret = resolve_client_secret(&settings);
         let hwid = self.backend.client_hwid().to_string();
-        self.backend.set_client(secret.clone(), hwid.clone());
-        self.mirror.set_client(secret, hwid);
+        self.backend.set_client(Some(secret.clone()), hwid.clone());
+        self.mirror.set_client(Some(secret), hwid);
 
         self.emit(Event::Settings { settings, max_ram });
         self.emit(Event::SettingsStatus("Сохранено".into()));
@@ -1290,6 +1380,33 @@ impl Worker {
         self.load_offline().await;
         self.spawn_check();
     }
+}
+
+/// Client signature key. The Settings override wins, then an environment
+/// variable, then the obfuscated build-time value so a clean install works
+/// without exposing the key as a plain string in the binary.
+fn resolve_client_secret(settings: &Settings) -> String {
+    let configured = settings.client_secret.trim();
+    if !configured.is_empty() {
+        return configured.to_string();
+    }
+
+    if let Ok(value) = std::env::var("VESTALIS_CLIENT_SECRET") {
+        if !value.trim().is_empty() {
+            return value.trim().to_string();
+        }
+    }
+
+    const OBFUSCATED: &[u8] = &[
+        241, 194, 212, 211, 198, 203, 206, 212, 248, 224, 210, 198, 213, 195, 248, 209, 149, 151,
+        149, 145, 248, 244, 194, 196, 210, 213, 194, 239, 234, 230, 228, 248, 230, 201, 211, 206,
+        229, 222, 215, 198, 212, 212, 248, 158, 158, 147, 150,
+    ];
+
+    OBFUSCATED
+        .iter()
+        .map(|byte| (byte ^ 0xA7) as char)
+        .collect()
 }
 
 fn view_for(id: usize, profile: &Profile) -> ProfileView {

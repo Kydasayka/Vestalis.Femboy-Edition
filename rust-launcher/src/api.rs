@@ -12,7 +12,7 @@ use uuid::Uuid;
 type HmacSha256 = Hmac<Sha256>;
 
 use crate::model::{
-    ApiResponse, LoginRequest, MirrorResponse, News, Player, Profile, ProfileInfo,
+    ApiResponse, LoginRequest, MirrorResponse, News, Player, PlayerTexture, Profile, ProfileInfo,
     ProfileInfoRequest, Session, TokenRequest,
 };
 
@@ -320,8 +320,11 @@ impl Backend {
         Ok(parsed.and_then(|value| value.data))
     }
 
-    pub async fn news(&self) -> Vec<News> {
-        let request = self.client.get(self.url("api/v1/integrations/news/list"));
+    pub async fn news(&self, token: &str) -> Vec<News> {
+        let request = self
+            .client
+            .get(self.url("api/v1/integrations/news/list"))
+            .bearer_auth(token);
         let Ok(response) = self.sign(request, &self.hwid).send().await else {
             return Vec::new();
         };
@@ -332,6 +335,43 @@ impl Backend {
         } else {
             Vec::new()
         }
+    }
+
+    /// Public profile lookup that yields the URL of the player's skin.
+    pub async fn player_skin(&self, name: &str) -> Option<String> {
+        let response = self
+            .client
+            .get(self.url(&format!("api/v1/users/info/{}", urlencoding(name))))
+            .send()
+            .await
+            .ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+
+        let parsed = response
+            .json::<ApiResponse<PlayerTexture>>()
+            .await
+            .ok()?
+            .data?;
+
+        if let Some(url) = parsed
+            .external_texture_skin_url
+            .filter(|v| !v.trim().is_empty())
+        {
+            return Some(url);
+        }
+        if let Some(url) = parsed.full_skin_url.filter(|v| !v.trim().is_empty()) {
+            return Some(url);
+        }
+        if parsed.texture_skin_guid.trim().is_empty() {
+            return None;
+        }
+
+        Some(self.url(&format!(
+            "api/v1/integrations/texture/skins/{}",
+            parsed.texture_skin_guid.trim()
+        )))
     }
 
     pub async fn optional_mods(

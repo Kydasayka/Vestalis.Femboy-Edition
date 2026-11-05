@@ -257,16 +257,26 @@ cargo clippy --all-targets -- -D warnings
   (импортирует старый кэш `%LOCALAPPDATA%\Gml.Launcher\validation-cache-v1.json`),
   параллельные загрузки, запуск `javaw.exe` с `-Xms/-Xmx` и подменой
   authlib-эндпоинта, страница модов (`.jar` ↔ `.jar.disabled`), звуки, безрамочное
-  окно со своими кнопками, сплэш, настройки, сервисный доступ.
-- Сервисный доступ (ключ, режимы `local/proxy`, Tor, selftest) — **только PL-1**:
-  RU/EU отдают 404 на `/api/v1/mirror/*`, карточка скрыта, команды в воркере
+  окно со своими кнопками, сплэш, настройки, сервисный доступ, Discord RPC.
+- Выбор сервера — выпадающий список в правом верхнем углу. При смене бэкенда
+  сохранённые логин/пароль остаются и выполняется автологин; сплэш висит до
+  `Event::Ready` (жёсткий таймаут 20 с), поэтому форма входа не мелькает.
+- Аватар игрока в сайдбаре — настоящая голова скина (базовый слой + слой шляпы),
+  а не первая буква ника. Берётся из `GET /api/v1/users/info/{name}` →
+  `textureSkinGuid`/`externalTextureSkinUrl`, режется 8×8 в (8,8), апскейлится
+  nearest до 96×96 и кэшируется в `%LOCALAPPDATA%\Vestalis\avatars\<uuid>.png`.
+  Буква остаётся только фолбэком, пока голова не загрузилась.
+- Сервисный доступ (ключ, режимы `local/proxy`, Tor, selftest) — **только PL-1 и
+  только под аккаунтом Kydasay** (`server-index == 3 && is-kydasay`): RU/EU
+  отдают 404 на `/api/v1/mirror/*`, карточка скрыта, команды в воркере
   дополнительно проверяют хост.
 - Официальные RU/EU требуют `X-Client-Signature`:
   `HMAC-SHA256(secret, "{unixSeconds}:{guidN}:{hwid}:Vestalis")`, заголовок
-  `unixSeconds:guidN:hexDigest`. Ключ выдаёт проект, он вводится в
-  Настройки → «Ключ подписи клиента» и лежит в `state.json`; **в исходники и
-  git его не класть**. Без ключа — `403`, тогда работает fallback на PL-1
-  (бейдж `ЗЕРКАЛО`), но зеркальная сессия не подходит официальным серверам.
+  `unixSeconds:guidN:hexDigest`. Ключ выдаёт проект; в билд он вшит обфусцированно
+  (XOR в `resolve_client_secret` в `worker.rs`), а переопределение можно ввести в
+  Настройки → «Ключ подписи клиента» (тогда лежит в `state.json`). **В исходники
+  и git открытый ключ не класть.** Без ключа — `403`, тогда работает fallback на
+  PL-1 (бейдж `ЗЕРКАЛО`), но зеркальная сессия не подходит официальным серверам.
 - `OsArchitecture` в `/profiles/info` обязан быть `"64"` (как в C#:
   `ToString().ToLower().Replace("x","")`). С `"x64"` бэкенд отдаёт пустой
   профиль (`state=Error`, `files=[]`), и запуск падает с «Java не найдена».
@@ -282,7 +292,10 @@ cargo clippy --all-targets -- -D warnings
   дополнительно ставится `WM_SETICON` (32px/DPI-фрейм для обоих размеров), а
   процессу — тот же AppUserModelID, что в C#
   (`Vestalis.FemboyEdition.Launcher`). `assets/logo.ico`/`logo.png` генерируются
-  вектором из `logo.svg` через `cargo run --example make_icon`.
+  `cargo run --example make_icon` из **нарисованной вручную** SVG-морды кота на
+  скруглённом градиентном тайле (фиолетовый → розовый). Не возвращать трассировку
+  `logo.svg` как источник иконки: у неё белый квадрат-подложка, который на панели
+  задач выглядел тонкой рамкой, а мелкие детали пропадали в 16 px.
 - В настройках есть «Скрывать лаунчер при запуске игры» (`hide_on_launch`):
   после spawn процесса окно сворачивается (`ShowWindow(SW_MINIMIZE)`).
 - Настройки собраны в Slint-дереве постоянно (`visible: screen == 2`), поэтому
@@ -290,16 +303,20 @@ cargo clippy --all-targets -- -D warnings
   анимированы. Разворот окна — плавный `animate_to` по work area.
 - Данные: `%APPDATA%\Vestalis\rust-launcher\state.json`,
   кэш `%LOCALAPPDATA%\Vestalis\validation-cache-rust.json`,
+  головы скинов `%LOCALAPPDATA%\Vestalis\avatars\<uuid>.png`,
   логи `%LOCALAPPDATA%\Vestalis\logs\launcher.log.<date>`.
+- Мелкие шрифты подняты (10→12, 11→13, 12/13→14) — не возвращать 10–11 px.
+  На карточке отсчёта «НЕДРОЧАБРЬ» стоит `assets/nedrochabr.png` (картинка
+  пользователя), скруглённая рамка 102×104, текст — свойство `countdown-text`.
 - PL-1 (`https://201-58-180-2.sslip.io/`) — дефолт: RU/EU отдают 403 «неофициальный
   клиент». Остальные хосты остаются в селекторе.
 - Подводные камни: в Rust `regex` **нет look-around** — не тащить сюда C#-паттерны
   с `(?<!…)`/`(?=…)`; `slint` facade не экспортирует feature `svg`, она включается
   через прямую зависимость `i-slint-core = { features = ["svg"] }`; UI-поток обязан
   остаться главным (`ui.run()`), Tokio — фоновый.
-- Ещё не сделано: SignalR-обновления, страница модов, звуки, скины, Discord RPC,
-  Sentry, mirror-control ключ/Tor/selftest, кастомный хром и сплэш. Подробности —
-  `rust-launcher/README.md` и `rust-launcher/docs/ARCHITECTURE.md`.
+- Ещё не сделано: SignalR-подписки (вместо них опрос раз в 90 с), витрина/страница
+  скинов (голова игрока уже рендерится), Sentry, установщик и подпись кода.
+  Подробности — `rust-launcher/README.md` и `rust-launcher/docs/ARCHITECTURE.md`.
 
 ## Стиль работы
 
