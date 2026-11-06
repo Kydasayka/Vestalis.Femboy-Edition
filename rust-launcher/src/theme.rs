@@ -543,14 +543,6 @@ pub fn system_accent() -> Option<Rgb> {
         })
 }
 
-/// Windows can report a gray/black accent when colouring is disabled. In that
-/// case Material 3 keeps the palette accent instead of producing a gray UI.
-pub fn is_chromatic(rgb: Rgb) -> bool {
-    rgb_to_oklch(&hex(rgb))
-        .map(|(_, chroma, _)| chroma >= 0.04)
-        .unwrap_or(false)
-}
-
 pub fn normalize_mode(value: &str) -> &'static str {
     match value {
         "material3" => "material3",
@@ -577,9 +569,9 @@ pub fn apply_mode(base: &Theme, mode: &str, accent: Option<Rgb>) -> Theme {
 
 fn apply_material3(theme: &mut Theme, accent: Option<Rgb>) {
     let theme_accent = parse_rgb(&theme.accent).unwrap_or((162, 28, 175));
-    let accent = accent
-        .filter(|rgb| is_chromatic(*rgb))
-        .unwrap_or(theme_accent);
+    // A gray/black Windows accent is still a real user choice; use it. The
+    // palette accent is only a fallback when Windows exposes no value at all.
+    let accent = accent.unwrap_or(theme_accent);
     let (_, accent_chroma, hue) = rgb_to_oklch(&hex(accent)).unwrap_or((0.6, 0.18, 300.0));
     let chroma = accent_chroma.clamp(0.05, 0.22);
     let dark = rgb_to_oklch(&theme.background)
@@ -1010,7 +1002,7 @@ mod tests {
 
     #[test]
     fn material3_accent_palettes_stay_readable() {
-        for accent in [(0, 120, 215), (220, 20, 60), (0, 200, 110)] {
+        for accent in [(0, 120, 215), (220, 20, 60), (0, 200, 110), (107, 107, 107)] {
             for base in [Theme::default(), light_theme()] {
                 let theme = apply_mode(&base, "material3", Some(accent));
                 assert!(contrast(&theme.text, &theme.background) >= 4.5);

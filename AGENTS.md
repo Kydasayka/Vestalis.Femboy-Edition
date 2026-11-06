@@ -337,10 +337,11 @@ cargo clippy --all-targets -- -D warnings
   мгновенно в Настройки → «Оформление».
 - Режимы: `base`, `material3`, `liquid-glass`. M3-палитра генерируется в Rust
   из `AccentColor` (ABGR), `ColorizationColor` (ARGB) и Explorer
-  `AccentPalette`; выбирается самый насыщенный кандидат. Если Windows отдаёт
-  серый/чёрный accent (цвет акцента выключен), M3 оставляет accent темы, чтобы
-  не получить серый UI; кнопка «Взять цвет Windows» показывает считанный цвет
-  и поясняет fallback. При активном M3 accent опрашивается раз в 20 с. Liquid Glass —
+  `AccentPalette`; выбирается самый насыщенный кандидат. Серый/чёрный accent —
+  валидная настройка Windows и используется как есть; accent темы берётся
+  только если Windows вообще не отдал значение. Кнопка «Взять цвет Windows»
+  показывает считанный hex. При активном M3 accent опрашивается раз в 20 с.
+  Liquid Glass —
   **имитация**: в Slint 1.18 нет backdrop-blur, поэтому используются
   полупрозрачные слои, градиентные блики (`glass-*`) и размытые цветовые поля
   (`GlassBackdrop`).

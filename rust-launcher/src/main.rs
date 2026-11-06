@@ -538,12 +538,7 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
             apply_theme_by_name(&ui, &ui.get_set_theme());
             ui.set_settings_status(
                 match accent {
-                    Some(rgb) if crate::theme::is_chromatic(rgb) => {
-                        format!("Цвет Windows: #{:02X}{:02X}{:02X}", rgb.0, rgb.1, rgb.2)
-                    }
-                    Some((r, g, b)) => format!(
-                        "Windows accent серый (#{r:02X}{g:02X}{b:02X}), использую accent темы"
-                    ),
+                    Some((r, g, b)) => format!("Цвет Windows: #{r:02X}{g:02X}{b:02X}"),
                     None => "Windows accent недоступен, использую accent темы".into(),
                 }
                 .into(),

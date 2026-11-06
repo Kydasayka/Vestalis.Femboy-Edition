@@ -158,11 +158,11 @@ Modes:
 - `material3` — tonal surfaces, larger radii, elevation shadows and Material 3
   state layers. The primary/tonal palette is generated in Rust from the Windows
   accent colour (`AccentColor` ABGR, `ColorizationColor` ARGB and the Explorer
-  `AccentPalette`; the most chromatic candidate wins). If Windows reports a
-  gray/black accent (accent colouring disabled), Material 3 keeps the selected
-  palette's accent instead of producing a gray UI; «Взять цвет Windows» still
-  reports the sampled colour and explains the fallback. While Material 3 is
-  active the accent is also polled every 20 seconds.
+  `AccentPalette`; the most chromatic candidate wins). A gray or black accent
+  is still a valid Windows setting and is used as-is; the palette accent is
+  only a fallback when Windows exposes no value at all. «Взять цвет Windows»
+  reports the sampled hex. While Material 3 is active the accent is also
+  polled every 20 seconds.
 - `liquid-glass` — translucent panels, gradient specular edges, soft blooms
   behind the UI and larger rounded corners. Slint 1.18 has no real backdrop
   blur, so this is an approximation made of layered translucency, gradients
