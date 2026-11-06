@@ -69,20 +69,9 @@ fn main() -> anyhow::Result<()> {
         storage::save_state(&state);
     }
 
-    let themes = crate::theme::load_all();
-    let active = crate::theme::resolve(&state.settings.theme, &themes).clone();
-    if state.settings.theme != active.name {
-        state.settings.theme = active.name.clone();
-        storage::save_state(&state);
-    }
+    let mut themes = crate::theme::load_all();
     state.settings.theme_mode =
         crate::theme::normalize_mode(&state.settings.theme_mode).to_string();
-    info!(
-        theme = %active.name,
-        mode = %state.settings.theme_mode,
-        "theme applied"
-    );
-    THEME_CATALOG.with(|catalog| *catalog.borrow_mut() = themes);
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -99,6 +88,25 @@ fn main() -> anyhow::Result<()> {
         accent = ?SYSTEM_ACCENT.with(|value| value.get()),
         "Windows accent sampled"
     );
+
+    let accent = SYSTEM_ACCENT
+        .with(|value| value.get())
+        .unwrap_or((0, 120, 215));
+    themes.retain(|item| !item.name.eq_ignore_ascii_case(crate::theme::WINDOWS_THEME));
+    themes.push(windows_theme_item(accent));
+
+    let active = crate::theme::resolve(&state.settings.theme, &themes).clone();
+    if state.settings.theme != active.name {
+        state.settings.theme = active.name.clone();
+        storage::save_state(&state);
+    }
+    info!(
+        theme = %active.name,
+        mode = %state.settings.theme_mode,
+        "theme applied"
+    );
+    THEME_CATALOG.with(|catalog| *catalog.borrow_mut() = themes);
+
     ui.set_set_theme_mode(state.settings.theme_mode.clone().into());
     // Apply before the first frame so a non-dark theme never flashes.
     apply_item(&ui, &active, &state.settings.theme_mode);
@@ -153,7 +161,7 @@ fn main() -> anyhow::Result<()> {
         },
     );
 
-    // Follow the Windows accent while Material 3 is active.
+    // Follow the Windows accent for Material 3 and for the Windows palette.
     let accent_ui = ui.as_weak();
     let accent_timer = slint::Timer::default();
     accent_timer.start(
@@ -172,8 +180,14 @@ fn main() -> anyhow::Result<()> {
                     false
                 }
             });
-            if changed && ui.get_set_theme_mode() == "material3" {
-                apply_theme_by_name(&ui, &ui.get_set_theme());
+            if changed {
+                update_windows_theme(&ui, accent.unwrap_or((0, 120, 215)));
+                let active = ui.get_set_theme();
+                if ui.get_set_theme_mode() == "material3"
+                    || active.eq_ignore_ascii_case(crate::theme::WINDOWS_THEME)
+                {
+                    apply_theme_by_name(&ui, &active);
+                }
             }
         },
     );
@@ -539,11 +553,16 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
             play_sound(&ui, Sound::Click);
             let accent = crate::theme::system_accent();
             SYSTEM_ACCENT.with(|value| value.set(accent));
-            apply_theme_by_name(&ui, &ui.get_set_theme());
+            let rgb = accent.unwrap_or((0, 120, 215));
+            update_windows_theme(&ui, rgb);
+            ui.set_set_theme(crate::theme::WINDOWS_THEME.into());
+            apply_theme_by_name(&ui, crate::theme::WINDOWS_THEME);
             ui.set_settings_status(
                 match accent {
-                    Some((r, g, b)) => format!("Цвет Windows: #{r:02X}{g:02X}{b:02X}"),
-                    None => "Windows accent недоступен, использую accent темы".into(),
+                    Some((r, g, b)) => {
+                        format!("Тема Windows: #{r:02X}{g:02X}{b:02X}")
+                    }
+                    None => "Windows accent недоступен, тема Windows с синим accent".into(),
                 }
                 .into(),
             );
@@ -944,6 +963,31 @@ fn theme_options() -> Vec<ThemeOption> {
             })
             .collect()
     })
+}
+
+fn windows_theme_item(accent: crate::theme::Rgb) -> ThemeItem {
+    ThemeItem {
+        name: crate::theme::WINDOWS_THEME.into(),
+        builtin: true,
+        theme: crate::theme::windows_theme(accent),
+        icons: std::collections::HashMap::new(),
+        texts: std::collections::HashMap::new(),
+    }
+}
+
+fn update_windows_theme(ui: &AppWindow, accent: crate::theme::Rgb) {
+    let item = windows_theme_item(accent);
+    THEME_CATALOG.with(|catalog| {
+        let mut catalog = catalog.borrow_mut();
+        match catalog
+            .iter_mut()
+            .find(|entry| entry.name.eq_ignore_ascii_case(crate::theme::WINDOWS_THEME))
+        {
+            Some(existing) => *existing = item,
+            None => catalog.push(item),
+        }
+    });
+    ui.set_themes(ModelRc::new(VecModel::from(theme_options())));
 }
 
 fn apply_item(ui: &AppWindow, item: &ThemeItem, mode: &str) {

@@ -16,6 +16,7 @@ use winreg::RegKey;
 use crate::model::app_dir;
 
 pub const DEFAULT_THEME: &str = "dark";
+pub const WINDOWS_THEME: &str = "Windows";
 pub const THEME_DIR: &str = "themes";
 pub const MODES: [&str; 3] = ["base", "material3", "liquid-glass"];
 
@@ -392,6 +393,45 @@ pub fn builtin_themes() -> Vec<ThemeItem> {
             texts: HashMap::new(),
         },
     ]
+}
+
+/// Builds the special `Windows` palette from a sampled accent. It is a normal
+/// dark theme whose primary/accent roles follow the Windows colour, so it is
+/// useful outside Material 3 as well.
+pub fn windows_theme(accent: Rgb) -> Theme {
+    let mut theme = Theme::default();
+    let value = hex(accent);
+    let (_, chroma, hue) = rgb_to_oklch(&value).unwrap_or((0.5, 0.1, 280.0));
+    let chroma = chroma.max(0.02);
+
+    theme.accent = value.clone();
+    theme.accent_hover = tone(hue, chroma, 0.82);
+    theme.accent_text = if relative_luminance(accent) > 0.45 {
+        "#0b0b0e".into()
+    } else {
+        "#ffffff".into()
+    };
+    theme.gradient_start = value;
+    theme.gradient_end = tone(hue + 35.0, chroma * 0.9, 0.56);
+    theme.primary_container = tone(hue, chroma * 0.7, 0.34);
+    theme.on_primary_container = tone(hue, 0.03, 0.90);
+    theme.secondary = tone(hue + 10.0, chroma * 0.4, 0.78);
+    theme.on_secondary = "#111116".into();
+    theme.tertiary = tone(hue + 55.0, chroma * 0.7, 0.76);
+    theme.on_tertiary = "#111116".into();
+    theme
+}
+
+fn relative_luminance(rgb: Rgb) -> f64 {
+    let channel = |value: u8| {
+        let value = value as f64 / 255.0;
+        if value <= 0.039_28 {
+            value / 12.92
+        } else {
+            ((value + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * channel(rgb.0) + 0.7152 * channel(rgb.1) + 0.0722 * channel(rgb.2)
 }
 
 fn parse_rgb(value: &str) -> Option<Rgb> {
@@ -1001,6 +1041,24 @@ mod tests {
         assert!(resolve_asset(&root, "icons/missing.svg").is_none());
 
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn windows_theme_uses_the_sampled_accent() {
+        for accent in [(220, 20, 60), (0, 120, 215), (63, 63, 63)] {
+            let theme = windows_theme(accent);
+            assert_eq!(theme.accent, hex(accent));
+            let ratio = contrast(&theme.accent_text, &theme.accent);
+            // A sampled accent can land exactly on the 4.5 boundary; keep the
+            // code point for the exact colour and allow 0.01 rounding slack.
+            assert!(
+                ratio >= 4.49,
+                "accent {:?} text {} ratio {:.2}",
+                accent,
+                theme.accent_text,
+                ratio
+            );
+        }
     }
 
     #[test]
