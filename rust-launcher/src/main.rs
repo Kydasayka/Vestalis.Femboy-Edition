@@ -11,6 +11,7 @@ mod discord;
 mod files;
 mod hwid;
 mod launch;
+mod layout;
 mod model;
 mod storage;
 mod theme;
@@ -24,7 +25,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use base64::Engine;
-use slint::{ModelRc, VecModel};
+use slint::{Model, ModelRc, VecModel};
 use tracing::{error, info, warn};
 
 use crate::model::{Persisted, Settings};
@@ -34,6 +35,7 @@ use crate::worker::{Command, Event, ProfileView, Worker};
 
 thread_local! {
     static THEME_CATALOG: RefCell<Vec<ThemeItem>> = const { RefCell::new(Vec::new()) };
+    static SYSTEM_ACCENT: std::cell::Cell<Option<crate::theme::Rgb>> = const { std::cell::Cell::new(None) };
 }
 
 fn main() -> anyhow::Result<()> {
@@ -73,7 +75,16 @@ fn main() -> anyhow::Result<()> {
         state.settings.theme = active.name.clone();
         storage::save_state(&state);
     }
-    info!(theme = %active.name, builtin = active.builtin, "theme applied");
+    state.settings.theme_mode =
+        crate::theme::normalize_mode(&state.settings.theme_mode).to_string();
+    let accent = crate::theme::system_accent();
+    SYSTEM_ACCENT.with(|value| value.set(accent));
+    info!(
+        theme = %active.name,
+        mode = %state.settings.theme_mode,
+        accent = ?accent,
+        "theme applied"
+    );
     THEME_CATALOG.with(|catalog| *catalog.borrow_mut() = themes);
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -84,8 +95,9 @@ fn main() -> anyhow::Result<()> {
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
 
     let ui = AppWindow::new()?;
+    ui.set_set_theme_mode(state.settings.theme_mode.clone().into());
     // Apply before the first frame so a non-dark theme never flashes.
-    apply_theme(&ui, &active.theme);
+    apply_item(&ui, &active, &state.settings.theme_mode);
     initialize_ui(&ui, &state);
     install_callbacks(&ui, command_tx.clone());
 
@@ -120,6 +132,7 @@ fn main() -> anyhow::Result<()> {
     slint::Timer::single_shot(Duration::from_millis(350), || {
         if let Some(handle) = window::find_launcher_window() {
             window::apply_icon(handle);
+            window::apply_rounded_corners(handle);
         }
     });
 
@@ -132,6 +145,31 @@ fn main() -> anyhow::Result<()> {
         move || {
             if let Some(ui) = countdown_ui.upgrade() {
                 ui.set_countdown_text(countdown_text().into());
+            }
+        },
+    );
+
+    // Follow the Windows accent while Material 3 is active.
+    let accent_ui = ui.as_weak();
+    let accent_timer = slint::Timer::default();
+    accent_timer.start(
+        slint::TimerMode::Repeated,
+        Duration::from_secs(20),
+        move || {
+            let Some(ui) = accent_ui.upgrade() else {
+                return;
+            };
+            let accent = crate::theme::system_accent();
+            let changed = SYSTEM_ACCENT.with(|value| {
+                if value.get() != accent {
+                    value.set(accent);
+                    true
+                } else {
+                    false
+                }
+            });
+            if changed && ui.get_set_theme_mode() == "material3" {
+                apply_theme_by_name(&ui, &ui.get_set_theme());
             }
         },
     );
@@ -450,11 +488,13 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
                 hide_on_launch: ui.get_set_hide_on_launch(),
                 background_effect: ui.get_set_background_effect().to_string(),
                 theme: ui.get_set_theme().to_string(),
+                theme_mode: ui.get_set_theme_mode().to_string(),
+                layout: ui_layout(&ui),
                 install_dir: ui.get_set_install_dir().to_string(),
             };
 
             ui.set_settings_status("Сохранение…".into());
-            let _ = tx.send(Command::SaveSettings(settings));
+            let _ = tx.send(Command::SaveSettings(Box::new(settings)));
         }
     });
 
@@ -463,7 +503,46 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         move |name| {
             let Some(ui) = ui.upgrade() else { return };
             play_sound(&ui, Sound::Click);
+            let mode = THEME_CATALOG.with(|catalog| {
+                catalog
+                    .borrow()
+                    .iter()
+                    .find(|item| item.name.eq_ignore_ascii_case(name.as_str()))
+                    .map(|item| item.theme.mode.clone())
+            });
+            if let Some(mode) = mode {
+                ui.set_set_theme_mode(mode.into());
+            }
             apply_theme_by_name(&ui, name.as_str());
+        }
+    });
+
+    ui.on_theme_mode_clicked({
+        let ui = ui.as_weak();
+        move |mode| {
+            let Some(ui) = ui.upgrade() else { return };
+            play_sound(&ui, Sound::Click);
+            let mode = crate::theme::normalize_mode(mode.as_str());
+            ui.set_set_theme_mode(mode.into());
+            apply_theme_by_name(&ui, &ui.get_set_theme());
+        }
+    });
+
+    ui.on_refresh_accent_clicked({
+        let ui = ui.as_weak();
+        move || {
+            let Some(ui) = ui.upgrade() else { return };
+            play_sound(&ui, Sound::Click);
+            let accent = crate::theme::system_accent();
+            SYSTEM_ACCENT.with(|value| value.set(accent));
+            apply_theme_by_name(&ui, &ui.get_set_theme());
+            ui.set_settings_status(
+                match accent {
+                    Some((r, g, b)) => format!("Цвет Windows: #{r:02X}{g:02X}{b:02X}"),
+                    None => "Цвет Windows недоступен, используется accent темы".into(),
+                }
+                .into(),
+            );
         }
     });
 
@@ -497,8 +576,34 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
             let Some(ui) = ui.upgrade() else { return };
             play_sound(&ui, Sound::Click);
             ui.set_set_theme("dark".into());
+            ui.set_set_theme_mode("base".into());
             apply_theme_by_name(&ui, crate::theme::DEFAULT_THEME);
             let _ = tx.send(Command::SaveTheme(crate::theme::DEFAULT_THEME.into()));
+        }
+    });
+
+    ui.on_layout_move({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move |item, direction| {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
+            let _ = tx.send(Command::MoveLayoutItem {
+                item: item.to_string(),
+                direction: direction.to_string(),
+            });
+        }
+    });
+
+    ui.on_layout_reset_clicked({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
+            let _ = tx.send(Command::ResetLayout);
         }
     });
 
@@ -732,7 +837,9 @@ fn apply_event(ui: &AppWindow, event: Event) {
             apply_theme_by_name(ui, &active);
             ui.set_settings_status("Темы обновлены".into());
         }
+        Event::Layout(layout) => apply_layout(ui, &layout),
         Event::Settings { settings, max_ram } => {
+            ui.set_set_theme_mode(settings.theme_mode.clone().into());
             apply_theme_by_name(ui, &settings.theme);
             apply_settings(ui, &settings, max_ram);
         }
@@ -835,8 +942,133 @@ fn theme_options() -> Vec<ThemeOption> {
     })
 }
 
+fn apply_item(ui: &AppWindow, item: &ThemeItem, mode: &str) {
+    let accent = SYSTEM_ACCENT.with(|value| value.get());
+    let theme = crate::theme::apply_mode(&item.theme, mode, accent);
+    info!(
+        theme = %item.name,
+        mode,
+        base_background = %item.theme.background,
+        effective_background = %theme.background,
+        "applying theme"
+    );
+    apply_theme(ui, &theme);
+    apply_icons(ui, item, &theme);
+    apply_texts(ui, item);
+}
+
+fn icon_tint<'a>(id: &str, theme: &'a crate::theme::Theme) -> &'a str {
+    match id {
+        "warning" => &theme.warning,
+        "error" | "close" => &theme.danger,
+        "success" => &theme.success,
+        "chevron" | "minimize" | "maximize" | "restore" => &theme.text_muted,
+        _ => &theme.accent,
+    }
+}
+
+fn load_theme_icon(path: &str, tint: &str) -> Option<slint::Image> {
+    use sha1::{Digest, Sha1};
+
+    let source = std::path::Path::new(path);
+    let is_svg = source
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case("svg"))
+        .unwrap_or(false);
+
+    if !is_svg {
+        return slint::Image::load_from_path(source).ok();
+    }
+
+    let text = std::fs::read_to_string(source).ok()?;
+    if !text.contains("currentColor") {
+        return slint::Image::load_from_path(source).ok();
+    }
+
+    let replaced = text.replace("currentColor", tint);
+    let mut hasher = Sha1::new();
+    hasher.update(replaced.as_bytes());
+    hasher.update(tint.as_bytes());
+    let key = hex::encode(hasher.finalize());
+
+    let dir = crate::model::local_app_dir().join("theme-icons");
+    std::fs::create_dir_all(&dir).ok()?;
+    let cache = dir.join(format!("{key}.svg"));
+    if !cache.exists() {
+        std::fs::write(&cache, replaced).ok()?;
+    }
+
+    slint::Image::load_from_path(&cache).ok()
+}
+
+fn apply_icons(ui: &AppWindow, item: &ThemeItem, theme: &crate::theme::Theme) {
+    let icons = ui.global::<ThemeIcons>();
+
+    macro_rules! set_icon {
+        ($id:literal, $setter:ident, $has_setter:ident) => {
+            match item
+                .icons
+                .get($id)
+                .and_then(|path| load_theme_icon(path, icon_tint($id, theme)))
+            {
+                Some(image) => {
+                    icons.$setter(image);
+                    icons.$has_setter(true);
+                }
+                None => icons.$has_setter(false),
+            }
+        };
+    }
+
+    set_icon!("server", set_server, set_has_server);
+    set_icon!("chevron", set_chevron, set_has_chevron);
+    set_icon!("play", set_play, set_has_play);
+    set_icon!("settings", set_settings, set_has_settings);
+    set_icon!("mods", set_mods, set_has_mods);
+    set_icon!("refresh", set_refresh, set_has_refresh);
+    set_icon!("minimize", set_minimize, set_has_minimize);
+    set_icon!("maximize", set_maximize, set_has_maximize);
+    set_icon!("restore", set_restore, set_has_restore);
+    set_icon!("close", set_close, set_has_close);
+    set_icon!("warning", set_warning, set_has_warning);
+    set_icon!("error", set_error, set_has_error);
+    set_icon!("success", set_success, set_has_success);
+}
+
+fn apply_texts(ui: &AppWindow, item: &ThemeItem) {
+    let texts = ui.global::<Texts>();
+    let value = |key: &str, fallback: &str| -> slint::SharedString {
+        item.texts
+            .get(key)
+            .cloned()
+            .unwrap_or_else(|| fallback.to_string())
+            .into()
+    };
+
+    texts.set_app_title(value("app.title", "Vestalis Launcher"));
+    texts.set_app_subtitle(value("app.subtitle", "Femboy"));
+    texts.set_login_title(value("login.title", "Вход в аккаунт"));
+    texts.set_login_subtitle(value(
+        "login.subtitle",
+        "Войдите, чтобы играть на серверах Vestalis",
+    ));
+    texts.set_login_submit(value("login.submit", "Войти"));
+    texts.set_login_offline(value("login.offline", "Оффлайн-режим"));
+    texts.set_play(value("buttons.play", "Играть"));
+    texts.set_settings(value("buttons.settings", "Настройки"));
+    texts.set_logout(value("buttons.logout", "Выйти"));
+    texts.set_refresh(value("buttons.refresh", "Обновить"));
+    texts.set_mods(value("buttons.mods", "Моды"));
+    texts.set_profiles(value("sections.profiles", "ПРОФИЛИ"));
+    texts.set_news(value("sections.news", "НОВОСТИ"));
+    texts.set_settings_title(value("settings.title", "Настройки"));
+    texts.set_back(value("settings.back", "← Назад"));
+}
+
 fn apply_theme(ui: &AppWindow, theme: &crate::theme::Theme) {
     let global = ui.global::<Theme>();
+    global.set_mode(theme.mode.clone().into());
     global.set_background(to_color(&theme.background));
     global.set_background_alt(to_color(&theme.background_alt));
     global.set_surface(to_color(&theme.surface));
@@ -854,6 +1086,22 @@ fn apply_theme(ui: &AppWindow, theme: &crate::theme::Theme) {
     global.set_gradient_end(to_color(&theme.gradient_end));
     global.set_shadow(to_color(&theme.shadow));
     global.set_scrim(to_color(&theme.scrim));
+    global.set_primary_container(to_color(&theme.primary_container));
+    global.set_on_primary_container(to_color(&theme.on_primary_container));
+    global.set_secondary(to_color(&theme.secondary));
+    global.set_on_secondary(to_color(&theme.on_secondary));
+    global.set_tertiary(to_color(&theme.tertiary));
+    global.set_on_tertiary(to_color(&theme.on_tertiary));
+    global.set_surface_low(to_color(&theme.surface_low));
+    global.set_surface_high(to_color(&theme.surface_high));
+    global.set_surface_variant(to_color(&theme.surface_variant));
+    global.set_on_surface_variant(to_color(&theme.on_surface_variant));
+    global.set_outline(to_color(&theme.outline));
+    global.set_error(to_color(&theme.error));
+    global.set_on_error(to_color(&theme.on_error));
+    global.set_glass_tint(to_color(&theme.glass_tint));
+    global.set_glass_border(to_color(&theme.glass_border));
+    global.set_glass_highlight(to_color(&theme.glass_highlight));
     global.set_radius_xs(theme.radius_xs as f32);
     global.set_radius_sm(theme.radius_sm as f32);
     global.set_radius_md(theme.radius_md as f32);
@@ -869,16 +1117,49 @@ fn apply_theme(ui: &AppWindow, theme: &crate::theme::Theme) {
 }
 
 fn apply_theme_by_name(ui: &AppWindow, name: &str) {
-    let theme = THEME_CATALOG.with(|catalog| {
+    let item = THEME_CATALOG.with(|catalog| {
         catalog
             .borrow()
             .iter()
             .find(|item| item.name.eq_ignore_ascii_case(name))
-            .map(|item| item.theme.clone())
+            .cloned()
     });
 
-    if let Some(theme) = theme {
-        apply_theme(ui, &theme);
+    if let Some(item) = item {
+        apply_item(ui, &item, &ui.get_set_theme_mode());
+    }
+}
+
+fn string_model(items: &[String]) -> ModelRc<slint::SharedString> {
+    ModelRc::new(VecModel::from(
+        items
+            .iter()
+            .map(|item| slint::SharedString::from(item.as_str()))
+            .collect::<Vec<_>>(),
+    ))
+}
+
+fn apply_layout(ui: &AppWindow, layout: &crate::layout::LayoutConfig) {
+    ui.set_layout_sidebar_left(string_model(&layout.sidebar_left));
+    ui.set_layout_sidebar_right(string_model(&layout.sidebar_right));
+    ui.set_layout_header(string_model(&layout.header));
+    ui.set_layout_content_top(string_model(&layout.content_top));
+    ui.set_layout_content_bottom(string_model(&layout.content_bottom));
+    ui.set_layout_footer(string_model(&layout.footer));
+}
+
+fn ui_layout(ui: &AppWindow) -> crate::layout::LayoutConfig {
+    fn collect(model: &ModelRc<slint::SharedString>) -> Vec<String> {
+        model.iter().map(|item| item.to_string()).collect()
+    }
+
+    crate::layout::LayoutConfig {
+        sidebar_left: collect(&ui.get_layout_sidebar_left()),
+        sidebar_right: collect(&ui.get_layout_sidebar_right()),
+        header: collect(&ui.get_layout_header()),
+        content_top: collect(&ui.get_layout_content_top()),
+        content_bottom: collect(&ui.get_layout_content_bottom()),
+        footer: collect(&ui.get_layout_footer()),
     }
 }
 
@@ -894,6 +1175,12 @@ fn apply_settings(ui: &AppWindow, settings: &Settings, max_ram: u64) {
     ui.set_set_sounds(settings.sounds);
     ui.set_set_hide_on_launch(settings.hide_on_launch);
     ui.set_set_theme(settings.theme.clone().into());
+    ui.set_set_theme_mode(
+        crate::theme::normalize_mode(&settings.theme_mode)
+            .to_string()
+            .into(),
+    );
+    apply_layout(ui, &settings.layout);
 
     let effect = match settings.background_effect.as_str() {
         "fireflies" | "leaves" | "snow" => settings.background_effect.clone(),

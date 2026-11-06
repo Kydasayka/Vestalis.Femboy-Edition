@@ -41,16 +41,22 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   enable/disable by renaming `.jar` ↔ `.jar.disabled`.
 - Rounded UI typography: Nunito (Regular/SemiBold/Bold, Cyrillic included),
   embedded in the binary and used as the default font family.
-- Visual themes: built-in `dark`, `light`, `femboy`, `ocean` plus any
-  `*.json` dropped into `%APPDATA%\Vestalis\rust-launcher\themes`. Switching is
-  instant, applies to every screen (login, main, settings, mods, splash,
-  dropdown), and is stored as `settings.theme` in `state.json`.
+- Visual themes: built-in `dark`, `light`, `femboy`, `ocean` plus user themes
+  in `%APPDATA%\Vestalis\rust-launcher\themes` (old `name.json` and new
+  `name/theme.json` layouts). Three presentation modes — `base`, `material3`
+  and `liquid-glass` — switch instantly and apply to every screen. Material 3
+  derives its tonal palette from the Windows accent (with a theme fallback);
+  Liquid Glass uses translucent panels, specular edges and blurred colour
+  fields. Themes may override semantic icons and safe UI strings.
+- Main-screen layout editor (Settings → «Layout»): six zones and seven movable
+  blocks, persisted separately as `settings.layout` in `state.json`.
 - Ambient background in Settings → «Фон лаунчера»: «Нет», «Светлячки»,
   «Листья» or «Снежинки». The effects are drawn in Slint and driven by
   `animation-tick()`, so they do not need a Rust timer.
 - Interface sounds from the original assets, custom borderless window with
-  hand-drawn minimize/maximize/close icons, a pill-style server selector and a
-  minimum window size of 1080×620, and an animated branded start screen.
+  hand-drawn minimize/maximize/close icons, a pill-style server selector,
+  rounded DWM corners and a minimum window size of 1080×620, and an animated
+  branded start screen.
   The maximize button animates to the Windows work area, so the taskbar stays
   usable. Screen changes, buttons, profile rows and the download bar animate.
 - Discord Rich Presence with the same application ID, assets and texts as the
@@ -139,60 +145,112 @@ No blocking I/O happens in a Slint callback.
 The first validation imports `%LOCALAPPDATA%\Gml.Launcher\validation-cache-v1.json`,
 so an existing C# installation does not re-hash its whole 16k-file client.
 
-## Themes
+## Themes and modes
 
-Built-in themes live in `src/theme.rs`: `dark`, `light`, `femboy`, `ocean`.
-The active theme is stored as `settings.theme` in `state.json`; Settings →
-«Оформление» switches it live and «Сохранить настройки» persists it.
+Built-in palettes live in `src/theme.rs`: `dark`, `light`, `femboy`, `ocean`.
+The palette is stored as `settings.theme` and the presentation mode as
+`settings.themeMode` in `state.json`. Settings → «Оформление» switches both
+live; «Сохранить настройки» persists the choice.
 
-Custom themes are JSON files directly inside
-`%APPDATA%\Vestalis\rust-launcher\themes`. The folder can be created with
-«Открыть папку тем». Example:
+Modes:
+
+- `base` — the classic flat launcher surfaces.
+- `material3` — tonal surfaces, larger radii, elevation shadows and Material 3
+  state layers. The primary/tonal palette is generated in Rust from the Windows
+  accent colour (`HKCU\Software\Microsoft\Windows\DWM\AccentColor`, ABGR,
+  falling back to `ColorizationColor`, ARGB). If neither is usable, the
+  palette accent is used. «Взять цвет Windows» refreshes it manually; while
+  Material 3 is active the accent is also polled every 20 seconds.
+- `liquid-glass` — translucent panels, gradient specular edges, soft blooms
+  behind the UI and larger rounded corners. Slint 1.18 has no real backdrop
+  blur, so this is an approximation made of layered translucency, gradients
+  and blurred colour fields; no network or GPU shader is involved.
+
+Modes are presentation layers over the selected palette. A user theme may set
+a default `mode`; selecting the theme switches to it, and the mode buttons can
+override it afterwards.
+
+### User themes
+
+Two layouts are supported:
+
+- legacy: `%APPDATA%\Vestalis\rust-launcher\themes\name.json`
+- folder: `%APPDATA%\Vestalis\rust-launcher\themes\name\theme.json` plus
+  `icons/…` assets next to it
 
 ```json
 {
-  "name": "sunset",
+  "name": "neon",
+  "mode": "material3",
   "theme": {
-    "background": "#1a0f0a",
-    "backgroundAlt": "#120a07",
-    "surface": "#2a1810",
-    "surfaceHover": "#3a2217",
-    "border": "#4a2c1d",
-    "text": "#ffe8d6",
-    "textMuted": "#d7b8a0",
-    "accent": "#f97316",
-    "accentHover": "#fb923c",
-    "accentText": "#1a0f0a",
-    "success": "#4ade80",
-    "warning": "#fbbf24",
-    "danger": "#fb7185",
-    "gradientStart": "#f97316",
-    "gradientEnd": "#dc2626",
-    "radiusXs": 3,
-    "radiusSm": 8,
-    "radiusMd": 11,
-    "radiusLg": 14,
-    "radiusPill": 99,
-    "cardOpacity": 0.92,
-    "fontFamily": "Nunito",
-    "baseFontWeight": 600,
-    "backgroundEffect": "leaves"
+    "background": "#071016",
+    "backgroundAlt": "#03080c",
+    "surface": "#0d1a22",
+    "surfaceHover": "#152833",
+    "border": "#23414f",
+    "text": "#eaffff",
+    "textMuted": "#9fc9d4",
+    "accent": "#22d3ee",
+    "accentHover": "#67e8f9",
+    "accentText": "#041216",
+    "gradientStart": "#06b6d4",
+    "gradientEnd": "#d946ef",
+    "cardOpacity": 0.9,
+    "backgroundEffect": "fireflies"
+  },
+  "icons": {
+    "play": "icons/play.svg",
+    "server": "icons/server.svg",
+    "close": "icons/close.svg"
+  },
+  "texts": {
+    "app.title": "Vestalis Neon",
+    "buttons.play": "ПОГНАЛИ",
+    "sections.news": "НОВОСТИ СЕРВЕРА"
   }
 }
 ```
 
-- Every field is optional: missing tokens use the `dark` palette.
-- Colors accept `#RRGGBB` or `#RRGGBBAA`; an invalid token is replaced by the
-  `dark` value and logged instead of rejecting the whole theme.
-- `radius*` are logical pixels (0–64, the pill radius is clamped to 1–999),
-  `cardOpacity` is clamped to 0–1, `baseFontWeight` to 100–900.
-- `backgroundEffect` is `none` / `fireflies` / `leaves` / `snow`; selecting a
-  theme applies its effect, and the Settings effect control can override it.
-- Only regular `*.json` files directly in the folder are read (no recursion,
-  no symlinks); files over 256 KiB are ignored. Invalid JSON, duplicate names
-  and unreadable files are logged and skipped. A UTF-8 BOM is accepted.
-- Theme text on `background` and `surface` is checked for ≥ 4.5:1 contrast by
-  the unit tests for all built-in themes.
+Rules:
+
+- Every theme token is optional and falls back to `dark`; every mode has
+  complete defaults (M3/glass roles are generated even if the JSON omits them).
+- Colors accept `#RRGGBB` or `#RRGGBBAA`. An invalid token is replaced by the
+  `dark` value and logged; the rest of the theme still loads.
+- `radius*` are logical pixels (0–64, pill 1–999), `cardOpacity` is clamped to
+  0–1 and `baseFontWeight` to 100–900. `backgroundEffect` is `none`,
+  `fireflies`, `leaves` or `snow`.
+- Icons use semantic IDs: `server`, `chevron`, `play`, `settings`, `mods`,
+  `refresh`, `minimize`, `maximize`, `restore`, `close`, `warning`, `error`,
+  `success`. Only SVG/PNG files up to 512 KiB, relative to the theme folder,
+  are accepted. Absolute paths, `..`, symlinks and paths resolving outside the
+  theme folder are rejected. Missing or broken icons fall back to the built-in
+  vector icon. SVG files containing `currentColor` are tinted with the active
+  theme colour and cached in `%LOCALAPPDATA%\Vestalis\theme-icons`.
+- Themeable text keys are limited to `app.title`, `app.subtitle`,
+  `login.title`, `login.subtitle`, `login.submit`, `login.offline`,
+  `buttons.play`, `buttons.settings`, `buttons.logout`, `buttons.refresh`,
+  `buttons.mods`, `sections.profiles`, `sections.news`, `settings.title` and
+  `settings.back`. Unknown keys are logged and ignored. Error messages, warning
+  details and window-control labels are deliberately not themeable.
+- Only regular files directly inside the themes folder (or one level of theme
+  folders) are read; themes are capped at 256 KiB. Invalid JSON, duplicate
+  names and unreadable files are logged and skipped. A UTF-8 BOM is accepted.
+- Unit tests enforce ≥ 4.5:1 contrast for `text` on `background`/`surface` for
+  all built-ins and for generated Material 3 palettes, and ≥ 4.5:1 for
+  `accentText` on `accent`.
+
+## Layout editor
+
+`settings.layout` is independent from the theme. The main screen is split into
+six zones: `sidebarLeft`, `sidebarRight`, `header`, `contentTop`,
+`contentBottom`, `footer`. Movable blocks are `user`, `profiles`, `countdown`,
+`sidebar-actions`, `news` and `main-actions`; the server selector is pinned to
+the header because the title bar owns its dropdown. Settings → «Layout» shows
+each zone and moves blocks with ←/↑/↓/→ buttons. Every move is normalised
+(unknown/duplicate items removed, missing blocks returned to their defaults),
+saved immediately and applied without a restart. There is no free canvas, which
+keeps the 1080×620 minimum size and the existing scrolling/clicks intact.
 
 ## Backend notes
 

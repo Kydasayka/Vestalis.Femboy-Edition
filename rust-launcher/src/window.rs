@@ -15,7 +15,13 @@ pub struct Rect {
 
 #[link(name = "user32")]
 extern "system" {
-    fn FindWindowW(class_name: *const u16, window_name: *const u16) -> isize;
+    fn EnumWindows(
+        callback: Option<unsafe extern "system" fn(isize, isize) -> i32>,
+        lparam: isize,
+    ) -> i32;
+    fn GetWindowThreadProcessId(window: isize, process_id: *mut u32) -> u32;
+    fn IsWindowVisible(window: isize) -> i32;
+    fn GetWindowTextLengthW(window: isize) -> i32;
     fn GetWindowRect(window: isize, rect: *mut Rect) -> i32;
     fn LoadImageW(
         instance: isize,
@@ -45,6 +51,12 @@ extern "system" {
     fn GetModuleHandleW(module_name: *const u16) -> isize;
 }
 
+#[link(name = "dwmapi")]
+extern "system" {
+    fn DwmSetWindowAttribute(window: isize, attribute: u32, value: *const c_void, size: u32)
+        -> i32;
+}
+
 #[link(name = "shell32")]
 extern "system" {
     fn SetCurrentProcessExplicitAppUserModelID(app_id: *const u16) -> i32;
@@ -60,6 +72,8 @@ const ICON_SMALL: usize = 0;
 const ICON_BIG: usize = 1;
 const SM_CXICON: i32 = 11;
 const SM_CYICON: i32 = 12;
+const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
+const DWMWCP_ROUND: i32 = 2;
 
 /// Same explicit AppUserModelID as the C# launcher, so Windows keeps one
 /// taskbar group and uses the right icon/shortcut identity.
@@ -73,13 +87,37 @@ pub fn set_app_user_model_id() {
     }
 }
 
+struct WindowSearch {
+    process_id: u32,
+    handle: isize,
+}
+
+unsafe extern "system" fn enum_window(window: isize, lparam: isize) -> i32 {
+    let search = &mut *(lparam as *mut WindowSearch);
+    if search.handle != 0 || IsWindowVisible(window) == 0 || GetWindowTextLengthW(window) == 0 {
+        return 1;
+    }
+
+    let mut process_id = 0u32;
+    GetWindowThreadProcessId(window, &mut process_id);
+    if process_id == search.process_id {
+        search.handle = window;
+        return 0;
+    }
+    1
+}
+
+/// Finds this process's visible top-level window. The title is intentionally
+/// not used: themes may rename the app (`Texts.app-title`).
 pub fn find_launcher_window() -> Option<isize> {
-    let title: Vec<u16> = "Vestalis Launcher"
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect();
-    let handle = unsafe { FindWindowW(std::ptr::null(), title.as_ptr()) };
-    (handle != 0).then_some(handle)
+    let mut search = WindowSearch {
+        process_id: std::process::id(),
+        handle: 0,
+    };
+    unsafe {
+        EnumWindows(Some(enum_window), &mut search as *mut WindowSearch as isize);
+    }
+    (search.handle != 0).then_some(search.handle)
 }
 
 pub fn window_rect(window: isize) -> Option<Rect> {
@@ -116,6 +154,21 @@ pub fn apply_icon(window: isize) {
         if small != 0 {
             SendMessageW(window, WM_SETICON, ICON_SMALL, small);
         }
+    }
+}
+
+/// Ask DWM to round the corners of the frameless window (Windows 11). This is
+/// preferable to SetWindowRgn because DWM keeps the rounding correct while the
+/// window is resized.
+pub fn apply_rounded_corners(window: isize) {
+    let preference = DWMWCP_ROUND;
+    unsafe {
+        DwmSetWindowAttribute(
+            window,
+            DWMWA_WINDOW_CORNER_PREFERENCE,
+            &preference as *const i32 as *const c_void,
+            std::mem::size_of::<i32>() as u32,
+        );
     }
 }
 

@@ -314,7 +314,9 @@ cargo clippy --all-targets -- -D warnings
   примитивами (`CaptionButton.kind` = `min`/`max`/`restore`/`close`), без
   текстовых глифов. Минимальный размер окна — `min-width: 1080px`,
   `min-height: 620px` (проверяется через `WM_GETMINMAXINFO`), меньше окно
-  сжать нельзя.
+  сжать нельзя. Скругление окна — DWM `DWMWA_WINDOW_CORNER_PREFERENCE` в
+  `window::apply_rounded_corners` (не `SetWindowRgn`: DWM сам пересчитывает
+  радиус при ресайзе/развороте).
 - Данные: `%APPDATA%\Vestalis\rust-launcher\state.json`,
   кэш `%LOCALAPPDATA%\Vestalis\validation-cache-rust.json`,
   головы скинов `%LOCALAPPDATA%\Vestalis\avatars\<uuid>.png`,
@@ -327,13 +329,32 @@ cargo clippy --all-targets -- -D warnings
   нет кириллицы.
 - Темы: `src/theme.rs` + `export global Theme` в `app.slint`. Встроенные
   `dark/light/femboy/ocean` заданы в Rust (`builtin_themes()`), пользовательские
-  — `*.json` прямо в `%APPDATA%\Vestalis\rust-launcher\themes` (формат
-  `{"name": "...", "theme": {...}}`, поля опциональны, битые цвета/JSON
-  логируются и заменяются на `dark`). `Settings.theme` (camelCase) хранит имя;
-  тема применяется в `main` до `ui.run()` и мгновенно при клике в
-  Настройки → «Оформление». Все цвета/радиусы в `app.slint` идут через
-  `Theme.*`; литералы допустимы только в дефолтах global Theme. Не добавлять
-  сетевую загрузку тем и не читать файлы вне папки тем.
+  — `name.json` **или** `name/theme.json` + ассеты в
+  `%APPDATA%\Vestalis\rust-launcher\themes` (формат
+  `{"name","mode","theme","icons","texts"}`, поля опциональны, битые
+  цвета/JSON логируются и заменяются на `dark`). `Settings.theme` хранит имя,
+  `Settings.themeMode` — режим. Тема применяется в `main` до `ui.run()` и
+  мгновенно в Настройки → «Оформление».
+- Режимы: `base`, `material3`, `liquid-glass`. M3-палитра генерируется в Rust
+  из `HKCU\Software\Microsoft\Windows\DWM\AccentColor` (ABGR) с fallback на
+  `ColorizationColor` (ARGB) и accent темы; при активном M3 accent опрашивается
+  раз в 20 с, кнопка «Взять цвет Windows» обновляет вручную. Liquid Glass —
+  **имитация**: в Slint 1.18 нет backdrop-blur, поэтому используются
+  полупрозрачные слои, градиентные блики (`glass-*`) и размытые цветовые поля
+  (`GlassBackdrop`).
+- Иконки темы: семантические ID (`server/chevron/play/settings/mods/refresh/
+  minimize/maximize/restore/close/warning/error/success`), только SVG/PNG до
+  512 КиБ, относительные пути внутри папки темы, без `..`/абсолютных путей/
+  симлинков; SVG `currentColor` тонируется и кэшируется в
+  `%LOCALAPPDATA%\Vestalis\theme-icons`. Тексты — только allowlist
+  `TEXT_KEYS` (заголовки/кнопки), ошибки и управление окном не переопределяются.
+- Layout: `src/layout.rs`, отдельно от темы, `Settings.layout` (camelCase).
+  Шесть зон, блоки `user/profiles/countdown/sidebar-actions/news/main-actions`,
+  серверный селектор закреплён в header. Экран Настройки → «Layout» двигает
+  блоки кнопками, всё нормализуется и сохраняется сразу; свободного canvas нет.
+- Все цвета/радиусы в `app.slint` идут через `Theme.*`; литералы допустимы
+  только в дефолтах global Theme. Не добавлять сетевую загрузку тем и не читать
+  файлы вне папки тем.
 - Фон лаунчера: настройка `background-effect` (`none`/`fireflies`/`leaves`/
   `snow`) в карточке «Лаунчер», хранится как `backgroundEffect` в `state.json`.
   Слой `BackgroundEffect` вставлен после градиента и до контента на экранах

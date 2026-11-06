@@ -12,6 +12,7 @@ use crate::discord::DiscordRpc;
 use crate::files::{sync_profile, SyncProgress};
 use crate::hwid;
 use crate::launch;
+use crate::layout::LayoutConfig;
 use crate::model::{
     app_dir, avatar_path, ApiResponse, News, Persisted, Profile, ProfileInfoRequest, Settings,
     DEFAULT_HOST, MIRROR_HOST, SERVERS,
@@ -30,10 +31,12 @@ pub enum Command {
     SelectProfile(usize),
     Play,
     Refresh,
-    SaveSettings(Settings),
+    SaveSettings(Box<Settings>),
     RefreshThemes,
     OpenThemesFolder,
     SaveTheme(String),
+    MoveLayoutItem { item: String, direction: String },
+    ResetLayout,
     OpenMods,
     ToggleMod { id: usize, enabled: bool },
     RefreshMirror,
@@ -132,6 +135,7 @@ pub enum Event {
         items: Vec<ThemeItem>,
         active: String,
     },
+    Layout(LayoutConfig),
     Settings {
         settings: Settings,
         max_ram: u64,
@@ -284,10 +288,14 @@ impl Worker {
                                 self.spawn_check();
                             }
                         }
-                        Some(Command::SaveSettings(settings)) => self.save_settings(settings),
+                        Some(Command::SaveSettings(settings)) => self.save_settings(*settings),
                         Some(Command::RefreshThemes) => self.refresh_themes(),
                         Some(Command::OpenThemesFolder) => self.open_themes_folder(),
                         Some(Command::SaveTheme(name)) => self.save_theme(name),
+                        Some(Command::MoveLayoutItem { item, direction }) => {
+                            self.move_layout_item(&item, &direction)
+                        }
+                        Some(Command::ResetLayout) => self.save_layout(LayoutConfig::default()),
                         Some(Command::OpenMods) => self.open_mods().await,
                         Some(Command::ToggleMod { id, enabled }) => self.toggle_mod(id, enabled),
                         Some(Command::RefreshMirror) => self.refresh_mirror().await,
@@ -1361,6 +1369,8 @@ impl Worker {
 
         let themes = theme::load_all();
         settings.theme = theme::resolve(&settings.theme, &themes).name.clone();
+        settings.theme_mode = theme::normalize_mode(&settings.theme_mode).to_string();
+        settings.layout.normalize();
 
         self.state.settings = settings.clone();
         save_state(&self.state);
@@ -1389,6 +1399,7 @@ impl Worker {
         let items = theme::load_all();
         let item = theme::resolve(&name, &items).clone();
         self.state.settings.theme = item.name.clone();
+        self.state.settings.theme_mode = item.theme.mode.clone();
         self.state.settings.background_effect = item.theme.background_effect.clone();
         save_state(&self.state);
         info!(theme = %item.name, "theme selected");
@@ -1416,6 +1427,24 @@ impl Worker {
                 )));
             }
         }
+    }
+
+    fn move_layout_item(&mut self, item: &str, direction: &str) {
+        let mut layout = self.state.settings.layout.clone();
+        layout.move_item(item, direction);
+        layout.normalize();
+        self.state.settings.layout = layout;
+        save_state(&self.state);
+        self.emit(Event::Layout(self.state.settings.layout.clone()));
+        self.emit(Event::SettingsStatus("Layout обновлён".into()));
+    }
+
+    fn save_layout(&mut self, mut layout: LayoutConfig) {
+        layout.normalize();
+        self.state.settings.layout = layout;
+        save_state(&self.state);
+        self.emit(Event::Layout(self.state.settings.layout.clone()));
+        self.emit(Event::SettingsStatus("Layout сохранён".into()));
     }
 
     async fn enter_offline(&mut self) {

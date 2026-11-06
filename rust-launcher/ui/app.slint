@@ -8,6 +8,7 @@ import "../assets/fonts/Nunito-Bold.ttf";
 // Active visual theme. Rust overwrites these tokens at startup and whenever a
 // theme is selected; the literals here are only the dark defaults.
 export global Theme {
+    in-out property <string> mode: "base";
     in-out property <color> background: #0d0d10;
     in-out property <color> background-alt: #09090c;
     in-out property <color> surface: #16161c;
@@ -26,6 +27,24 @@ export global Theme {
     in-out property <color> shadow: #00000080;
     in-out property <color> scrim: #00000000;
 
+    in-out property <color> primary-container: #4a044e;
+    in-out property <color> on-primary-container: #f5d0fe;
+    in-out property <color> secondary: #c084fc;
+    in-out property <color> on-secondary: #1a0a20;
+    in-out property <color> tertiary: #f472b6;
+    in-out property <color> on-tertiary: #2a0a18;
+    in-out property <color> surface-low: #101015;
+    in-out property <color> surface-high: #202029;
+    in-out property <color> surface-variant: #26262e;
+    in-out property <color> on-surface-variant: #c4c4cf;
+    in-out property <color> outline: #4a4a55;
+    in-out property <color> error: #f87171;
+    in-out property <color> on-error: #2a0a0a;
+
+    in-out property <color> glass-tint: #ffffff14;
+    in-out property <color> glass-border: #ffffff2e;
+    in-out property <color> glass-highlight: #ffffff1f;
+
     in-out property <length> radius-xs: 3px;
     in-out property <length> radius-sm: 8px;
     in-out property <length> radius-md: 11px;
@@ -36,6 +55,57 @@ export global Theme {
     in-out property <string> font-family: "Nunito";
     in-out property <int> base-font-weight: 600;
     in-out property <string> background-effect: "none";
+}
+
+// User-facing strings a theme may override. Critical errors and window
+// controls deliberately stay in the launcher.
+export global Texts {
+    in-out property <string> app-title: "Vestalis Launcher";
+    in-out property <string> app-subtitle: "Femboy";
+    in-out property <string> login-title: "Вход в аккаунт";
+    in-out property <string> login-subtitle: "Войдите, чтобы играть на серверах Vestalis";
+    in-out property <string> login-submit: "Войти";
+    in-out property <string> login-offline: "Оффлайн-режим";
+    in-out property <string> play: "Играть";
+    in-out property <string> settings: "Настройки";
+    in-out property <string> logout: "Выйти";
+    in-out property <string> refresh: "Обновить";
+    in-out property <string> mods: "Моды";
+    in-out property <string> profiles: "ПРОФИЛИ";
+    in-out property <string> news: "НОВОСТИ";
+    in-out property <string> settings-title: "Настройки";
+    in-out property <string> back: "← Назад";
+}
+
+// Optional theme icons. When a theme does not provide one, the launcher draws
+// its built-in vector icon.
+export global ThemeIcons {
+    in-out property <image> server;
+    in-out property <bool> has-server: false;
+    in-out property <image> chevron;
+    in-out property <bool> has-chevron: false;
+    in-out property <image> play;
+    in-out property <bool> has-play: false;
+    in-out property <image> settings;
+    in-out property <bool> has-settings: false;
+    in-out property <image> mods;
+    in-out property <bool> has-mods: false;
+    in-out property <image> refresh;
+    in-out property <bool> has-refresh: false;
+    in-out property <image> minimize;
+    in-out property <bool> has-minimize: false;
+    in-out property <image> maximize;
+    in-out property <bool> has-maximize: false;
+    in-out property <image> restore;
+    in-out property <bool> has-restore: false;
+    in-out property <image> close;
+    in-out property <bool> has-close: false;
+    in-out property <image> warning;
+    in-out property <bool> has-warning: false;
+    in-out property <image> error;
+    in-out property <bool> has-error: false;
+    in-out property <image> success;
+    in-out property <bool> has-success: false;
 }
 
 
@@ -137,19 +207,64 @@ component BackgroundEffect inherits Rectangle {
     }
 }
 
+// Soft colour fields behind Liquid Glass panels. Slint cannot blur the actual
+// backdrop, so these blurred blobs provide the colour bleed that makes the
+// translucent panels read as glass.
+component GlassBackdrop inherits Rectangle {
+    Rectangle {
+        x: parent.width * 0.05;
+        y: parent.height * 0.10;
+        width: 340px;
+        height: 340px;
+        border-radius: Theme.radius-pill;
+        background: Theme.gradient-start.with-alpha(0.30);
+        drop-shadow-blur: 130px;
+        drop-shadow-color: Theme.gradient-start.with-alpha(0.55);
+    }
+    Rectangle {
+        x: parent.width * 0.62;
+        y: parent.height * 0.42;
+        width: 420px;
+        height: 420px;
+        border-radius: Theme.radius-pill;
+        background: Theme.gradient-end.with-alpha(0.28);
+        drop-shadow-blur: 150px;
+        drop-shadow-color: Theme.gradient-end.with-alpha(0.50);
+    }
+    Rectangle {
+        x: parent.width * 0.35;
+        y: parent.height * 0.65;
+        width: 280px;
+        height: 280px;
+        border-radius: Theme.radius-pill;
+        background: Theme.tertiary.with-alpha(0.18);
+        drop-shadow-blur: 120px;
+        drop-shadow-color: Theme.tertiary.with-alpha(0.35);
+    }
+}
+
 component ActionButton inherits Rectangle {
     in property <string> label;
     in property <bool> primary: false;
     in property <bool> available: true;
+    in property <image> icon;
+    in property <bool> has-icon: false;
     callback clicked();
 
     height: 44px;
     border-radius: Theme.radius-md;
     border-width: 1px;
-    border-color: !available ? Theme.border : (primary ? Theme.accent-hover : Theme.border);
+    border-color: !available
+        ? Theme.border
+        : Theme.mode == "liquid-glass"
+            ? Theme.glass-border
+            : (primary ? Theme.accent-hover : Theme.border);
     background: !available ? Theme.background-alt
-        : area.has-hover ? (primary ? Theme.accent-hover : Theme.surface-hover)
-        : (primary ? Theme.accent : Theme.surface);
+        : area.has-hover
+            ? (primary ? Theme.accent-hover : (Theme.mode == "liquid-glass" ? Theme.glass-highlight : Theme.surface-hover))
+            : (primary
+                ? (Theme.mode == "liquid-glass" ? Theme.accent.with-alpha(0.86) : Theme.accent)
+                : (Theme.mode == "liquid-glass" ? Theme.glass-tint : Theme.surface));
     animate background { duration: 130ms; easing: ease-out; }
 
     area := TouchArea {
@@ -158,12 +273,24 @@ component ActionButton inherits Rectangle {
         clicked => { root.clicked(); }
     }
 
+    if root.has-icon: Image {
+        x: 12px;
+        y: (parent.height - 16px) / 2;
+        width: 16px;
+        height: 16px;
+        source: root.icon;
+        image-fit: contain;
+    }
+
     Text {
+        x: root.has-icon ? 34px : 0;
+        width: root.has-icon ? parent.width - 40px : parent.width;
+        height: parent.height;
         text: root.label;
         color: root.available ? (root.primary ? Theme.accent-text : Theme.text) : Theme.text-muted;
         font-size: 14px;
         font-weight: 600;
-        horizontal-alignment: center;
+        horizontal-alignment: root.has-icon ? left : center;
         vertical-alignment: center;
     }
 }
@@ -177,9 +304,11 @@ component TextField inherits Rectangle {
 
     height: 46px;
     border-radius: Theme.radius-md;
-    background: Theme.background-alt;
+    background: Theme.mode == "liquid-glass" ? Theme.glass-tint : Theme.background-alt;
     border-width: 1px;
-    border-color: input.has-focus ? Theme.accent : Theme.border;
+    border-color: input.has-focus
+        ? Theme.accent
+        : (Theme.mode == "liquid-glass" ? Theme.glass-border : Theme.border);
 
     input := TextInput {
         x: 14px;
@@ -218,6 +347,8 @@ component TextField inherits Rectangle {
 
 component CaptionButton inherits Rectangle {
     in property <string> kind: "min";
+    in property <image> icon;
+    in property <bool> has-icon: false;
     callback clicked();
 
     width: 38px;
@@ -237,7 +368,16 @@ component CaptionButton inherits Rectangle {
         clicked => { root.clicked(); }
     }
 
-    if kind == "min": Rectangle {
+    if has-icon: Image {
+        x: (parent.width - 16px) / 2;
+        y: (parent.height - 16px) / 2;
+        width: 16px;
+        height: 16px;
+        source: root.icon;
+        image-fit: contain;
+    }
+
+    if !has-icon && kind == "min": Rectangle {
         width: 11px;
         height: 1.5px;
         x: (parent.width - 11px) / 2;
@@ -246,18 +386,18 @@ component CaptionButton inherits Rectangle {
         background: icon-color;
     }
 
-    if kind == "max": Rectangle {
+    if !has-icon && kind == "max": Rectangle {
         width: 10px;
         height: 10px;
         x: (parent.width - 10px) / 2;
         y: (parent.height - 10px) / 2;
         border-width: 1.5px;
         border-color: icon-color;
-        border-radius: 2px;
+        border-radius: Theme.radius-xs;
         background: transparent;
     }
 
-    if kind == "restore": Rectangle {
+    if !has-icon && kind == "restore": Rectangle {
         width: parent.width;
         height: parent.height;
 
@@ -268,7 +408,7 @@ component CaptionButton inherits Rectangle {
             y: (parent.height - 11px) / 2;
             border-width: 1.5px;
             border-color: icon-color;
-            border-radius: 2px;
+            border-radius: Theme.radius-xs;
             background: transparent;
         }
         Rectangle {
@@ -278,12 +418,12 @@ component CaptionButton inherits Rectangle {
             y: (parent.height - 11px) / 2 + 3px;
             border-width: 1.5px;
             border-color: icon-color;
-            border-radius: 2px;
+            border-radius: Theme.radius-xs;
             background: area.has-hover ? Theme.surface-hover : Theme.background-alt;
         }
     }
 
-    if kind == "close": Rectangle {
+    if !has-icon && kind == "close": Rectangle {
         width: 13px;
         height: 1.5px;
         x: (parent.width - 13px) / 2;
@@ -292,7 +432,7 @@ component CaptionButton inherits Rectangle {
         border-radius: Theme.radius-xs;
         background: icon-color;
     }
-    if kind == "close": Rectangle {
+    if !has-icon && kind == "close": Rectangle {
         width: 13px;
         height: 1.5px;
         x: (parent.width - 13px) / 2;
@@ -344,6 +484,486 @@ component ServerMenuItem inherits Rectangle {
     }
 }
 
+component MiniButton inherits Rectangle {
+    in property <string> label;
+    callback clicked();
+
+    width: 26px;
+    height: 24px;
+    border-radius: Theme.radius-sm;
+    background: area.has-hover ? Theme.surface-hover : transparent;
+
+    Text {
+        text: root.label;
+        color: Theme.text-muted;
+        font-size: 13px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    area := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component LayoutRow inherits Rectangle {
+    in property <string> item;
+    in property <bool> pinned: false;
+    callback move(string, string);
+
+    height: 34px;
+
+    Text {
+        x: 8px;
+        width: parent.width - 130px;
+        height: parent.height;
+        text: item == "server" ? "Выбор сервера"
+            : item == "user" ? "Карточка пользователя"
+            : item == "profiles" ? "Список профилей"
+            : item == "countdown" ? "Отсчёт «Недрочабрь»"
+            : item == "sidebar-actions" ? "Настройки / Выйти"
+            : item == "news" ? "Новости"
+            : item == "main-actions" ? "Играть / Обновить / Моды"
+            : item;
+        color: Theme.text;
+        font-size: 13px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    Text {
+        x: parent.width - 64px;
+        width: 58px;
+        height: parent.height;
+        text: root.pinned ? "закреплён" : "";
+        color: Theme.text-muted;
+        font-size: 12px;
+        horizontal-alignment: end;
+        vertical-alignment: center;
+    }
+
+    if !root.pinned: HorizontalLayout {
+        x: parent.width - 126px;
+        y: (parent.height - 24px) / 2;
+        spacing: 2px;
+        MiniButton { label: "←"; clicked => { root.move(root.item, "left"); } }
+        MiniButton { label: "↑"; clicked => { root.move(root.item, "up"); } }
+        MiniButton { label: "↓"; clicked => { root.move(root.item, "down"); } }
+        MiniButton { label: "→"; clicked => { root.move(root.item, "right"); } }
+    }
+}
+
+component LayoutZone inherits Rectangle {
+    in property <string> title;
+    in property <[string]> items;
+    callback move(string, string);
+
+    height: zone-layout.preferred-height + 20px;
+    border-radius: Theme.radius-md;
+    background: Theme.mode == "liquid-glass"
+        ? @linear-gradient(160deg, Theme.glass-highlight 0%, Theme.glass-tint 30%, Theme.glass-tint 100%)
+        : (Theme.mode == "material3" ? Theme.surface : Theme.surface.with-alpha(Theme.card-opacity));
+    border-width: 1px;
+    border-color: Theme.mode == "liquid-glass" ? Theme.glass-border : (Theme.mode == "material3" ? Theme.outline : Theme.border);
+    drop-shadow-blur: Theme.mode == "material3" ? 16px : (Theme.mode == "liquid-glass" ? 28px : 0px);
+    drop-shadow-offset-y: Theme.mode == "material3" ? 4px : (Theme.mode == "liquid-glass" ? 10px : 0px);
+    drop-shadow-color: Theme.shadow;
+    
+    Rectangle {
+        x: 12px;
+        y: 0;
+        width: parent.width - 24px;
+        height: 1px;
+        border-radius: Theme.radius-pill;
+        background: Theme.glass-highlight;
+        visible: Theme.mode == "liquid-glass";
+    }
+
+    zone-layout := VerticalLayout {
+        padding: 10px;
+        spacing: 2px;
+        Text { text: root.title; color: Theme.text; font-size: 14px; font-weight: 700; }
+        if root.items.length == 0: Text {
+            text: "пусто";
+            color: Theme.text-muted;
+            font-size: 13px;
+        }
+        for item in root.items: LayoutRow {
+            item: item;
+            pinned: item == "server";
+            move(i, direction) => { root.move(i, direction); }
+        }
+    }
+}
+
+component UserCard inherits Rectangle {
+    in property <string> name;
+    in property <string> host;
+    in property <string> initial;
+    in property <image> avatar;
+    in property <bool> has-avatar: false;
+
+    height: 64px;
+    border-radius: Theme.radius-md;
+    background: Theme.surface;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    HorizontalLayout {
+        padding: 10px;
+        spacing: 12px;
+        Rectangle {
+            width: 42px;
+            height: 42px;
+            border-radius: Theme.radius-md;
+            clip: true;
+            background: @linear-gradient(135deg, Theme.gradient-start 0%, Theme.gradient-end 100%);
+            Image {
+                source: root.avatar;
+                width: 100%;
+                height: 100%;
+                image-fit: cover;
+                visible: root.has-avatar;
+            }
+            Text {
+                text: root.initial;
+                color: Theme.accent-text;
+                font-size: 18px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                visible: !root.has-avatar;
+            }
+        }
+        VerticalLayout {
+            spacing: 2px;
+            alignment: center;
+            Text { text: root.name; color: Theme.text; font-size: 14px; font-weight: 600; }
+            Text { text: root.host; color: Theme.text-muted; font-size: 14px; overflow: elide; }
+        }
+    }
+}
+
+component ProfileList inherits VerticalLayout {
+    in property <[ProfileItem]> profiles;
+    in property <int> selected-index;
+    callback profile-clicked(int);
+
+    spacing: 8px;
+
+    Text {
+        text: Texts.profiles;
+        color: Theme.text-muted;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 1.4px;
+    }
+
+    ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            spacing: 6px;
+            for p in root.profiles: Rectangle {
+                height: 62px;
+                border-radius: Theme.radius-md;
+                background: p.id == root.selected-index ? Theme.accent.with-alpha(0.22)
+                    : row-area.has-hover ? Theme.surface-hover : transparent;
+                border-width: 1px;
+                border-color: p.id == root.selected-index ? Theme.accent : transparent;
+                animate background { duration: 140ms; easing: ease-out; }
+                animate border-color { duration: 140ms; }
+
+                row-area := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.profile-clicked(p.id); }
+                }
+
+                HorizontalLayout {
+                    padding: 8px;
+                    spacing: 10px;
+                    Rectangle {
+                        width: 44px;
+                        height: 44px;
+                        border-radius: Theme.radius-sm;
+                        background: Theme.surface-hover;
+                        clip: true;
+                        Text {
+                            text: p.initial;
+                            color: Theme.text-muted;
+                            font-size: 18px;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            visible: !p.has-icon;
+                        }
+                        Image {
+                            source: p.icon;
+                            width: 100%;
+                            height: 100%;
+                            image-fit: cover;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: 3px;
+                        alignment: center;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: p.display-name;
+                            color: Theme.text;
+                            font-size: 14px;
+                            font-weight: 600;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: p.subtitle;
+                            color: Theme.text-muted;
+                            font-size: 14px;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component CountdownCard inherits Rectangle {
+    in property <string> text;
+
+    height: 124px;
+    border-radius: Theme.radius-lg;
+    background: Theme.mode == "liquid-glass"
+        ? @linear-gradient(160deg, Theme.glass-highlight 0%, Theme.glass-tint 30%, Theme.glass-tint 100%)
+        : (Theme.mode == "material3" ? Theme.surface : Theme.surface.with-alpha(Theme.card-opacity));
+    border-width: 1px;
+    border-color: Theme.mode == "liquid-glass" ? Theme.glass-border : (Theme.mode == "material3" ? Theme.outline : Theme.border);
+    drop-shadow-blur: Theme.mode == "material3" ? 16px : (Theme.mode == "liquid-glass" ? 28px : 0px);
+    drop-shadow-offset-y: Theme.mode == "material3" ? 4px : (Theme.mode == "liquid-glass" ? 10px : 0px);
+    drop-shadow-color: Theme.shadow;
+    
+    Rectangle {
+        x: 12px;
+        y: 0;
+        width: parent.width - 24px;
+        height: 1px;
+        border-radius: Theme.radius-pill;
+        background: Theme.glass-highlight;
+        visible: Theme.mode == "liquid-glass";
+    }
+
+    HorizontalLayout {
+        padding: 10px;
+        spacing: 12px;
+        Rectangle {
+            width: 102px;
+            height: 104px;
+            border-radius: Theme.radius-md;
+            clip: true;
+            background: Theme.background-alt;
+            Image {
+                source: @image-url("../assets/nedrochabr.png");
+                width: 100%;
+                height: 100%;
+                image-fit: cover;
+            }
+        }
+        VerticalLayout {
+            spacing: 4px;
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: "НЕДРОЧАБРЬ";
+                color: Theme.accent-hover;
+                font-size: 13px;
+                font-weight: 700;
+                letter-spacing: 1.2px;
+            }
+            Text {
+                text: root.text;
+                color: Theme.text-muted;
+                font-size: 12px;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+component SidebarActions inherits HorizontalLayout {
+    callback settings-clicked();
+    callback logout-clicked();
+
+    spacing: 8px;
+    ActionButton {
+        label: Texts.settings;
+        icon: ThemeIcons.settings;
+        has-icon: ThemeIcons.has-settings;
+        clicked => { root.settings-clicked(); }
+    }
+    ActionButton {
+        label: Texts.logout;
+        clicked => { root.logout-clicked(); }
+    }
+}
+
+component NewsBlock inherits VerticalLayout {
+    in property <[NewsItem]> news;
+
+    spacing: 8px;
+    Text {
+        text: Texts.news;
+        color: Theme.text-muted;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 1.4px;
+    }
+    ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            spacing: 8px;
+            for n in root.news: Rectangle {
+                height: news-layout.preferred-height + 28px;
+                border-radius: Theme.radius-md;
+                background: Theme.mode == "liquid-glass"
+                    ? @linear-gradient(160deg, Theme.glass-highlight 0%, Theme.glass-tint 30%, Theme.glass-tint 100%)
+                    : (Theme.mode == "material3" ? Theme.surface : Theme.surface.with-alpha(Theme.card-opacity));
+                border-width: 1px;
+                border-color: Theme.mode == "liquid-glass" ? Theme.glass-border : (Theme.mode == "material3" ? Theme.outline : Theme.border);
+                drop-shadow-blur: Theme.mode == "material3" ? 16px : (Theme.mode == "liquid-glass" ? 28px : 0px);
+                drop-shadow-offset-y: Theme.mode == "material3" ? 4px : (Theme.mode == "liquid-glass" ? 10px : 0px);
+                drop-shadow-color: Theme.shadow;
+                
+                Rectangle {
+                    x: 12px;
+                    y: 0;
+                    width: parent.width - 24px;
+                    height: 1px;
+                    border-radius: Theme.radius-pill;
+                    background: Theme.glass-highlight;
+                    visible: Theme.mode == "liquid-glass";
+                }
+                news-layout := VerticalLayout {
+                    padding: 14px;
+                    spacing: 6px;
+                    Text { text: n.title; color: Theme.text; font-size: 14px; font-weight: 600; }
+                    Text { text: n.body; color: Theme.text-muted; font-size: 14px; wrap: word-wrap; }
+                    Text {
+                        text: n.date;
+                        color: Theme.text-muted;
+                        font-size: 14px;
+                        visible: !n.date.is-empty;
+                    }
+                }
+            }
+        }
+    }
+}
+
+component MainActions inherits HorizontalLayout {
+    in property <bool> can-play: false;
+    callback play-clicked();
+    callback refresh-clicked();
+    callback mods-clicked();
+
+    spacing: 14px;
+    ActionButton {
+        label: Texts.play;
+        primary: true;
+        available: root.can-play;
+        icon: ThemeIcons.play;
+        has-icon: ThemeIcons.has-play;
+        width: 220px;
+        height: 52px;
+        clicked => { root.play-clicked(); }
+    }
+    ActionButton {
+        label: Texts.refresh;
+        icon: ThemeIcons.refresh;
+        has-icon: ThemeIcons.has-refresh;
+        width: 130px;
+        height: 52px;
+        clicked => { root.refresh-clicked(); }
+    }
+    ActionButton {
+        label: Texts.mods;
+        icon: ThemeIcons.mods;
+        has-icon: ThemeIcons.has-mods;
+        width: 110px;
+        height: 52px;
+        clicked => { root.mods-clicked(); }
+    }
+    Rectangle { horizontal-stretch: 1; }
+}
+
+component ZoneItem inherits Rectangle {
+    in property <string> item;
+    in property <[ProfileItem]> profiles;
+    in property <int> selected-index;
+    in property <string> user-name;
+    in property <string> user-host;
+    in property <string> user-initial;
+    in property <image> user-avatar;
+    in property <bool> has-avatar: false;
+    in property <string> countdown-text;
+    in property <[NewsItem]> news;
+    in property <bool> can-play: false;
+    callback profile-clicked(int);
+    callback settings-clicked();
+    callback logout-clicked();
+    callback play-clicked();
+    callback refresh-clicked();
+    callback mods-clicked();
+
+    height: item == "user" ? 64px
+        : item == "profiles" ? 200px
+        : item == "countdown" ? 124px
+        : item == "sidebar-actions" ? 44px
+        : item == "news" ? 220px
+        : item == "main-actions" ? 52px
+        : 0px;
+
+    if item == "user": UserCard {
+        width: 100%;
+        height: 100%;
+        name: root.user-name;
+        host: root.user-host;
+        initial: root.user-initial;
+        avatar: root.user-avatar;
+        has-avatar: root.has-avatar;
+    }
+    if item == "profiles": ProfileList {
+        width: 100%;
+        height: 100%;
+        profiles: root.profiles;
+        selected-index: root.selected-index;
+        profile-clicked(id) => { root.profile-clicked(id); }
+    }
+    if item == "countdown": CountdownCard {
+        width: 100%;
+        height: 100%;
+        text: root.countdown-text;
+    }
+    if item == "sidebar-actions": SidebarActions {
+        width: 100%;
+        height: 100%;
+        settings-clicked => { root.settings-clicked(); }
+        logout-clicked => { root.logout-clicked(); }
+    }
+    if item == "news": NewsBlock {
+        width: 100%;
+        height: 100%;
+        news: root.news;
+    }
+    if item == "main-actions": MainActions {
+        width: 100%;
+        height: 100%;
+        can-play: root.can-play;
+        play-clicked => { root.play-clicked(); }
+        refresh-clicked => { root.refresh-clicked(); }
+        mods-clicked => { root.mods-clicked(); }
+    }
+}
+
 component Toggle inherits Rectangle {
     in-out property <bool> checked;
     callback toggled(bool);
@@ -373,7 +993,7 @@ component Toggle inherits Rectangle {
 }
 
 export component AppWindow inherits Window {
-    title: "Vestalis Launcher";
+    title: Texts.app-title;
     preferred-width: 1180px;
     preferred-height: 640px;
     min-width: 1080px;
@@ -408,6 +1028,13 @@ export component AppWindow inherits Window {
     in-out property <string> set-background-effect: "none";
     in-out property <[ThemeOption]> themes: [];
     in-out property <string> set-theme: "dark";
+    in-out property <string> set-theme-mode: "base";
+    in-out property <[string]> layout-sidebar-left: [];
+    in-out property <[string]> layout-sidebar-right: [];
+    in-out property <[string]> layout-header: [];
+    in-out property <[string]> layout-content-top: [];
+    in-out property <[string]> layout-content-bottom: [];
+    in-out property <[string]> layout-footer: [];
     in-out property <bool> server-menu-open: false;
     in-out property <bool> is-kydasay: false;
     in-out property <bool> startup-ready: false;
@@ -491,9 +1118,13 @@ export component AppWindow inherits Window {
     callback mirror-tor-toggled(bool);
     callback selftest-clicked();
     callback theme-clicked(string);
+    callback theme-mode-clicked(string);
+    callback refresh-accent-clicked();
     callback themes-refresh-clicked();
     callback themes-open-folder-clicked();
     callback theme-reset-clicked();
+    callback layout-move(string, string);
+    callback layout-reset-clicked();
     callback maximize-clicked();
 
     // =====================================================================
@@ -512,15 +1143,22 @@ export component AppWindow inherits Window {
             width: 100%;
             height: 100%;
             image-fit: cover;
-            opacity: 0.4;
+            opacity: Theme.mode == "liquid-glass" ? 0.65 : 0.4;
         }
 
         Rectangle {
-            background: @linear-gradient(180deg, Theme.background.with-alpha(0.8) 0%, Theme.background.with-alpha(0.94) 55%, Theme.background 100%);
+            background: Theme.mode == "liquid-glass"
+                ? @linear-gradient(180deg, Theme.gradient-start.with-alpha(0.22) 0%, Theme.background.with-alpha(0.50) 55%, Theme.background.with-alpha(0.72) 100%)
+                : @linear-gradient(180deg, Theme.background.with-alpha(0.8) 0%, Theme.background.with-alpha(0.94) 55%, Theme.background 100%);
         }
 
         if root.background-effect != "none": BackgroundEffect {
             kind: root.background-effect;
+            width: 100%;
+            height: 100%;
+        }
+
+        if Theme.mode == "liquid-glass": GlassBackdrop {
             width: 100%;
             height: 100%;
         }
@@ -567,13 +1205,13 @@ export component AppWindow inherits Window {
                         spacing: 12px;
 
                         Text {
-                            text: "Вход в аккаунт";
+                            text: Texts.login-title;
                             color: Theme.text;
                             font-size: 22px;
                             font-weight: 700;
                         }
                         Text {
-                            text: "Войдите, чтобы играть на серверах Vestalis";
+                            text: Texts.login-subtitle;
                             color: Theme.text-muted;
                             font-size: 14px;
                         }
@@ -634,13 +1272,13 @@ export component AppWindow inherits Window {
                         Rectangle { vertical-stretch: 1; }
 
                         ActionButton {
-                            label: root.busy ? "Подключение…" : "Войти";
+                            label: root.busy ? "Подключение…" : Texts.login-submit;
                             primary: true;
                             available: !root.busy;
                             clicked => { root.login-clicked(); }
                         }
                         ActionButton {
-                            label: "Оффлайн-режим";
+                            label: Texts.login-offline;
                             available: !root.busy;
                             clicked => { root.offline-clicked(); }
                         }
@@ -673,14 +1311,21 @@ export component AppWindow inherits Window {
             width: 100%;
             height: 100%;
             image-fit: cover;
-            opacity: 0.22;
+            opacity: Theme.mode == "liquid-glass" ? 0.5 : 0.22;
         }
         Rectangle {
-            background: @linear-gradient(120deg, Theme.background.with-alpha(0.96) 0%, Theme.background.with-alpha(0.85) 55%, Theme.background.with-alpha(0.95) 100%);
+            background: Theme.mode == "liquid-glass"
+                ? @linear-gradient(120deg, Theme.gradient-start.with-alpha(0.25) 0%, Theme.background.with-alpha(0.52) 55%, Theme.gradient-end.with-alpha(0.28) 100%)
+                : @linear-gradient(120deg, Theme.background.with-alpha(0.96) 0%, Theme.background.with-alpha(0.85) 55%, Theme.background.with-alpha(0.95) 100%);
         }
 
         if root.background-effect != "none": BackgroundEffect {
             kind: root.background-effect;
+            width: 100%;
+            height: 100%;
+        }
+
+        if Theme.mode == "liquid-glass": GlassBackdrop {
             width: 100%;
             height: 100%;
         }
@@ -691,7 +1336,7 @@ export component AppWindow inherits Window {
             // ---- sidebar ----
             Rectangle {
                 width: 316px;
-                background: Theme.background-alt.with-alpha(0.95);
+                background: Theme.mode == "liquid-glass" ? Theme.glass-tint : (Theme.mode == "material3" ? Theme.surface-low : Theme.background-alt.with-alpha(0.95));
                 border-width: 0px;
 
                 VerticalLayout {
@@ -713,194 +1358,35 @@ export component AppWindow inherits Window {
                             vertical-alignment: center;
                         }
                         Text {
-                            text: "Femboy";
+                            text: Texts.app-subtitle;
                             color: Theme.accent-hover;
                             font-size: 14px;
                             vertical-alignment: center;
                         }
                     }
 
-                    Rectangle {
-                        height: 64px;
-                        border-radius: Theme.radius-md;
-                        background: Theme.surface;
-                        border-width: 1px;
-                        border-color: Theme.border;
-                        HorizontalLayout {
-                            padding: 10px;
-                            spacing: 12px;
-                            Rectangle {
-                                width: 42px;
-                                height: 42px;
-                                border-radius: Theme.radius-md;
-                                clip: true;
-                                background: @linear-gradient(135deg, Theme.gradient-start 0%, Theme.gradient-end 100%);
-                                Image {
-                                    source: root.user-avatar;
-                                    width: 100%;
-                                    height: 100%;
-                                    image-fit: cover;
-                                    visible: root.has-avatar;
-                                }
-                                Text {
-                                    text: root.user-initial;
-                                    color: Theme.accent-text;
-                                    font-size: 18px;
-                                    font-weight: 700;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    visible: !root.has-avatar;
-                                }
-                            }
-                            VerticalLayout {
-                                spacing: 2px;
-                                alignment: center;
-                                Text {
-                                    text: root.user-name;
-                                    color: Theme.text;
-                                    font-size: 14px;
-                                    font-weight: 600;
-                                }
-                                Text {
-                                    text: root.server-host-label;
-                                    color: Theme.text-muted;
-                                    font-size: 14px;
-                                }
-                            }
-                        }
-                    }
-
-                    Text {
-                        text: "ПРОФИЛИ";
-                        color: Theme.text-muted;
-                        font-size: 14px;
-                        font-weight: 700;
-                        letter-spacing: 1.4px;
-                    }
-
-                    ScrollView {
+                    VerticalLayout {
                         vertical-stretch: 1;
-                        VerticalLayout {
-                            spacing: 6px;
-                            for p in root.profiles: Rectangle {
-                                height: 62px;
-                                border-radius: Theme.radius-md;
-                                background: p.id == root.selected-index ? Theme.accent.with-alpha(0.22)
-                                    : row-area.has-hover ? Theme.surface-hover : transparent;
-                                border-width: 1px;
-                                border-color: p.id == root.selected-index ? Theme.accent : transparent;
-                                animate background { duration: 140ms; easing: ease-out; }
-                                animate border-color { duration: 140ms; }
-
-                                row-area := TouchArea {
-                                    mouse-cursor: pointer;
-                                    clicked => { root.profile-clicked(p.id); }
-                                }
-
-                                HorizontalLayout {
-                                    padding: 8px;
-                                    spacing: 10px;
-                                    Rectangle {
-                                        width: 44px;
-                                        height: 44px;
-                                        border-radius: Theme.radius-sm;
-                                        background: Theme.surface-hover;
-                                        clip: true;
-                                        Text {
-                                            text: p.initial;
-                                            color: Theme.text-muted;
-                                            font-size: 18px;
-                                            font-weight: 700;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                            visible: !p.has-icon;
-                                        }
-                                        Image {
-                                            source: p.icon;
-                                            width: 100%;
-                                            height: 100%;
-                                            image-fit: cover;
-                                        }
-                                    }
-                                    VerticalLayout {
-                                        spacing: 3px;
-                                        alignment: center;
-                                        horizontal-stretch: 1;
-                                        Text {
-                                            text: p.display-name;
-                                            color: p.id == root.selected-index ? Theme.text : Theme.text;
-                                            font-size: 14px;
-                                            font-weight: 600;
-                                            overflow: elide;
-                                        }
-                                        Text {
-                                            text: p.subtitle;
-                                            color: Theme.text-muted;
-                                            font-size: 14px;
-                                            overflow: elide;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        height: 124px;
-                        border-radius: Theme.radius-lg;
-                        background: Theme.surface.with-alpha(Theme.card-opacity);
-                        border-width: 1px;
-                        border-color: Theme.border;
-
-                        HorizontalLayout {
-                            padding: 10px;
-                            spacing: 12px;
-
-                            Rectangle {
-                                width: 102px;
-                                height: 104px;
-                                border-radius: Theme.radius-md;
-                                clip: true;
-                                background: Theme.background-alt;
-
-                                Image {
-                                    source: @image-url("../assets/nedrochabr.png");
-                                    width: 100%;
-                                    height: 100%;
-                                    image-fit: cover;
-                                }
-                            }
-
-                            VerticalLayout {
-                                spacing: 4px;
-                                alignment: center;
-                                horizontal-stretch: 1;
-                                Text {
-                                    text: "НЕДРОЧАБРЬ";
-                                    color: Theme.accent-hover;
-                                    font-size: 13px;
-                                    font-weight: 700;
-                                    letter-spacing: 1.2px;
-                                }
-                                Text {
-                                    text: root.countdown-text;
-                                    color: Theme.text-muted;
-                                    font-size: 12px;
-                                    wrap: word-wrap;
-                                }
-                            }
-                        }
-                    }
-
-                    HorizontalLayout {
-                        spacing: 8px;
-                        ActionButton {
-                            label: "Настройки";
-                            clicked => { root.settings-clicked(); }
-                        }
-                        ActionButton {
-                            label: "Выйти";
-                            clicked => { root.logout-clicked(); }
+                        spacing: 14px;
+                        for item in root.layout-sidebar-left: ZoneItem {
+                            item: item;
+                            vertical-stretch: item == "profiles" ? 1 : 0;
+                            profiles: root.profiles;
+                            selected-index: root.selected-index;
+                            user-name: root.user-name;
+                            user-host: root.server-host-label;
+                            user-initial: root.user-initial;
+                            user-avatar: root.user-avatar;
+                            has-avatar: root.has-avatar;
+                            countdown-text: root.countdown-text;
+                            news: root.news;
+                            can-play: root.can-play;
+                            profile-clicked(id) => { root.profile-clicked(id); }
+                            settings-clicked => { root.settings-clicked(); }
+                            logout-clicked => { root.logout-clicked(); }
+                            play-clicked => { root.play-clicked(); }
+                            refresh-clicked => { root.refresh-clicked(); }
+                            mods-clicked => { root.mods-clicked(); }
                         }
                     }
                 }
@@ -908,9 +1394,29 @@ export component AppWindow inherits Window {
 
             // ---- content ----
             VerticalLayout {
-                width: root.width - 316px;
+                horizontal-stretch: 1;
                 padding: 28px;
                 spacing: 12px;
+
+                for item in root.layout-header: ZoneItem {
+                    item: item;
+                    profiles: root.profiles;
+                    selected-index: root.selected-index;
+                    user-name: root.user-name;
+                    user-host: root.server-host-label;
+                    user-initial: root.user-initial;
+                    user-avatar: root.user-avatar;
+                    has-avatar: root.has-avatar;
+                    countdown-text: root.countdown-text;
+                    news: root.news;
+                    can-play: root.can-play;
+                    profile-clicked(id) => { root.profile-clicked(id); }
+                    settings-clicked => { root.settings-clicked(); }
+                    logout-clicked => { root.logout-clicked(); }
+                    play-clicked => { root.play-clicked(); }
+                    refresh-clicked => { root.refresh-clicked(); }
+                    mods-clicked => { root.mods-clicked(); }
+                }
 
                 HorizontalLayout {
                     spacing: 8px;
@@ -994,48 +1500,28 @@ export component AppWindow inherits Window {
 
                 Rectangle { height: 8px; }
 
-                Text {
-                    text: "НОВОСТИ";
-                    color: Theme.text-muted;
-                    font-size: 14px;
-                    font-weight: 700;
-                    letter-spacing: 1.4px;
-                }
-
-                ScrollView {
+                VerticalLayout {
                     vertical-stretch: 1;
-                    VerticalLayout {
-                        spacing: 8px;
-                        for n in root.news: Rectangle {
-                            height: news-layout.preferred-height + 28px;
-                            border-radius: Theme.radius-md;
-                            background: Theme.surface.with-alpha(Theme.card-opacity);
-                            border-width: 1px;
-                            border-color: Theme.border;
-
-                            news-layout := VerticalLayout {
-                                padding: 14px;
-                                spacing: 6px;
-                                Text {
-                                    text: n.title;
-                                    color: Theme.text;
-                                    font-size: 14px;
-                                    font-weight: 600;
-                                }
-                                Text {
-                                    text: n.body;
-                                    color: Theme.text-muted;
-                                    font-size: 14px;
-                                    wrap: word-wrap;
-                                }
-                                Text {
-                                    text: n.date;
-                                    color: Theme.text-muted;
-                                    font-size: 14px;
-                                    visible: !n.date.is-empty;
-                                }
-                            }
-                        }
+                    spacing: 12px;
+                    for item in root.layout-content-top: ZoneItem {
+                        item: item;
+                        vertical-stretch: item == "news" ? 1 : 0;
+                        profiles: root.profiles;
+                        selected-index: root.selected-index;
+                        user-name: root.user-name;
+                        user-host: root.server-host-label;
+                        user-initial: root.user-initial;
+                        user-avatar: root.user-avatar;
+                        has-avatar: root.has-avatar;
+                        countdown-text: root.countdown-text;
+                        news: root.news;
+                        can-play: root.can-play;
+                        profile-clicked(id) => { root.profile-clicked(id); }
+                        settings-clicked => { root.settings-clicked(); }
+                        logout-clicked => { root.logout-clicked(); }
+                        play-clicked => { root.play-clicked(); }
+                        refresh-clicked => { root.refresh-clicked(); }
+                        mods-clicked => { root.mods-clicked(); }
                     }
                 }
 
@@ -1094,29 +1580,74 @@ export component AppWindow inherits Window {
 
                 Rectangle { height: 2px; }
 
-                HorizontalLayout {
+                for item in root.layout-content-bottom: ZoneItem {
+                    item: item;
+                        profiles: root.profiles;
+                        selected-index: root.selected-index;
+                        user-name: root.user-name;
+                        user-host: root.server-host-label;
+                        user-initial: root.user-initial;
+                        user-avatar: root.user-avatar;
+                        has-avatar: root.has-avatar;
+                        countdown-text: root.countdown-text;
+                        news: root.news;
+                        can-play: root.can-play;
+                        profile-clicked(id) => { root.profile-clicked(id); }
+                        settings-clicked => { root.settings-clicked(); }
+                        logout-clicked => { root.logout-clicked(); }
+                        play-clicked => { root.play-clicked(); }
+                        refresh-clicked => { root.refresh-clicked(); }
+                        mods-clicked => { root.mods-clicked(); }
+                }
+                for item in root.layout-footer: ZoneItem {
+                    item: item;
+                        profiles: root.profiles;
+                        selected-index: root.selected-index;
+                        user-name: root.user-name;
+                        user-host: root.server-host-label;
+                        user-initial: root.user-initial;
+                        user-avatar: root.user-avatar;
+                        has-avatar: root.has-avatar;
+                        countdown-text: root.countdown-text;
+                        news: root.news;
+                        can-play: root.can-play;
+                        profile-clicked(id) => { root.profile-clicked(id); }
+                        settings-clicked => { root.settings-clicked(); }
+                        logout-clicked => { root.logout-clicked(); }
+                        play-clicked => { root.play-clicked(); }
+                        refresh-clicked => { root.refresh-clicked(); }
+                        mods-clicked => { root.mods-clicked(); }
+                }
+            }
+
+            if root.layout-sidebar-right.length > 0: Rectangle {
+                width: 300px;
+                background: Theme.mode == "liquid-glass" ? Theme.glass-tint : (Theme.mode == "material3" ? Theme.surface-low : Theme.background-alt.with-alpha(0.95));
+                border-width: 0px;
+
+                VerticalLayout {
+                    padding: 20px;
                     spacing: 14px;
-                    ActionButton {
-                        label: "Играть";
-                        primary: true;
-                        available: root.can-play;
-                        width: 220px;
-                        height: 52px;
-                        clicked => { root.play-clicked(); }
+                    for item in root.layout-sidebar-right: ZoneItem {
+                        item: item;
+                        vertical-stretch: item == "profiles" ? 1 : 0;
+                        profiles: root.profiles;
+                        selected-index: root.selected-index;
+                        user-name: root.user-name;
+                        user-host: root.server-host-label;
+                        user-initial: root.user-initial;
+                        user-avatar: root.user-avatar;
+                        has-avatar: root.has-avatar;
+                        countdown-text: root.countdown-text;
+                        news: root.news;
+                        can-play: root.can-play;
+                        profile-clicked(id) => { root.profile-clicked(id); }
+                        settings-clicked => { root.settings-clicked(); }
+                        logout-clicked => { root.logout-clicked(); }
+                        play-clicked => { root.play-clicked(); }
+                        refresh-clicked => { root.refresh-clicked(); }
+                        mods-clicked => { root.mods-clicked(); }
                     }
-                    ActionButton {
-                        label: "Обновить";
-                        width: 130px;
-                        height: 52px;
-                        clicked => { root.refresh-clicked(); }
-                    }
-                    ActionButton {
-                        label: "Моды";
-                        width: 110px;
-                        height: 52px;
-                        clicked => { root.mods-clicked(); }
-                    }
-                    Rectangle { horizontal-stretch: 1; }
                 }
             }
         }
@@ -1134,6 +1665,11 @@ export component AppWindow inherits Window {
         animate opacity { duration: 180ms; easing: ease-out; }
         background: Theme.background;
 
+        if Theme.mode == "liquid-glass": GlassBackdrop {
+            width: 100%;
+            height: 100%;
+        }
+
         VerticalLayout {
             padding: 24px;
             spacing: 16px;
@@ -1141,12 +1677,12 @@ export component AppWindow inherits Window {
             HorizontalLayout {
                 spacing: 12px;
                 ActionButton {
-                    label: "← Назад";
+                    label: Texts.back;
                     width: 120px;
                     clicked => { root.back-clicked(); }
                 }
                 Text {
-                    text: "Настройки";
+                    text: Texts.settings-title;
                     color: Theme.text;
                     font-size: 26px;
                     font-weight: 700;
@@ -1174,9 +1710,24 @@ export component AppWindow inherits Window {
 
                         Rectangle {
                             border-radius: Theme.radius-lg;
-                            background: Theme.surface.with-alpha(Theme.card-opacity);
+                            background: Theme.mode == "liquid-glass"
+                                ? @linear-gradient(160deg, Theme.glass-highlight 0%, Theme.glass-tint 30%, Theme.glass-tint 100%)
+                                : (Theme.mode == "material3" ? Theme.surface : Theme.surface.with-alpha(Theme.card-opacity));
                             border-width: 1px;
-                            border-color: Theme.border;
+                            border-color: Theme.mode == "liquid-glass" ? Theme.glass-border : (Theme.mode == "material3" ? Theme.outline : Theme.border);
+                            drop-shadow-blur: Theme.mode == "material3" ? 16px : (Theme.mode == "liquid-glass" ? 28px : 0px);
+                            drop-shadow-offset-y: Theme.mode == "material3" ? 4px : (Theme.mode == "liquid-glass" ? 10px : 0px);
+                            drop-shadow-color: Theme.shadow;
+                            
+                            Rectangle {
+                                x: 12px;
+                                y: 0;
+                                width: parent.width - 24px;
+                                height: 1px;
+                                border-radius: Theme.radius-pill;
+                                background: Theme.glass-highlight;
+                                visible: Theme.mode == "liquid-glass";
+                            }
                             height: ram-layout.preferred-height + 40px;
 
                             ram-layout := VerticalLayout {
@@ -1226,9 +1777,24 @@ export component AppWindow inherits Window {
 
                         Rectangle {
                             border-radius: Theme.radius-lg;
-                            background: Theme.surface.with-alpha(Theme.card-opacity);
+                            background: Theme.mode == "liquid-glass"
+                                ? @linear-gradient(160deg, Theme.glass-highlight 0%, Theme.glass-tint 30%, Theme.glass-tint 100%)
+                                : (Theme.mode == "material3" ? Theme.surface : Theme.surface.with-alpha(Theme.card-opacity));
                             border-width: 1px;
-                            border-color: Theme.border;
+                            border-color: Theme.mode == "liquid-glass" ? Theme.glass-border : (Theme.mode == "material3" ? Theme.outline : Theme.border);
+                            drop-shadow-blur: Theme.mode == "material3" ? 16px : (Theme.mode == "liquid-glass" ? 28px : 0px);
+                            drop-shadow-offset-y: Theme.mode == "material3" ? 4px : (Theme.mode == "liquid-glass" ? 10px : 0px);
+                            drop-shadow-color: Theme.shadow;
+                            
+                            Rectangle {
+                                x: 12px;
+                                y: 0;
+                                width: parent.width - 24px;
+                                height: 1px;
+                                border-radius: Theme.radius-pill;
+                                background: Theme.glass-highlight;
+                                visible: Theme.mode == "liquid-glass";
+                            }
                             height: jvm-layout.preferred-height + 40px;
 
                             jvm-layout := VerticalLayout {
@@ -1256,9 +1822,24 @@ export component AppWindow inherits Window {
 
                         Rectangle {
                             border-radius: Theme.radius-lg;
-                            background: Theme.surface.with-alpha(Theme.card-opacity);
+                            background: Theme.mode == "liquid-glass"
+                                ? @linear-gradient(160deg, Theme.glass-highlight 0%, Theme.glass-tint 30%, Theme.glass-tint 100%)
+                                : (Theme.mode == "material3" ? Theme.surface : Theme.surface.with-alpha(Theme.card-opacity));
                             border-width: 1px;
-                            border-color: Theme.border;
+                            border-color: Theme.mode == "liquid-glass" ? Theme.glass-border : (Theme.mode == "material3" ? Theme.outline : Theme.border);
+                            drop-shadow-blur: Theme.mode == "material3" ? 16px : (Theme.mode == "liquid-glass" ? 28px : 0px);
+                            drop-shadow-offset-y: Theme.mode == "material3" ? 4px : (Theme.mode == "liquid-glass" ? 10px : 0px);
+                            drop-shadow-color: Theme.shadow;
+                            
+                            Rectangle {
+                                x: 12px;
+                                y: 0;
+                                width: parent.width - 24px;
+                                height: 1px;
+                                border-radius: Theme.radius-pill;
+                                background: Theme.glass-highlight;
+                                visible: Theme.mode == "liquid-glass";
+                            }
                             height: window-layout.preferred-height + 40px;
 
                             window-layout := VerticalLayout {
@@ -1301,9 +1882,24 @@ export component AppWindow inherits Window {
 
                         Rectangle {
                             border-radius: Theme.radius-lg;
-                            background: Theme.surface.with-alpha(Theme.card-opacity);
+                            background: Theme.mode == "liquid-glass"
+                                ? @linear-gradient(160deg, Theme.glass-highlight 0%, Theme.glass-tint 30%, Theme.glass-tint 100%)
+                                : (Theme.mode == "material3" ? Theme.surface : Theme.surface.with-alpha(Theme.card-opacity));
                             border-width: 1px;
-                            border-color: Theme.border;
+                            border-color: Theme.mode == "liquid-glass" ? Theme.glass-border : (Theme.mode == "material3" ? Theme.outline : Theme.border);
+                            drop-shadow-blur: Theme.mode == "material3" ? 16px : (Theme.mode == "liquid-glass" ? 28px : 0px);
+                            drop-shadow-offset-y: Theme.mode == "material3" ? 4px : (Theme.mode == "liquid-glass" ? 10px : 0px);
+                            drop-shadow-color: Theme.shadow;
+                            
+                            Rectangle {
+                                x: 12px;
+                                y: 0;
+                                width: parent.width - 24px;
+                                height: 1px;
+                                border-radius: Theme.radius-pill;
+                                background: Theme.glass-highlight;
+                                visible: Theme.mode == "liquid-glass";
+                            }
                             height: launcher-layout.preferred-height + 40px;
 
                             launcher-layout := VerticalLayout {
@@ -1371,9 +1967,24 @@ export component AppWindow inherits Window {
 
                         Rectangle {
                             border-radius: Theme.radius-lg;
-                            background: Theme.surface.with-alpha(Theme.card-opacity);
+                            background: Theme.mode == "liquid-glass"
+                                ? @linear-gradient(160deg, Theme.glass-highlight 0%, Theme.glass-tint 30%, Theme.glass-tint 100%)
+                                : (Theme.mode == "material3" ? Theme.surface : Theme.surface.with-alpha(Theme.card-opacity));
                             border-width: 1px;
-                            border-color: Theme.border;
+                            border-color: Theme.mode == "liquid-glass" ? Theme.glass-border : (Theme.mode == "material3" ? Theme.outline : Theme.border);
+                            drop-shadow-blur: Theme.mode == "material3" ? 16px : (Theme.mode == "liquid-glass" ? 28px : 0px);
+                            drop-shadow-offset-y: Theme.mode == "material3" ? 4px : (Theme.mode == "liquid-glass" ? 10px : 0px);
+                            drop-shadow-color: Theme.shadow;
+                            
+                            Rectangle {
+                                x: 12px;
+                                y: 0;
+                                width: parent.width - 24px;
+                                height: 1px;
+                                border-radius: Theme.radius-pill;
+                                background: Theme.glass-highlight;
+                                visible: Theme.mode == "liquid-glass";
+                            }
                             height: theme-layout.preferred-height + 40px;
 
                             theme-layout := VerticalLayout {
@@ -1385,6 +1996,50 @@ export component AppWindow inherits Window {
                                     color: Theme.text-muted;
                                     font-size: 14px;
                                     wrap: word-wrap;
+                                }
+
+                                Text { text: "Режим оформления"; color: Theme.text-muted; font-size: 14px; }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    ActionButton {
+                                        label: "Base";
+                                        primary: root.set-theme-mode == "base";
+                                        width: 110px;
+                                        height: 36px;
+                                        clicked => { root.set-theme-mode = "base"; root.theme-mode-clicked("base"); }
+                                    }
+                                    ActionButton {
+                                        label: "Material 3";
+                                        primary: root.set-theme-mode == "material3";
+                                        width: 140px;
+                                        height: 36px;
+                                        clicked => { root.set-theme-mode = "material3"; root.theme-mode-clicked("material3"); }
+                                    }
+                                    ActionButton {
+                                        label: "Liquid Glass";
+                                        primary: root.set-theme-mode == "liquid-glass";
+                                        width: 150px;
+                                        height: 36px;
+                                        clicked => { root.set-theme-mode = "liquid-glass"; root.theme-mode-clicked("liquid-glass"); }
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    Text {
+                                        text: "Material 3 использует цвет Windows; при недоступности — accent темы.";
+                                        color: Theme.text-muted;
+                                        font-size: 13px;
+                                        vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                        wrap: word-wrap;
+                                    }
+                                    ActionButton {
+                                        label: "Взять цвет Windows";
+                                        width: 190px;
+                                        height: 36px;
+                                        clicked => { root.refresh-accent-clicked(); }
+                                    }
                                 }
 
                                 for t in root.themes: Rectangle {
@@ -1475,11 +2130,97 @@ export component AppWindow inherits Window {
                         }
 
                         Rectangle {
+                            border-radius: Theme.radius-lg;
+                            background: Theme.mode == "liquid-glass"
+                                ? @linear-gradient(160deg, Theme.glass-highlight 0%, Theme.glass-tint 30%, Theme.glass-tint 100%)
+                                : (Theme.mode == "material3" ? Theme.surface : Theme.surface.with-alpha(Theme.card-opacity));
+                            border-width: 1px;
+                            border-color: Theme.mode == "liquid-glass" ? Theme.glass-border : (Theme.mode == "material3" ? Theme.outline : Theme.border);
+                            drop-shadow-blur: Theme.mode == "material3" ? 16px : (Theme.mode == "liquid-glass" ? 28px : 0px);
+                            drop-shadow-offset-y: Theme.mode == "material3" ? 4px : (Theme.mode == "liquid-glass" ? 10px : 0px);
+                            drop-shadow-color: Theme.shadow;
+                            
+                            Rectangle {
+                                x: 12px;
+                                y: 0;
+                                width: parent.width - 24px;
+                                height: 1px;
+                                border-radius: Theme.radius-pill;
+                                background: Theme.glass-highlight;
+                                visible: Theme.mode == "liquid-glass";
+                            }
+                            height: layout-card.preferred-height + 40px;
+
+                            layout-card := VerticalLayout {
+                                padding: 20px;
+                                spacing: 8px;
+                                Text { text: "Layout"; color: Theme.text; font-size: 17px; font-weight: 700; }
+                                Text {
+                                    text: "Зоны главного экрана. Стрелки перемещают блок внутри зоны и между зонами; выбор сервера закреплён в шапке.";
+                                    color: Theme.text-muted;
+                                    font-size: 14px;
+                                    wrap: word-wrap;
+                                }
+                                LayoutZone {
+                                    title: "Левый сайдбар";
+                                    items: root.layout-sidebar-left;
+                                    move(i, direction) => { root.layout-move(i, direction); }
+                                }
+                                LayoutZone {
+                                    title: "Правый сайдбар";
+                                    items: root.layout-sidebar-right;
+                                    move(i, direction) => { root.layout-move(i, direction); }
+                                }
+                                LayoutZone {
+                                    title: "Шапка";
+                                    items: root.layout-header;
+                                    move(i, direction) => { root.layout-move(i, direction); }
+                                }
+                                LayoutZone {
+                                    title: "Верх контента";
+                                    items: root.layout-content-top;
+                                    move(i, direction) => { root.layout-move(i, direction); }
+                                }
+                                LayoutZone {
+                                    title: "Низ контента";
+                                    items: root.layout-content-bottom;
+                                    move(i, direction) => { root.layout-move(i, direction); }
+                                }
+                                LayoutZone {
+                                    title: "Подвал";
+                                    items: root.layout-footer;
+                                    move(i, direction) => { root.layout-move(i, direction); }
+                                }
+                                ActionButton {
+                                    label: "Сбросить layout";
+                                    width: 190px;
+                                    height: 38px;
+                                    clicked => { root.layout-reset-clicked(); }
+                                }
+                            }
+                        }
+
+                        Rectangle {
                             visible: root.server-index == 3 && root.is-kydasay;
                             border-radius: Theme.radius-lg;
-                            background: Theme.surface.with-alpha(Theme.card-opacity);
+                            background: Theme.mode == "liquid-glass"
+                                ? @linear-gradient(160deg, Theme.glass-highlight 0%, Theme.glass-tint 30%, Theme.glass-tint 100%)
+                                : (Theme.mode == "material3" ? Theme.surface : Theme.surface.with-alpha(Theme.card-opacity));
                             border-width: 1px;
-                            border-color: Theme.border;
+                            border-color: Theme.mode == "liquid-glass" ? Theme.glass-border : (Theme.mode == "material3" ? Theme.outline : Theme.border);
+                            drop-shadow-blur: Theme.mode == "material3" ? 16px : (Theme.mode == "liquid-glass" ? 28px : 0px);
+                            drop-shadow-offset-y: Theme.mode == "material3" ? 4px : (Theme.mode == "liquid-glass" ? 10px : 0px);
+                            drop-shadow-color: Theme.shadow;
+                            
+                            Rectangle {
+                                x: 12px;
+                                y: 0;
+                                width: parent.width - 24px;
+                                height: 1px;
+                                border-radius: Theme.radius-pill;
+                                background: Theme.glass-highlight;
+                                visible: Theme.mode == "liquid-glass";
+                            }
                             height: mirror-layout.preferred-height + 40px;
 
                             mirror-layout := VerticalLayout {
@@ -1652,7 +2393,7 @@ export component AppWindow inherits Window {
             HorizontalLayout {
                 spacing: 12px;
                 ActionButton {
-                    label: "← Назад";
+                    label: Texts.back;
                     width: 120px;
                     clicked => { root.back-clicked(); }
                 }
@@ -1812,7 +2553,7 @@ export component AppWindow inherits Window {
         y: 0;
         width: 100%;
         height: 42px;
-        background: Theme.background-alt.with-alpha(0.96);
+        background: Theme.mode == "liquid-glass" ? Theme.glass-tint : (Theme.mode == "material3" ? Theme.surface : Theme.background-alt.with-alpha(0.96));
         border-width: 0px;
 
         WindowMoveArea { }
@@ -1824,7 +2565,7 @@ export component AppWindow inherits Window {
             cross-axis-alignment: center;
 
             Text {
-                text: "Vestalis Launcher";
+                text: Texts.app-title;
                 color: Theme.text-muted;
                 font-size: 14px;
                 vertical-alignment: center;
@@ -1844,12 +2585,21 @@ export component AppWindow inherits Window {
                 animate background { duration: 130ms; }
                 animate border-color { duration: 130ms; }
 
-                Rectangle {
+                if ThemeIcons.has-server: Image {
                     x: 10px;
                     y: (parent.height - 18px) / 2;
                     width: 18px;
                     height: 18px;
-                    border-radius: 5px;
+                    source: ThemeIcons.server;
+                    image-fit: contain;
+                }
+
+                if !ThemeIcons.has-server: Rectangle {
+                    x: 10px;
+                    y: (parent.height - 18px) / 2;
+                    width: 18px;
+                    height: 18px;
+                    border-radius: Theme.radius-sm;
                     background: @linear-gradient(135deg, Theme.gradient-start 0%, Theme.gradient-end 100%);
 
                     Rectangle {
@@ -1857,7 +2607,7 @@ export component AppWindow inherits Window {
                         y: 5px;
                         width: 10px;
                         height: 1.5px;
-                        border-radius: 1px;
+                        border-radius: Theme.radius-xs;
                         background: Theme.accent-text;
                         opacity: 0.9;
                     }
@@ -1866,7 +2616,7 @@ export component AppWindow inherits Window {
                         y: 8.25px;
                         width: 10px;
                         height: 1.5px;
-                        border-radius: 1px;
+                        border-radius: Theme.radius-xs;
                         background: Theme.accent-text;
                         opacity: 0.7;
                     }
@@ -1875,7 +2625,7 @@ export component AppWindow inherits Window {
                         y: 11.5px;
                         width: 10px;
                         height: 1.5px;
-                        border-radius: 1px;
+                        border-radius: Theme.radius-xs;
                         background: Theme.accent-text;
                         opacity: 0.5;
                     }
@@ -1890,7 +2640,16 @@ export component AppWindow inherits Window {
                     vertical-alignment: center;
                 }
 
-                Path {
+                if ThemeIcons.has-chevron: Image {
+                    x: parent.width - 24px;
+                    y: (parent.height - 12px) / 2;
+                    width: 12px;
+                    height: 12px;
+                    source: ThemeIcons.chevron;
+                    image-fit: contain;
+                }
+
+                if !ThemeIcons.has-chevron: Path {
                     x: parent.width - 22px;
                     y: (parent.height - 6px) / 2;
                     width: 9px;
@@ -1911,14 +2670,20 @@ export component AppWindow inherits Window {
 
             CaptionButton {
                 kind: "min";
+                icon: ThemeIcons.minimize;
+                has-icon: ThemeIcons.has-minimize;
                 clicked => { root.minimized = true; }
             }
             CaptionButton {
                 kind: root.window-maximized ? "restore" : "max";
+                icon: root.window-maximized ? ThemeIcons.restore : ThemeIcons.maximize;
+                has-icon: root.window-maximized ? ThemeIcons.has-restore : ThemeIcons.has-maximize;
                 clicked => { root.maximize-clicked(); }
             }
             CaptionButton {
                 kind: "close";
+                icon: ThemeIcons.close;
+                has-icon: ThemeIcons.has-close;
                 clicked => { root.close(); }
             }
         }
@@ -1941,12 +2706,22 @@ export component AppWindow inherits Window {
         width: 172px;
         height: root.pl1-available ? 160px : 124px;
         border-radius: Theme.radius-lg;
-        background: Theme.surface.with-alpha(0.97);
+        background: Theme.mode == "liquid-glass" ? Theme.glass-tint : Theme.surface.with-alpha(0.97);
         border-width: 1px;
         border-color: Theme.border;
         drop-shadow-blur: 18px;
         drop-shadow-offset-y: 6px;
         drop-shadow-color: Theme.shadow;
+        
+        Rectangle {
+            x: 12px;
+            y: 0;
+            width: parent.width - 24px;
+            height: 1px;
+            border-radius: Theme.radius-pill;
+            background: Theme.glass-highlight;
+            visible: Theme.mode == "liquid-glass";
+        }
 
         VerticalLayout {
             padding: 5px;

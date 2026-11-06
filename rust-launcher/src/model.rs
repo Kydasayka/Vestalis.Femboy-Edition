@@ -80,6 +80,10 @@ pub struct Settings {
     pub background_effect: String,
     /// Active visual theme name (built-in or a JSON file in the themes folder).
     pub theme: String,
+    /// Presentation mode: "base", "material3" or "liquid-glass".
+    pub theme_mode: String,
+    /// Main-screen zone layout, independent from the selected theme.
+    pub layout: crate::layout::LayoutConfig,
     pub install_dir: String,
 }
 
@@ -97,6 +101,8 @@ impl Default for Settings {
             hide_on_launch: true,
             background_effect: "none".to_string(),
             theme: "dark".to_string(),
+            theme_mode: "base".to_string(),
+            layout: crate::layout::LayoutConfig::default(),
             install_dir: app_dir().to_string_lossy().into_owned(),
         }
     }
