@@ -487,7 +487,33 @@ fn tone(hue: f64, chroma: f64, lightness: f64) -> String {
 /// accent palette is also consulted. The most chromatic candidate wins; if the
 /// system accent is genuinely gray, the callers fall back to the theme accent
 /// while still being able to display the sampled Windows colour.
+#[cfg(windows)]
+fn winrt_accent() -> Option<Rgb> {
+    use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
+    use windows::UI::ViewManagement::{UIColorType, UISettings};
+
+    // Slint/winit may already have initialised COM; ignore the mode error.
+    unsafe {
+        let _ = RoInitialize(RO_INIT_MULTITHREADED);
+    }
+
+    let settings = UISettings::new().ok()?;
+    let color = settings.GetColorValue(UIColorType::Accent).ok()?;
+    Some((color.R, color.G, color.B))
+}
+
+#[cfg(not(windows))]
+fn winrt_accent() -> Option<Rgb> {
+    None
+}
+
 pub fn system_accent() -> Option<Rgb> {
+    // The WinRT setting is the exact colour shown in Windows Settings. It is
+    // authoritative and also works when DWM colourisation is disabled.
+    if let Some(rgb) = winrt_accent() {
+        return Some(rgb);
+    }
+
     let mut candidates: Vec<Rgb> = Vec::new();
 
     if let Ok(dwm) =

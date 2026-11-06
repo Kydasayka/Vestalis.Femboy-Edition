@@ -5557,6 +5557,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "uuid 1.29.0",
+ "windows 0.62.2",
  "winreg",
  "winres",
 ]
