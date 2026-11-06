@@ -217,26 +217,89 @@ component TextField inherits Rectangle {
 }
 
 component CaptionButton inherits Rectangle {
-    in property <string> label;
-    in property <bool> close: false;
+    in property <string> kind: "min";
     callback clicked();
 
-    width: 34px;
-    height: 26px;
+    width: 38px;
+    height: 28px;
     border-radius: Theme.radius-sm;
-    background: area.has-hover ? (close ? Theme.danger : Theme.surface-hover) : transparent;
+    background: area.has-hover
+        ? (kind == "close" ? Theme.danger : Theme.surface-hover)
+        : transparent;
+    animate background { duration: 120ms; easing: ease-out; }
+
+    property <color> icon-color: area.has-hover
+        ? (kind == "close" ? Theme.accent-text : Theme.text)
+        : Theme.text-muted;
 
     area := TouchArea {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
     }
 
-    Text {
-        text: root.label;
-        color: area.has-hover ? (root.close ? Theme.accent-text : Theme.text) : Theme.text-muted;
-        font-size: 14px;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    if kind == "min": Rectangle {
+        width: 11px;
+        height: 1.5px;
+        x: (parent.width - 11px) / 2;
+        y: (parent.height - 1.5px) / 2;
+        border-radius: Theme.radius-xs;
+        background: icon-color;
+    }
+
+    if kind == "max": Rectangle {
+        width: 10px;
+        height: 10px;
+        x: (parent.width - 10px) / 2;
+        y: (parent.height - 10px) / 2;
+        border-width: 1.5px;
+        border-color: icon-color;
+        border-radius: 2px;
+        background: transparent;
+    }
+
+    if kind == "restore": Rectangle {
+        width: parent.width;
+        height: parent.height;
+
+        Rectangle {
+            width: 9px;
+            height: 9px;
+            x: (parent.width - 11px) / 2;
+            y: (parent.height - 11px) / 2;
+            border-width: 1.5px;
+            border-color: icon-color;
+            border-radius: 2px;
+            background: transparent;
+        }
+        Rectangle {
+            width: 9px;
+            height: 9px;
+            x: (parent.width - 11px) / 2 + 3px;
+            y: (parent.height - 11px) / 2 + 3px;
+            border-width: 1.5px;
+            border-color: icon-color;
+            border-radius: 2px;
+            background: area.has-hover ? Theme.surface-hover : Theme.background-alt;
+        }
+    }
+
+    if kind == "close": Rectangle {
+        width: 13px;
+        height: 1.5px;
+        x: (parent.width - 13px) / 2;
+        y: (parent.height - 1.5px) / 2;
+        transform-rotation: 45deg;
+        border-radius: Theme.radius-xs;
+        background: icon-color;
+    }
+    if kind == "close": Rectangle {
+        width: 13px;
+        height: 1.5px;
+        x: (parent.width - 13px) / 2;
+        y: (parent.height - 1.5px) / 2;
+        transform-rotation: -45deg;
+        border-radius: Theme.radius-xs;
+        background: icon-color;
     }
 }
 
@@ -245,18 +308,31 @@ component ServerMenuItem inherits Rectangle {
     in property <bool> active: false;
     callback clicked();
 
-    height: 34px;
+    height: 36px;
     border-radius: Theme.radius-sm;
-    background: active ? Theme.accent.with-alpha(0.28) : (area.has-hover ? Theme.surface-hover : transparent);
+    background: active
+        ? Theme.accent.with-alpha(0.18)
+        : (area.has-hover ? Theme.surface-hover : transparent);
+    animate background { duration: 110ms; easing: ease-out; }
+
+    Rectangle {
+        width: 3px;
+        height: 18px;
+        x: 1px;
+        y: (parent.height - 18px) / 2;
+        border-radius: Theme.radius-pill;
+        background: Theme.accent;
+        visible: root.active;
+    }
 
     Text {
-        x: 10px;
-        width: parent.width - 12px;
+        x: 14px;
+        width: parent.width - 20px;
         height: parent.height;
         text: root.label;
-        color: root.active ? Theme.text : Theme.text;
+        color: root.active ? Theme.text : Theme.text-muted;
         font-size: 14px;
-        font-weight: root.active ? 600 : 400;
+        font-weight: root.active ? 700 : 500;
         vertical-alignment: center;
     }
 
@@ -300,6 +376,8 @@ export component AppWindow inherits Window {
     title: "Vestalis Launcher";
     preferred-width: 1180px;
     preferred-height: 640px;
+    min-width: 1080px;
+    min-height: 620px;
     icon: @image-url("../assets/logo.png");
     background: Theme.background;
     no-frame: true;
@@ -423,8 +501,8 @@ export component AppWindow inherits Window {
     // =====================================================================
     if screen == 0: Rectangle {
         width: 100%;
-        y: 34px;
-        height: root.height - 34px;
+        y: 38px;
+        height: root.height - 38px;
         opacity: root.screen-opacity;
         animate opacity { duration: 180ms; easing: ease-out; }
         background: Theme.background;
@@ -584,8 +662,8 @@ export component AppWindow inherits Window {
     // =====================================================================
     if screen == 1: Rectangle {
         width: 100%;
-        y: 34px;
-        height: root.height - 34px;
+        y: 38px;
+        height: root.height - 38px;
         opacity: root.screen-opacity;
         animate opacity { duration: 180ms; easing: ease-out; }
         background: Theme.background;
@@ -1050,8 +1128,8 @@ export component AppWindow inherits Window {
     Rectangle {
         visible: screen == 2;
         width: 100%;
-        y: 34px;
-        height: root.height - 34px;
+        y: 38px;
+        height: root.height - 38px;
         opacity: root.screen-opacity;
         animate opacity { duration: 180ms; easing: ease-out; }
         background: Theme.background;
@@ -1561,8 +1639,8 @@ export component AppWindow inherits Window {
     // =====================================================================
     if screen == 3: Rectangle {
         width: 100%;
-        y: 34px;
-        height: root.height - 34px;
+        y: 38px;
+        height: root.height - 38px;
         opacity: root.screen-opacity;
         animate opacity { duration: 180ms; easing: ease-out; }
         background: Theme.background;
@@ -1733,7 +1811,7 @@ export component AppWindow inherits Window {
     Rectangle {
         y: 0;
         width: 100%;
-        height: 34px;
+        height: 38px;
         background: Theme.background-alt.with-alpha(0.96);
         border-width: 0px;
 
@@ -1754,28 +1832,74 @@ export component AppWindow inherits Window {
             Rectangle { horizontal-stretch: 1; }
 
             Rectangle {
-                width: 124px;
-                height: 26px;
-                border-radius: Theme.radius-sm;
-                background: root.server-menu-open ? Theme.surface-hover : Theme.background-alt;
+                width: 138px;
+                height: 30px;
+                border-radius: Theme.radius-pill;
+                background: root.server-menu-open
+                    ? Theme.surface-hover
+                    : Theme.surface.with-alpha(0.85);
                 border-width: 1px;
                 border-color: root.server-menu-open ? Theme.accent : Theme.border;
-                animate background { duration: 120ms; }
+                animate background { duration: 130ms; }
+                animate border-color { duration: 130ms; }
+
+                Rectangle {
+                    x: 10px;
+                    y: (parent.height - 18px) / 2;
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 5px;
+                    background: @linear-gradient(135deg, Theme.gradient-start 0%, Theme.gradient-end 100%);
+
+                    Rectangle {
+                        x: 4px;
+                        y: 5px;
+                        width: 10px;
+                        height: 1.5px;
+                        border-radius: 1px;
+                        background: Theme.accent-text;
+                        opacity: 0.9;
+                    }
+                    Rectangle {
+                        x: 4px;
+                        y: 8.25px;
+                        width: 10px;
+                        height: 1.5px;
+                        border-radius: 1px;
+                        background: Theme.accent-text;
+                        opacity: 0.7;
+                    }
+                    Rectangle {
+                        x: 4px;
+                        y: 11.5px;
+                        width: 10px;
+                        height: 1.5px;
+                        border-radius: 1px;
+                        background: Theme.accent-text;
+                        opacity: 0.5;
+                    }
+                }
 
                 Text {
-                    x: 10px;
+                    x: 35px;
                     text: root.server-label;
                     color: Theme.text;
-                    font-size: 14px;
-                    font-weight: 600;
+                    font-size: 13px;
+                    font-weight: 700;
                     vertical-alignment: center;
                 }
-                Text {
-                    x: parent.width - 18px;
-                    text: "v";
-                    color: Theme.text-muted;
-                    font-size: 11px;
-                    vertical-alignment: center;
+
+                Path {
+                    x: parent.width - 22px;
+                    y: (parent.height - 6px) / 2;
+                    width: 9px;
+                    height: 6px;
+                    commands: "M 0 0 L 4.5 6 L 9 0";
+                    stroke: root.server-menu-open ? Theme.accent : Theme.text-muted;
+                    stroke-width: 1.5px;
+                    fill: transparent;
+                    transform-rotation: root.server-menu-open ? 180deg : 0deg;
+                    animate transform-rotation { duration: 150ms; easing: ease-out; }
                 }
 
                 TouchArea {
@@ -1785,25 +1909,24 @@ export component AppWindow inherits Window {
             }
 
             CaptionButton {
-                label: "-";
+                kind: "min";
                 clicked => { root.minimized = true; }
             }
             CaptionButton {
-                label: root.window-maximized ? "❐" : "□";
+                kind: root.window-maximized ? "restore" : "max";
                 clicked => { root.maximize-clicked(); }
             }
             CaptionButton {
-                label: "✕";
-                close: true;
+                kind: "close";
                 clicked => { root.close(); }
             }
         }
     }
 
     if root.server-menu-open: Rectangle {
-        y: 34px;
+        y: 38px;
         width: 100%;
-        height: root.height - 34px;
+        height: root.height - 38px;
         background: transparent;
 
         TouchArea {
@@ -1812,17 +1935,20 @@ export component AppWindow inherits Window {
     }
 
     if root.server-menu-open: Rectangle {
-        x: root.width - 262px;
-        y: 38px;
-        width: 160px;
-        height: root.pl1-available ? 150px : 114px;
-        border-radius: Theme.radius-md;
-        background: Theme.surface.with-alpha(0.96);
+        x: root.width - 276px;
+        y: 42px;
+        width: 172px;
+        height: root.pl1-available ? 160px : 124px;
+        border-radius: Theme.radius-lg;
+        background: Theme.surface.with-alpha(0.97);
         border-width: 1px;
         border-color: Theme.border;
+        drop-shadow-blur: 18px;
+        drop-shadow-offset-y: 6px;
+        drop-shadow-color: Theme.shadow;
 
         VerticalLayout {
-            padding: 4px;
+            padding: 5px;
             spacing: 2px;
             ServerMenuItem {
                 label: "RU-1";

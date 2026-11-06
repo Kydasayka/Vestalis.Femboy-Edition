@@ -49,7 +49,8 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   «Листья» or «Снежинки». The effects are drawn in Slint and driven by
   `animation-tick()`, so they do not need a Rust timer.
 - Interface sounds from the original assets, custom borderless window with
-  caption buttons and resize handles, and an animated branded start screen.
+  hand-drawn minimize/maximize/close icons, a pill-style server selector and a
+  minimum window size of 1080×620, and an animated branded start screen.
   The maximize button animates to the Windows work area, so the taskbar stays
   usable. Screen changes, buttons, profile rows and the download bar animate.
 - Discord Rich Presence with the same application ID, assets and texts as the

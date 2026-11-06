@@ -309,6 +309,12 @@ cargo clippy --all-targets -- -D warnings
 - Настройки собраны в Slint-дереве постоянно (`visible: screen == 2`), поэтому
   открываются без холодного layout; переходы экранов/кнопки/строки профилей
   анимированы. Разворот окна — плавный `animate_to` по work area.
+- Кастомный хром: заголовок 38 px, селектор сервера — пилюля 138×30 с
+  градиентной иконкой и шевроном (`Path`), кнопки окна 38×28 рисуются
+  примитивами (`CaptionButton.kind` = `min`/`max`/`restore`/`close`), без
+  текстовых глифов. Минимальный размер окна — `min-width: 1080px`,
+  `min-height: 620px` (проверяется через `WM_GETMINMAXINFO`), меньше окно
+  сжать нельзя.
 - Данные: `%APPDATA%\Vestalis\rust-launcher\state.json`,
   кэш `%LOCALAPPDATA%\Vestalis\validation-cache-rust.json`,
   головы скинов `%LOCALAPPDATA%\Vestalis\avatars\<uuid>.png`,
