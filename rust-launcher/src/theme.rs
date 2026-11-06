@@ -483,34 +483,72 @@ fn tone(hue: f64, chroma: f64, lightness: f64) -> String {
 }
 
 /// Windows stores `AccentColor` as ABGR and `ColorizationColor` as ARGB.
+/// The DWM values are black when accent colouring is disabled, so the Explorer
+/// accent palette is also consulted. The most chromatic candidate wins; if the
+/// system accent is genuinely gray, the callers fall back to the theme accent
+/// while still being able to display the sampled Windows colour.
 pub fn system_accent() -> Option<Rgb> {
-    let dwm = RegKey::predef(HKEY_CURRENT_USER)
-        .open_subkey(r"Software\Microsoft\Windows\DWM")
-        .ok()?;
+    let mut candidates: Vec<Rgb> = Vec::new();
 
-    if let Ok(value) = dwm.get_value::<u32, _>("AccentColor") {
-        let rgb = (
-            (value & 0xFF) as u8,
-            ((value >> 8) & 0xFF) as u8,
-            ((value >> 16) & 0xFF) as u8,
-        );
-        if rgb != (0, 0, 0) {
-            return Some(rgb);
+    if let Ok(dwm) =
+        RegKey::predef(HKEY_CURRENT_USER).open_subkey(r"Software\Microsoft\Windows\DWM")
+    {
+        if let Ok(value) = dwm.get_value::<u32, _>("AccentColor") {
+            candidates.push((
+                (value & 0xFF) as u8,
+                ((value >> 8) & 0xFF) as u8,
+                ((value >> 16) & 0xFF) as u8,
+            ));
+        }
+        if let Ok(value) = dwm.get_value::<u32, _>("ColorizationColor") {
+            candidates.push((
+                ((value >> 16) & 0xFF) as u8,
+                ((value >> 8) & 0xFF) as u8,
+                (value & 0xFF) as u8,
+            ));
         }
     }
 
-    if let Ok(value) = dwm.get_value::<u32, _>("ColorizationColor") {
-        let rgb = (
-            ((value >> 16) & 0xFF) as u8,
-            ((value >> 8) & 0xFF) as u8,
-            (value & 0xFF) as u8,
-        );
-        if rgb != (0, 0, 0) {
-            return Some(rgb);
+    if let Ok(accent) = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent")
+    {
+        if let Ok(value) = accent.get_value::<u32, _>("StartColorMenu") {
+            candidates.push((
+                (value & 0xFF) as u8,
+                ((value >> 8) & 0xFF) as u8,
+                ((value >> 16) & 0xFF) as u8,
+            ));
+        }
+
+        // The palette is eight BGRA entries (light to dark tones).
+        if let Ok(palette) = accent.get_raw_value("AccentPalette") {
+            if palette.vtype == winreg::enums::REG_BINARY {
+                for entry in palette.bytes.chunks_exact(4) {
+                    let (b, g, r, a) = (entry[0], entry[1], entry[2], entry[3]);
+                    if a > 0 {
+                        candidates.push((r, g, b));
+                    }
+                }
+            }
         }
     }
 
-    None
+    candidates
+        .into_iter()
+        .filter(|rgb| *rgb != (0, 0, 0))
+        .max_by(|left, right| {
+            let left = rgb_to_oklch(&hex(*left)).map(|(_, c, _)| c).unwrap_or(0.0);
+            let right = rgb_to_oklch(&hex(*right)).map(|(_, c, _)| c).unwrap_or(0.0);
+            left.total_cmp(&right)
+        })
+}
+
+/// Windows can report a gray/black accent when colouring is disabled. In that
+/// case Material 3 keeps the palette accent instead of producing a gray UI.
+pub fn is_chromatic(rgb: Rgb) -> bool {
+    rgb_to_oklch(&hex(rgb))
+        .map(|(_, chroma, _)| chroma >= 0.04)
+        .unwrap_or(false)
 }
 
 pub fn normalize_mode(value: &str) -> &'static str {
@@ -538,9 +576,10 @@ pub fn apply_mode(base: &Theme, mode: &str, accent: Option<Rgb>) -> Theme {
 }
 
 fn apply_material3(theme: &mut Theme, accent: Option<Rgb>) {
+    let theme_accent = parse_rgb(&theme.accent).unwrap_or((162, 28, 175));
     let accent = accent
-        .or_else(|| parse_rgb(&theme.accent))
-        .unwrap_or((162, 28, 175));
+        .filter(|rgb| is_chromatic(*rgb))
+        .unwrap_or(theme_accent);
     let (_, accent_chroma, hue) = rgb_to_oklch(&hex(accent)).unwrap_or((0.6, 0.18, 300.0));
     let chroma = accent_chroma.clamp(0.05, 0.22);
     let dark = rgb_to_oklch(&theme.background)
