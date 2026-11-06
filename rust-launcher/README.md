@@ -34,6 +34,11 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   (`/api/v1/mirror/*`).
 - Mods page: optional mods from `/api/v1/profiles/{name}/mods/optionals`,
   enable/disable by renaming `.jar` ↔ `.jar.disabled`.
+- Rounded UI typography: Nunito (Regular/SemiBold/Bold, Cyrillic included),
+  embedded in the binary and used as the default font family.
+- Ambient background in Settings → «Фон лаунчера»: «Нет», «Светлячки»,
+  «Листья» or «Снежинки». The effects are drawn in Slint and driven by
+  `animation-tick()`, so they do not need a Rust timer.
 - Interface sounds from the original assets, custom borderless window with
   caption buttons and resize handles, and an animated branded start screen.
   The maximize button animates to the Windows work area, so the taskbar stays
@@ -101,7 +106,7 @@ rust-launcher/
 │  ├─ storage.rs        state.json + validation cache (legacy C# cache import)
 │  ├─ hwid.rs           Windows HWID, RAM, OS info
 │  └─ model.rs          settings, session, API DTOs
-└─ assets/              logo, background
+└─ assets/              logo, background, meme, fonts/Nunito-*
 ```
 
 Threading model: Slint owns the main thread; a Tokio multi-thread runtime runs

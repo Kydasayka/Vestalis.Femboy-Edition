@@ -72,6 +72,8 @@ pub struct Settings {
     pub sounds: bool,
     /// Minimize the launcher as soon as the game process starts.
     pub hide_on_launch: bool,
+    /// Ambient background: "none", "fireflies", "leaves" or "snow".
+    pub background_effect: String,
     pub install_dir: String,
 }
 
@@ -87,6 +89,7 @@ impl Default for Settings {
             send_hwid: true,
             sounds: true,
             hide_on_launch: true,
+            background_effect: "none".to_string(),
             install_dir: app_dir().to_string_lossy().into_owned(),
         }
     }

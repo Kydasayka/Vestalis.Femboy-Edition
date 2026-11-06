@@ -1,5 +1,10 @@
 import { ScrollView } from "std-widgets.slint";
 
+// Rounded UI font with Cyrillic coverage (Nunito, OFL).
+import "../assets/fonts/Nunito-Regular.ttf";
+import "../assets/fonts/Nunito-SemiBold.ttf";
+import "../assets/fonts/Nunito-Bold.ttf";
+
 
 export struct ProfileItem {
     id: int,
@@ -31,6 +36,64 @@ export struct SelfTestItem {
     status: string,
     message: string,
     duration: string,
+}
+
+// Ambient background effects, driven by Slint's animation clock so they do not
+// need a Rust timer. Only the selected variant is instantiated.
+component BackgroundEffect inherits Rectangle {
+    in property <string> kind: "none";
+
+    if kind == "fireflies": Rectangle {
+        for i in 16: Rectangle {
+            width: 3px + Math.mod(i, 3) * 1px;
+            height: self.width;
+            border-radius: 99px;
+            background: #fef3c7;
+            drop-shadow-blur: 10px;
+            drop-shadow-color: #f59e0bcc;
+            opacity: 0.2 + 0.75 * abs(sin((animation-tick() / 1s * (18 + Math.mod(i, 6)) + i * 61) * 1deg));
+            x: parent.width * (0.04 + Math.mod(i * 37 + 13, 90) / 100.0)
+                + 24px * sin((animation-tick() / 1s * (7 + Math.mod(i, 5)) + i * 29) * 1deg);
+            y: parent.height * (0.1 + Math.mod(i * 29 + 7, 78) / 100.0)
+                + 18px * sin((animation-tick() / 1s * (10 + Math.mod(i, 4)) + i * 47) * 1deg);
+        }
+    }
+
+    if kind == "leaves": Rectangle {
+        for i in 18: Rectangle {
+            width: 10px + Math.mod(i, 4) * 3px;
+            height: self.width * 0.62;
+            border-radius: 99px;
+            background: Math.mod(i, 4) == 0 ? #f59e0b
+                : Math.mod(i, 4) == 1 ? #d97706
+                : Math.mod(i, 4) == 2 ? #84cc16
+                : #b45309;
+            opacity: 0.55 + 0.35 * abs(sin((animation-tick() / 1s * (9 + Math.mod(i, 5)) + i * 23) * 1deg));
+            transform-rotation: sin((animation-tick() / 1s * (24 + Math.mod(i, 5)) + i * 33) * 1deg) * 40deg + i * 17deg;
+            x: parent.width * (0.02 + Math.mod(i * 41 + 7, 94) / 100.0)
+                + (34px + Math.mod(i, 4) * 8px)
+                    * sin((animation-tick() / 1s * (23 + Math.mod(i, 3) * 14) + i * 37) * 1deg);
+            y: -28px + (parent.height + 56px)
+                * Math.mod(animation-tick() + i * 1400ms, (9 + Math.mod(i, 7)) * 1s)
+                / ((9 + Math.mod(i, 7)) * 1s);
+        }
+    }
+
+    if kind == "snow": Rectangle {
+        for i in 28: Rectangle {
+            width: 2px + Math.mod(i, 4) * 1.2px;
+            height: self.width;
+            border-radius: 99px;
+            background: #f8fafc;
+            opacity: 0.35 + 0.55 * abs(sin((animation-tick() / 1s * (10 + Math.mod(i, 7)) + i * 41) * 1deg));
+            x: parent.width * (0.01 + Math.mod(i * 43 + 11, 97) / 100.0)
+                + (16px + Math.mod(i, 5) * 7px)
+                    * sin((animation-tick() / 1s * (18 + Math.mod(i, 4) * 11) + i * 53) * 1deg);
+            y: -12px + (parent.height + 24px)
+                * Math.mod(animation-tick() + i * 900ms, (7 + Math.mod(i, 8)) * 1s)
+                / ((7 + Math.mod(i, 8)) * 1s);
+        }
+    }
 }
 
 component ActionButton inherits Rectangle {
@@ -200,7 +263,7 @@ export component AppWindow inherits Window {
     background: #0d0d10;
     no-frame: true;
     resize-border-width: 6px;
-    default-font-family: "Segoe UI";
+    default-font-family: "Nunito";
 
     // ---- login / global state -------------------------------------------
     in-out property <int> screen: 0;
@@ -218,6 +281,8 @@ export component AppWindow inherits Window {
     in-out property <int> server-index: 0;
     in-out property <string> server-label: "PL-1";
     in-out property <string> server-host-label: "";
+    in-out property <string> background-effect: "none";
+    in-out property <string> set-background-effect: "none";
     in-out property <bool> server-menu-open: false;
     in-out property <bool> is-kydasay: false;
     in-out property <bool> startup-ready: false;
@@ -323,6 +388,12 @@ export component AppWindow inherits Window {
 
         Rectangle {
             background: @linear-gradient(180deg, #0e0e11cc 0%, #0e0e11f0 55%, #0e0e11 100%);
+        }
+
+        if root.background-effect != "none": BackgroundEffect {
+            kind: root.background-effect;
+            width: 100%;
+            height: 100%;
         }
 
         HorizontalLayout {
@@ -477,6 +548,12 @@ export component AppWindow inherits Window {
         }
         Rectangle {
             background: @linear-gradient(120deg, #0d0d10f5 0%, #0d0d10d9 55%, #0d0d10f2 100%);
+        }
+
+        if root.background-effect != "none": BackgroundEffect {
+            kind: root.background-effect;
+            width: 100%;
+            height: 100%;
         }
 
         HorizontalLayout {
@@ -1109,6 +1186,39 @@ export component AppWindow inherits Window {
                                 TextField {
                                     text <=> root.set-install-dir;
                                     placeholder: "%APPDATA%\\Vestalis";
+                                }
+
+                                Text { text: "Фон лаунчера"; color: #b9b9c4; font-size: 14px; }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    ActionButton {
+                                        label: "Нет";
+                                        primary: root.set-background-effect == "none";
+                                        width: 112px;
+                                        height: 38px;
+                                        clicked => { root.set-background-effect = "none"; root.background-effect = "none"; }
+                                    }
+                                    ActionButton {
+                                        label: "Светлячки";
+                                        primary: root.set-background-effect == "fireflies";
+                                        width: 128px;
+                                        height: 38px;
+                                        clicked => { root.set-background-effect = "fireflies"; root.background-effect = "fireflies"; }
+                                    }
+                                    ActionButton {
+                                        label: "Листья";
+                                        primary: root.set-background-effect == "leaves";
+                                        width: 112px;
+                                        height: 38px;
+                                        clicked => { root.set-background-effect = "leaves"; root.background-effect = "leaves"; }
+                                    }
+                                    ActionButton {
+                                        label: "Снежинки";
+                                        primary: root.set-background-effect == "snow";
+                                        width: 128px;
+                                        height: 38px;
+                                        clicked => { root.set-background-effect = "snow"; root.background-effect = "snow"; }
+                                    }
                                 }
 
                                 HorizontalLayout {

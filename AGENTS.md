@@ -314,7 +314,17 @@ cargo clippy --all-targets -- -D warnings
   головы скинов `%LOCALAPPDATA%\Vestalis\avatars\<uuid>.png`,
   логи `%LOCALAPPDATA%\Vestalis\logs\launcher.log.<date>`.
 - Мелкие шрифты подняты (10→12, 11→13, 12/13→14) — не возвращать 10–11 px.
-  На карточке отсчёта «НЕДРОЧАБРЬ» стоит `assets/nedrochabr.png` (картинка
+  Шрифт UI — Nunito (`assets/fonts/Nunito-{Regular,SemiBold,Bold}.ttf`, OFL
+  рядом); подключается файловыми `import` в `app.slint`, семья задана через
+  `Window.default-font-family: "Nunito"`. Не заменять на Fredoka One: в нём нет
+  кириллицы.
+- Фон лаунчера: настройка `background-effect` (`none`/`fireflies`/`leaves`/
+  `snow`) в карточке «Лаунчер», хранится как `backgroundEffect` в `state.json`.
+  Слой `BackgroundEffect` вставлен после градиента и до контента на экранах
+  входа и главного; анимация на `animation-tick()` (без Rust-таймера), `%`
+  в Slint нельзя — только `Math.mod`, `sin/cos` принимают угол (`* 1deg`),
+  `border-radius: 50%` не поддерживается — используется длина.
+- На карточке отсчёта «НЕДРОЧАБРЬ» стоит `assets/nedrochabr.png` (картинка
   пользователя), скруглённая рамка 102×104, текст — свойство `countdown-text`.
 - PL-1 (`https://201-58-180-2.sslip.io/`) — дефолт: RU/EU отдают 403 «неофициальный
   клиент». Остальные хосты остаются в селекторе.

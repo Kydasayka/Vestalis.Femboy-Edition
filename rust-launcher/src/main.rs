@@ -418,6 +418,7 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
                 send_hwid: ui.get_set_send_hwid(),
                 sounds: ui.get_set_sounds(),
                 hide_on_launch: ui.get_set_hide_on_launch(),
+                background_effect: ui.get_set_background_effect().to_string(),
                 install_dir: ui.get_set_install_dir().to_string(),
             };
 
@@ -742,6 +743,13 @@ fn apply_settings(ui: &AppWindow, settings: &Settings, max_ram: u64) {
     ui.set_set_send_hwid(settings.send_hwid);
     ui.set_set_sounds(settings.sounds);
     ui.set_set_hide_on_launch(settings.hide_on_launch);
+
+    let effect = match settings.background_effect.as_str() {
+        "fireflies" | "leaves" | "snow" => settings.background_effect.clone(),
+        _ => "none".to_string(),
+    };
+    ui.set_set_background_effect(effect.clone().into());
+    ui.set_background_effect(effect.into());
     ui.set_max_ram(max_ram.min(i32::MAX as u64) as i32);
 }
 
