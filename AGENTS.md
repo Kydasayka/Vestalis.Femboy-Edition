@@ -319,6 +319,15 @@ cargo clippy --all-targets -- -D warnings
   `Window.default-font-family: "Nunito"`, базовый вес — `default-font-weight:
   600` (Regular 400 на тёмном фоне «рябит»). Не заменять на Fredoka One: в нём
   нет кириллицы.
+- Темы: `src/theme.rs` + `export global Theme` в `app.slint`. Встроенные
+  `dark/light/femboy/ocean` заданы в Rust (`builtin_themes()`), пользовательские
+  — `*.json` прямо в `%APPDATA%\Vestalis\rust-launcher\themes` (формат
+  `{"name": "...", "theme": {...}}`, поля опциональны, битые цвета/JSON
+  логируются и заменяются на `dark`). `Settings.theme` (camelCase) хранит имя;
+  тема применяется в `main` до `ui.run()` и мгновенно при клике в
+  Настройки → «Оформление». Все цвета/радиусы в `app.slint` идут через
+  `Theme.*`; литералы допустимы только в дефолтах global Theme. Не добавлять
+  сетевую загрузку тем и не читать файлы вне папки тем.
 - Фон лаунчера: настройка `background-effect` (`none`/`fireflies`/`leaves`/
   `snow`) в карточке «Лаунчер», хранится как `backgroundEffect` в `state.json`.
   Слой `BackgroundEffect` вставлен после градиента и до контента на экранах

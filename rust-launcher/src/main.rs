@@ -13,6 +13,7 @@ mod hwid;
 mod launch;
 mod model;
 mod storage;
+mod theme;
 mod window;
 mod worker;
 
@@ -28,7 +29,12 @@ use tracing::{error, info, warn};
 
 use crate::model::{Persisted, Settings};
 use crate::storage::load_state;
+use crate::theme::ThemeItem;
 use crate::worker::{Command, Event, ProfileView, Worker};
+
+thread_local! {
+    static THEME_CATALOG: RefCell<Vec<ThemeItem>> = const { RefCell::new(Vec::new()) };
+}
 
 fn main() -> anyhow::Result<()> {
     window::set_app_user_model_id();
@@ -61,6 +67,15 @@ fn main() -> anyhow::Result<()> {
         storage::save_state(&state);
     }
 
+    let themes = crate::theme::load_all();
+    let active = crate::theme::resolve(&state.settings.theme, &themes).clone();
+    if state.settings.theme != active.name {
+        state.settings.theme = active.name.clone();
+        storage::save_state(&state);
+    }
+    info!(theme = %active.name, builtin = active.builtin, "theme applied");
+    THEME_CATALOG.with(|catalog| *catalog.borrow_mut() = themes);
+
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
@@ -69,6 +84,8 @@ fn main() -> anyhow::Result<()> {
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
 
     let ui = AppWindow::new()?;
+    // Apply before the first frame so a non-dark theme never flashes.
+    apply_theme(&ui, &active.theme);
     initialize_ui(&ui, &state);
     install_callbacks(&ui, command_tx.clone());
 
@@ -161,6 +178,9 @@ fn initialize_ui(ui: &AppWindow, state: &Persisted) {
             .map(|session| session.name.eq_ignore_ascii_case("Kydasay"))
             .unwrap_or(false),
     );
+
+    ui.set_themes(ModelRc::new(VecModel::from(theme_options())));
+    ui.set_set_theme(state.settings.theme.clone().into());
 
     if let Some(saved) = &state.saved_login {
         ui.set_login(saved.login.clone().into());
@@ -429,11 +449,56 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
                 sounds: ui.get_set_sounds(),
                 hide_on_launch: ui.get_set_hide_on_launch(),
                 background_effect: ui.get_set_background_effect().to_string(),
+                theme: ui.get_set_theme().to_string(),
                 install_dir: ui.get_set_install_dir().to_string(),
             };
 
             ui.set_settings_status("Сохранение…".into());
             let _ = tx.send(Command::SaveSettings(settings));
+        }
+    });
+
+    ui.on_theme_clicked({
+        let ui = ui.as_weak();
+        move |name| {
+            let Some(ui) = ui.upgrade() else { return };
+            play_sound(&ui, Sound::Click);
+            apply_theme_by_name(&ui, name.as_str());
+        }
+    });
+
+    ui.on_themes_refresh_clicked({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+                ui.set_settings_status("Обновление тем…".into());
+            }
+            let _ = tx.send(Command::RefreshThemes);
+        }
+    });
+
+    ui.on_themes_open_folder_clicked({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
+            let _ = tx.send(Command::OpenThemesFolder);
+        }
+    });
+
+    ui.on_theme_reset_clicked({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move || {
+            let Some(ui) = ui.upgrade() else { return };
+            play_sound(&ui, Sound::Click);
+            ui.set_set_theme("dark".into());
+            apply_theme_by_name(&ui, crate::theme::DEFAULT_THEME);
+            let _ = tx.send(Command::SaveTheme(crate::theme::DEFAULT_THEME.into()));
         }
     });
 
@@ -660,7 +725,15 @@ fn apply_event(ui: &AppWindow, event: Event) {
                 });
             }
         }
+        Event::Themes { items, active } => {
+            THEME_CATALOG.with(|catalog| *catalog.borrow_mut() = items);
+            ui.set_themes(ModelRc::new(VecModel::from(theme_options())));
+            ui.set_set_theme(active.clone().into());
+            apply_theme_by_name(ui, &active);
+            ui.set_settings_status("Темы обновлены".into());
+        }
         Event::Settings { settings, max_ram } => {
+            apply_theme_by_name(ui, &settings.theme);
             apply_settings(ui, &settings, max_ram);
         }
         Event::SettingsStatus(status) => ui.set_settings_status(status.into()),
@@ -742,6 +815,73 @@ fn select_view(ui: &AppWindow, view: &ProfileView) {
     ui.set_can_play(true);
 }
 
+fn to_color(value: &str) -> slint::Color {
+    crate::theme::parse_color(value).unwrap_or_else(|| slint::Color::from_rgb_u8(13, 13, 16))
+}
+
+fn theme_options() -> Vec<ThemeOption> {
+    THEME_CATALOG.with(|catalog| {
+        catalog
+            .borrow()
+            .iter()
+            .map(|item| ThemeOption {
+                name: item.name.clone().into(),
+                builtin: item.builtin,
+                accent: to_color(&item.theme.accent),
+                surface: to_color(&item.theme.surface),
+                text: to_color(&item.theme.text),
+            })
+            .collect()
+    })
+}
+
+fn apply_theme(ui: &AppWindow, theme: &crate::theme::Theme) {
+    let global = ui.global::<Theme>();
+    global.set_background(to_color(&theme.background));
+    global.set_background_alt(to_color(&theme.background_alt));
+    global.set_surface(to_color(&theme.surface));
+    global.set_surface_hover(to_color(&theme.surface_hover));
+    global.set_border(to_color(&theme.border));
+    global.set_text(to_color(&theme.text));
+    global.set_text_muted(to_color(&theme.text_muted));
+    global.set_accent(to_color(&theme.accent));
+    global.set_accent_hover(to_color(&theme.accent_hover));
+    global.set_accent_text(to_color(&theme.accent_text));
+    global.set_success(to_color(&theme.success));
+    global.set_warning(to_color(&theme.warning));
+    global.set_danger(to_color(&theme.danger));
+    global.set_gradient_start(to_color(&theme.gradient_start));
+    global.set_gradient_end(to_color(&theme.gradient_end));
+    global.set_shadow(to_color(&theme.shadow));
+    global.set_scrim(to_color(&theme.scrim));
+    global.set_radius_xs(theme.radius_xs as f32);
+    global.set_radius_sm(theme.radius_sm as f32);
+    global.set_radius_md(theme.radius_md as f32);
+    global.set_radius_lg(theme.radius_lg as f32);
+    global.set_radius_pill(theme.radius_pill as f32);
+    global.set_card_opacity(theme.card_opacity);
+    global.set_font_family(theme.font_family.clone().into());
+    global.set_base_font_weight(theme.base_font_weight);
+    global.set_background_effect(theme.background_effect.clone().into());
+
+    ui.set_background_effect(theme.background_effect.clone().into());
+    ui.set_set_background_effect(theme.background_effect.clone().into());
+}
+
+fn apply_theme_by_name(ui: &AppWindow, name: &str) {
+    let theme = THEME_CATALOG.with(|catalog| {
+        catalog
+            .borrow()
+            .iter()
+            .find(|item| item.name.eq_ignore_ascii_case(name))
+            .map(|item| item.theme.clone())
+    });
+
+    if let Some(theme) = theme {
+        apply_theme(ui, &theme);
+    }
+}
+
 fn apply_settings(ui: &AppWindow, settings: &Settings, max_ram: u64) {
     ui.set_set_install_dir(settings.install_dir.clone().into());
     ui.set_set_xms(settings.xms as i32);
@@ -753,6 +893,7 @@ fn apply_settings(ui: &AppWindow, settings: &Settings, max_ram: u64) {
     ui.set_set_send_hwid(settings.send_hwid);
     ui.set_set_sounds(settings.sounds);
     ui.set_set_hide_on_launch(settings.hide_on_launch);
+    ui.set_set_theme(settings.theme.clone().into());
 
     let effect = match settings.background_effect.as_str() {
         "fireflies" | "leaves" | "snow" => settings.background_effect.clone(),

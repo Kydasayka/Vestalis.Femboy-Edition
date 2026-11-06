@@ -78,6 +78,8 @@ pub struct Settings {
     pub hide_on_launch: bool,
     /// Ambient background: "none", "fireflies", "leaves" or "snow".
     pub background_effect: String,
+    /// Active visual theme name (built-in or a JSON file in the themes folder).
+    pub theme: String,
     pub install_dir: String,
 }
 
@@ -94,6 +96,7 @@ impl Default for Settings {
             sounds: true,
             hide_on_launch: true,
             background_effect: "none".to_string(),
+            theme: "dark".to_string(),
             install_dir: app_dir().to_string_lossy().into_owned(),
         }
     }

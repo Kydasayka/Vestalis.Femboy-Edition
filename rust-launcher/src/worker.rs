@@ -17,6 +17,7 @@ use crate::model::{
     DEFAULT_HOST, MIRROR_HOST, SERVERS,
 };
 use crate::storage::{load_state, save_state};
+use crate::theme::{self, ThemeItem};
 
 #[derive(Debug)]
 pub enum Command {
@@ -30,6 +31,9 @@ pub enum Command {
     Play,
     Refresh,
     SaveSettings(Settings),
+    RefreshThemes,
+    OpenThemesFolder,
+    SaveTheme(String),
     OpenMods,
     ToggleMod { id: usize, enabled: bool },
     RefreshMirror,
@@ -123,6 +127,10 @@ pub enum Event {
         label: String,
         color: String,
         visible: bool,
+    },
+    Themes {
+        items: Vec<ThemeItem>,
+        active: String,
     },
     Settings {
         settings: Settings,
@@ -277,6 +285,9 @@ impl Worker {
                             }
                         }
                         Some(Command::SaveSettings(settings)) => self.save_settings(settings),
+                        Some(Command::RefreshThemes) => self.refresh_themes(),
+                        Some(Command::OpenThemesFolder) => self.open_themes_folder(),
+                        Some(Command::SaveTheme(name)) => self.save_theme(name),
                         Some(Command::OpenMods) => self.open_mods().await,
                         Some(Command::ToggleMod { id, enabled }) => self.toggle_mod(id, enabled),
                         Some(Command::RefreshMirror) => self.refresh_mirror().await,
@@ -1348,6 +1359,9 @@ impl Worker {
             settings.install_dir = app_dir().to_string_lossy().into_owned();
         }
 
+        let themes = theme::load_all();
+        settings.theme = theme::resolve(&settings.theme, &themes).name.clone();
+
         self.state.settings = settings.clone();
         save_state(&self.state);
 
@@ -1358,6 +1372,50 @@ impl Worker {
 
         self.emit(Event::Settings { settings, max_ram });
         self.emit(Event::SettingsStatus("Сохранено".into()));
+    }
+
+    fn refresh_themes(&mut self) {
+        let items = theme::load_all();
+        let active = theme::resolve(&self.state.settings.theme, &items)
+            .name
+            .clone();
+        self.state.settings.theme = active.clone();
+        save_state(&self.state);
+        info!(theme = %active, themes = items.len(), "themes refreshed");
+        self.emit(Event::Themes { items, active });
+    }
+
+    fn save_theme(&mut self, name: String) {
+        let items = theme::load_all();
+        let item = theme::resolve(&name, &items).clone();
+        self.state.settings.theme = item.name.clone();
+        self.state.settings.background_effect = item.theme.background_effect.clone();
+        save_state(&self.state);
+        info!(theme = %item.name, "theme selected");
+        self.emit(Event::Themes {
+            items,
+            active: item.name,
+        });
+    }
+
+    fn open_themes_folder(&mut self) {
+        match theme::ensure_themes_dir() {
+            Ok(dir) => {
+                info!(path = %dir.display(), "opening themes folder");
+                if let Err(error) = std::process::Command::new("explorer").arg(&dir).spawn() {
+                    error!(%error, "failed to open themes folder");
+                    self.emit(Event::Error(format!(
+                        "Не удалось открыть папку тем: {error}"
+                    )));
+                }
+            }
+            Err(error) => {
+                error!(%error, "failed to create themes folder");
+                self.emit(Event::Error(format!(
+                    "Не удалось создать папку тем: {error}"
+                )));
+            }
+        }
     }
 
     async fn enter_offline(&mut self) {

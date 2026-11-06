@@ -41,6 +41,10 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   enable/disable by renaming `.jar` ↔ `.jar.disabled`.
 - Rounded UI typography: Nunito (Regular/SemiBold/Bold, Cyrillic included),
   embedded in the binary and used as the default font family.
+- Visual themes: built-in `dark`, `light`, `femboy`, `ocean` plus any
+  `*.json` dropped into `%APPDATA%\Vestalis\rust-launcher\themes`. Switching is
+  instant, applies to every screen (login, main, settings, mods, splash,
+  dropdown), and is stored as `settings.theme` in `state.json`.
 - Ambient background in Settings → «Фон лаунчера»: «Нет», «Светлячки»,
   «Листья» or «Снежинки». The effects are drawn in Slint and driven by
   `animation-tick()`, so they do not need a Rust timer.
@@ -109,6 +113,7 @@ rust-launcher/
 │  ├─ discord.rs        minimal Discord IPC rich presence
 │  ├─ window.rs         Win32 work-area maximize for the borderless window
 │  ├─ storage.rs        state.json + validation cache (legacy C# cache import)
+│  ├─ theme.rs          theme tokens, built-ins and user theme loading
 │  ├─ hwid.rs           Windows HWID, RAM, OS info
 │  └─ model.rs          settings, session, API DTOs
 └─ assets/              logo, background, meme, fonts/Nunito-*
@@ -132,6 +137,61 @@ No blocking I/O happens in a Slint callback.
 
 The first validation imports `%LOCALAPPDATA%\Gml.Launcher\validation-cache-v1.json`,
 so an existing C# installation does not re-hash its whole 16k-file client.
+
+## Themes
+
+Built-in themes live in `src/theme.rs`: `dark`, `light`, `femboy`, `ocean`.
+The active theme is stored as `settings.theme` in `state.json`; Settings →
+«Оформление» switches it live and «Сохранить настройки» persists it.
+
+Custom themes are JSON files directly inside
+`%APPDATA%\Vestalis\rust-launcher\themes`. The folder can be created with
+«Открыть папку тем». Example:
+
+```json
+{
+  "name": "sunset",
+  "theme": {
+    "background": "#1a0f0a",
+    "backgroundAlt": "#120a07",
+    "surface": "#2a1810",
+    "surfaceHover": "#3a2217",
+    "border": "#4a2c1d",
+    "text": "#ffe8d6",
+    "textMuted": "#d7b8a0",
+    "accent": "#f97316",
+    "accentHover": "#fb923c",
+    "accentText": "#1a0f0a",
+    "success": "#4ade80",
+    "warning": "#fbbf24",
+    "danger": "#fb7185",
+    "gradientStart": "#f97316",
+    "gradientEnd": "#dc2626",
+    "radiusXs": 3,
+    "radiusSm": 8,
+    "radiusMd": 11,
+    "radiusLg": 14,
+    "radiusPill": 99,
+    "cardOpacity": 0.92,
+    "fontFamily": "Nunito",
+    "baseFontWeight": 600,
+    "backgroundEffect": "leaves"
+  }
+}
+```
+
+- Every field is optional: missing tokens use the `dark` palette.
+- Colors accept `#RRGGBB` or `#RRGGBBAA`; an invalid token is replaced by the
+  `dark` value and logged instead of rejecting the whole theme.
+- `radius*` are logical pixels (0–64, the pill radius is clamped to 1–999),
+  `cardOpacity` is clamped to 0–1, `baseFontWeight` to 100–900.
+- `backgroundEffect` is `none` / `fireflies` / `leaves` / `snow`; selecting a
+  theme applies its effect, and the Settings effect control can override it.
+- Only regular `*.json` files directly in the folder are read (no recursion,
+  no symlinks); files over 256 KiB are ignored. Invalid JSON, duplicate names
+  and unreadable files are logged and skipped. A UTF-8 BOM is accepted.
+- Theme text on `background` and `surface` is checked for ≥ 4.5:1 contrast by
+  the unit tests for all built-in themes.
 
 ## Backend notes
 
