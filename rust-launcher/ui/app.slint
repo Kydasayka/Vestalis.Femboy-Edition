@@ -667,7 +667,8 @@ component ProfileList inherits VerticalLayout {
             for p in root.profiles: Rectangle {
                 height: 62px;
                 border-radius: Theme.radius-md;
-                background: p.id == root.selected-index ? Theme.accent.with-alpha(0.22)
+                background: p.id == root.selected-index
+                    ? (Theme.mode == "material3" ? Theme.primary-container : Theme.accent.with-alpha(0.22))
                     : row-area.has-hover ? Theme.surface-hover : transparent;
                 border-width: 1px;
                 border-color: p.id == root.selected-index ? Theme.accent : transparent;
@@ -710,7 +711,9 @@ component ProfileList inherits VerticalLayout {
                         horizontal-stretch: 1;
                         Text {
                             text: p.display-name;
-                            color: Theme.text;
+                            color: p.id == root.selected-index && Theme.mode == "material3"
+                                ? Theme.on-primary-container
+                                : Theme.text;
                             font-size: 14px;
                             font-weight: 600;
                             overflow: elide;
@@ -2046,7 +2049,9 @@ export component AppWindow inherits Window {
                                     height: 46px;
                                     border-radius: Theme.radius-md;
                                     background: root.set-theme == t.name
-                                        ? Theme.accent.with-alpha(0.16)
+                                        ? (Theme.mode == "material3"
+                                            ? Theme.primary-container
+                                            : Theme.accent.with-alpha(0.16))
                                         : Theme.surface-hover;
                                     border-width: 1px;
                                     border-color: root.set-theme == t.name ? Theme.accent : Theme.border;
@@ -2080,7 +2085,9 @@ export component AppWindow inherits Window {
 
                                         Text {
                                             text: t.name;
-                                            color: Theme.text;
+                                            color: root.set-theme == t.name && Theme.mode == "material3"
+                                                ? Theme.on-primary-container
+                                                : Theme.text;
                                             font-size: 14px;
                                             font-weight: 600;
                                             vertical-alignment: center;
@@ -2318,6 +2325,17 @@ export component AppWindow inherits Window {
                                     row-layout := HorizontalLayout {
                                         padding: 8px;
                                         spacing: 8px;
+                                        Image {
+                                            width: 14px;
+                                            height: 14px;
+                                            source: row.status == "ok"
+                                                ? ThemeIcons.success
+                                                : row.status == "warn" ? ThemeIcons.warning : ThemeIcons.error;
+                                            visible: row.status == "ok"
+                                                ? ThemeIcons.has-success
+                                                : row.status == "warn" ? ThemeIcons.has-warning : ThemeIcons.has-error;
+                                            image-fit: contain;
+                                        }
                                         Text {
                                             text: row.status == "ok" ? "ОК" : row.status == "warn" ? "ВНИМАНИЕ" : "ОШИБКА";
                                             color: row.status == "ok" ? Theme.success : row.status == "warn" ? Theme.warning : Theme.danger;

@@ -950,6 +950,26 @@ mod tests {
     }
 
     #[test]
+    fn status_colors_are_readable() {
+        for item in builtin_themes() {
+            for background in [&item.theme.background, &item.theme.surface] {
+                assert!(
+                    contrast(&item.theme.warning, background) >= 3.0,
+                    "{} warning on {}",
+                    item.name,
+                    background
+                );
+                assert!(
+                    contrast(&item.theme.danger, background) >= 3.0,
+                    "{} danger on {}",
+                    item.name,
+                    background
+                );
+            }
+        }
+    }
+
+    #[test]
     fn material3_accent_palettes_stay_readable() {
         for accent in [(0, 120, 215), (220, 20, 60), (0, 200, 110)] {
             for base in [Theme::default(), light_theme()] {
@@ -957,6 +977,7 @@ mod tests {
                 assert!(contrast(&theme.text, &theme.background) >= 4.5);
                 assert!(contrast(&theme.text, &theme.surface) >= 4.5);
                 assert!(contrast(&theme.accent_text, &theme.accent) >= 4.5);
+                assert!(contrast(&theme.on_error, &theme.error) >= 4.5);
             }
         }
     }
