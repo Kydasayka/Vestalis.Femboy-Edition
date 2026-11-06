@@ -264,6 +264,9 @@ export component AppWindow inherits Window {
     no-frame: true;
     resize-border-width: 6px;
     default-font-family: "Nunito";
+    // Regular 400 shimmers on the dark background at 14 px; SemiBold reads
+    // cleaner without looking like a heading.
+    default-font-weight: 600;
 
     // ---- login / global state -------------------------------------------
     in-out property <int> screen: 0;

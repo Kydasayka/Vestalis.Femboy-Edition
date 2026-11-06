@@ -316,8 +316,9 @@ cargo clippy --all-targets -- -D warnings
 - Мелкие шрифты подняты (10→12, 11→13, 12/13→14) — не возвращать 10–11 px.
   Шрифт UI — Nunito (`assets/fonts/Nunito-{Regular,SemiBold,Bold}.ttf`, OFL
   рядом); подключается файловыми `import` в `app.slint`, семья задана через
-  `Window.default-font-family: "Nunito"`. Не заменять на Fredoka One: в нём нет
-  кириллицы.
+  `Window.default-font-family: "Nunito"`, базовый вес — `default-font-weight:
+  600` (Regular 400 на тёмном фоне «рябит»). Не заменять на Fredoka One: в нём
+  нет кириллицы.
 - Фон лаунчера: настройка `background-effect` (`none`/`fireflies`/`leaves`/
   `snow`) в карточке «Лаунчер», хранится как `backgroundEffect` в `state.json`.
   Слой `BackgroundEffect` вставлен после градиента и до контента на экранах
