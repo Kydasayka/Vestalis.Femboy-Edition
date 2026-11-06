@@ -501,8 +501,8 @@ export component AppWindow inherits Window {
     // =====================================================================
     if screen == 0: Rectangle {
         width: 100%;
-        y: 38px;
-        height: root.height - 38px;
+        y: 42px;
+        height: root.height - 42px;
         opacity: root.screen-opacity;
         animate opacity { duration: 180ms; easing: ease-out; }
         background: Theme.background;
@@ -662,8 +662,8 @@ export component AppWindow inherits Window {
     // =====================================================================
     if screen == 1: Rectangle {
         width: 100%;
-        y: 38px;
-        height: root.height - 38px;
+        y: 42px;
+        height: root.height - 42px;
         opacity: root.screen-opacity;
         animate opacity { duration: 180ms; easing: ease-out; }
         background: Theme.background;
@@ -1128,8 +1128,8 @@ export component AppWindow inherits Window {
     Rectangle {
         visible: screen == 2;
         width: 100%;
-        y: 38px;
-        height: root.height - 38px;
+        y: 42px;
+        height: root.height - 42px;
         opacity: root.screen-opacity;
         animate opacity { duration: 180ms; easing: ease-out; }
         background: Theme.background;
@@ -1639,8 +1639,8 @@ export component AppWindow inherits Window {
     // =====================================================================
     if screen == 3: Rectangle {
         width: 100%;
-        y: 38px;
-        height: root.height - 38px;
+        y: 42px;
+        height: root.height - 42px;
         opacity: root.screen-opacity;
         animate opacity { duration: 180ms; easing: ease-out; }
         background: Theme.background;
@@ -1811,7 +1811,7 @@ export component AppWindow inherits Window {
     Rectangle {
         y: 0;
         width: 100%;
-        height: 38px;
+        height: 42px;
         background: Theme.background-alt.with-alpha(0.96);
         border-width: 0px;
 
@@ -1821,6 +1821,7 @@ export component AppWindow inherits Window {
             padding-left: 12px;
             padding-right: 6px;
             spacing: 6px;
+            cross-axis-alignment: center;
 
             Text {
                 text: "Vestalis Launcher";
@@ -1924,9 +1925,9 @@ export component AppWindow inherits Window {
     }
 
     if root.server-menu-open: Rectangle {
-        y: 38px;
+        y: 42px;
         width: 100%;
-        height: root.height - 38px;
+        height: root.height - 42px;
         background: transparent;
 
         TouchArea {
@@ -1936,7 +1937,7 @@ export component AppWindow inherits Window {
 
     if root.server-menu-open: Rectangle {
         x: root.width - 276px;
-        y: 42px;
+        y: 46px;
         width: 172px;
         height: root.pl1-available ? 160px : 124px;
         border-radius: Theme.radius-lg;
