@@ -77,12 +77,9 @@ fn main() -> anyhow::Result<()> {
     }
     state.settings.theme_mode =
         crate::theme::normalize_mode(&state.settings.theme_mode).to_string();
-    let accent = crate::theme::system_accent();
-    SYSTEM_ACCENT.with(|value| value.set(accent));
     info!(
         theme = %active.name,
         mode = %state.settings.theme_mode,
-        accent = ?accent,
         "theme applied"
     );
     THEME_CATALOG.with(|catalog| *catalog.borrow_mut() = themes);
@@ -95,6 +92,13 @@ fn main() -> anyhow::Result<()> {
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
 
     let ui = AppWindow::new()?;
+    // winit initialises OLE/STA while creating the window, so the WinRT
+    // accent lookup must run after this point on the UI thread.
+    SYSTEM_ACCENT.with(|value| value.set(crate::theme::system_accent()));
+    info!(
+        accent = ?SYSTEM_ACCENT.with(|value| value.get()),
+        "Windows accent sampled"
+    );
     ui.set_set_theme_mode(state.settings.theme_mode.clone().into());
     // Apply before the first frame so a non-dark theme never flashes.
     apply_item(&ui, &active, &state.settings.theme_mode);

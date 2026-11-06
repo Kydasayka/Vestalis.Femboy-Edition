@@ -342,7 +342,10 @@ cargo clippy --all-targets -- -D warnings
   насыщенный кандидат. Серый/чёрный accent — валидная настройка Windows и
   используется как есть; accent темы берётся только если Windows вообще не
   отдал значение. Кнопка «Взять цвет Windows» показывает считанный hex. При
-  активном M3 accent опрашивается раз в 20 с. Liquid Glass —
+  активном M3 accent опрашивается раз в 20 с. **Важно:** не инициализировать
+  COM как MTA до создания окна — winit делает `OleInitialize` (STA) и падает с
+  `RPC_E_CHANGED_MODE`; `system_accent()` вызывается только после
+  `AppWindow::new()`. Liquid Glass —
   **имитация**: в Slint 1.18 нет backdrop-blur, поэтому используются
   полупрозрачные слои, градиентные блики (`glass-*`) и размытые цветовые поля
   (`GlassBackdrop`).

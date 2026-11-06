@@ -489,14 +489,11 @@ fn tone(hue: f64, chroma: f64, lightness: f64) -> String {
 /// while still being able to display the sampled Windows colour.
 #[cfg(windows)]
 fn winrt_accent() -> Option<Rgb> {
-    use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
     use windows::UI::ViewManagement::{UIColorType, UISettings};
 
-    // Slint/winit may already have initialised COM; ignore the mode error.
-    unsafe {
-        let _ = RoInitialize(RO_INIT_MULTITHREADED);
-    }
-
+    // COM/WinRT is initialised by winit before this is called from the UI
+    // thread. Do not initialise MTA here: winit uses OLE/STA and would fail
+    // with RPC_E_CHANGED_MODE.
     let settings = UISettings::new().ok()?;
     let color = settings.GetColorValue(UIColorType::Accent).ok()?;
     Some((color.R, color.G, color.B))
