@@ -12,8 +12,10 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   `X-Client-Signature` (HMAC-SHA256). The key is embedded in the build as
   XOR-obfuscated bytes and is not configurable — the old Settings field was
   removed because a mistyped key silently broke sessions.
-- Server selector as a dropdown in the top-right corner (RU-1, RU-2, EU-1,
-  PL-1). Switching a server keeps the saved credentials and signs in again
+- Server selector as a dropdown in the top-right corner (RU-1, RU-2, EU-1).
+  PL-1 is temporarily hidden (`model::PL1_AVAILABLE = false`) because the mirror
+  backend is offline; a saved PL-1 selection is migrated to RU-2 on startup.
+  Switching a server keeps the saved credentials and signs in again
   automatically; the branded start screen stays up until the auto-login
   finishes, so the login form never flashes.
 - Profiles and news from the backend, with icons, version badges and online
@@ -23,7 +25,10 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
 - Offline mode using the snapshots in `%APPDATA%\Vestalis\offline-mode`
   (`profiles.json` + `<profile>/profileInfo.json`).
 - File validation (SHA-1, size, mtime cache) and parallel downloads with
-  progress, speed, retries and atomic replace.
+  progress, speed, retries and atomic replace. The manifest `size` is checked
+  before the hash, so a server-side replacement is picked up even if the hash
+  is missing; the SHA-1 cache is only trusted while both the local file and
+  the expected manifest hash are unchanged.
 - Game launch: Java detection, `-Xms`/`-Xmx` injection, custom JVM flags,
   authlib endpoint rewrite for the active server, and removal of the authlib
   agent in offline mode.

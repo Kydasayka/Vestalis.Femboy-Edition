@@ -51,7 +51,16 @@ fn main() -> anyhow::Result<()> {
         "starting Vestalis launcher"
     );
 
-    let state = load_state();
+    let mut state = load_state();
+    // PL-1 is disabled: migrate a saved selection to RU-2 and let the normal
+    // auto-login issue a fresh session on the working backend.
+    if !model::PL1_AVAILABLE && model::server_index(&state.server_host) == 3 {
+        state.server_host = model::SERVERS[1].1.to_string();
+        state.user = None;
+        state.auth_via_mirror = false;
+        storage::save_state(&state);
+    }
+
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
@@ -139,6 +148,7 @@ fn initialize_ui(ui: &AppWindow, state: &Persisted) {
     ui.set_server_index(server_index as i32);
     ui.set_server_label(model::SERVERS[server_index].0.into());
     ui.set_server_host_label(state.server_host.clone().into());
+    ui.set_pl1_available(model::PL1_AVAILABLE);
     if server_index == 3 {
         ui.set_main_status(
             "PL-1 — зеркало для просмотра. Для входа в игру выберите RU-1, RU-2 или EU-1.".into(),

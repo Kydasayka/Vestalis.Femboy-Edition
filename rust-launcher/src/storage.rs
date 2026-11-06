@@ -44,6 +44,11 @@ pub struct CacheEntry {
     pub size: i64,
     pub mtime: i64,
     pub hash: String,
+    /// Expected hash from the manifest the cached local hash was checked
+    /// against. If the server changes the file, this forces a re-hash instead
+    /// of trusting a cache entry that was valid for the previous manifest.
+    #[serde(default)]
+    pub server_hash: String,
 }
 
 pub type ValidationCache = HashMap<String, CacheEntry>;
@@ -98,6 +103,7 @@ fn load_legacy_cache() -> Option<ValidationCache> {
                         size: entry.size,
                         mtime: (entry.ticks - EPOCH_TICKS) / 10_000_000,
                         hash: entry.hash,
+                        server_hash: String::new(),
                     },
                 )
             })

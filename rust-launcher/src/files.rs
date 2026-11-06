@@ -8,6 +8,7 @@ use anyhow::{anyhow, Context, Result};
 use futures::stream::{self, StreamExt};
 use sha1::{Digest, Sha1};
 use tokio::io::AsyncWriteExt;
+use tracing::info;
 
 use crate::api::Backend;
 use crate::model::{ProfileFile, ProfileInfo};
@@ -130,10 +131,16 @@ pub async fn sync_profile(
         save_cache(&cache);
     }
 
+    info!(total, to_update = tasks.len(), "profile files validated");
+
     if tasks.is_empty() {
         state.done.store(total, Ordering::Relaxed);
         state.emit(&progress, "Все файлы актуальны", true);
         return Ok(());
+    }
+
+    for task in tasks.iter().take(12) {
+        info!(file = %task.file.directory, "file will be updated");
     }
 
     let files_total = tasks.len();
@@ -145,10 +152,11 @@ pub async fn sync_profile(
             let backend = backend.clone();
             let state = download_state.clone();
             let progress = progress.clone();
+            let cache = cache.clone();
 
             async move {
                 let name = task.file.name.clone();
-                let result = download_one(&backend, &task, &state, &progress).await;
+                let result = download_one(&backend, &task, &state, &progress, &cache).await;
                 if result.is_ok() {
                     state.done.fetch_add(1, Ordering::Relaxed);
                     state.emit(&progress, &name, true);
@@ -169,6 +177,11 @@ pub async fn sync_profile(
 
     if let Some(error) = first_error {
         return Err(error);
+    }
+
+    {
+        let cache = cache.lock().unwrap();
+        save_cache(&cache);
     }
 
     download_state.emit(&progress, "Готово", true);
@@ -193,13 +206,32 @@ fn validate_one(
     let metadata = std::fs::metadata(&target).ok();
 
     if let Some(metadata) = metadata {
+        let size = metadata.len() as i64;
+
+        // User-owned files (options, configs, saves, logs) must survive updates.
+        // This is the same containment check the C# client uses.
+        let whitelisted = white_list
+            .iter()
+            .any(|allowed| allowed.directory.contains(&file.directory));
+        if whitelisted {
+            return None;
+        }
+
+        // The size in the manifest is authoritative. A mismatch means the
+        // server replaced the file even if the hash is missing or stale.
+        if file.size > 0 && size != file.size {
+            return Some(DownloadTask {
+                file: file.clone(),
+                target,
+            });
+        }
+
         // Huge files are trusted by presence; hashing them every launch is pointless.
-        if metadata.len() >= 100 * 1024 * 1024 {
+        if size >= 100 * 1024 * 1024 {
             return None;
         }
 
         if let Some(expected) = file.hash.as_deref().filter(|hash| !hash.is_empty()) {
-            let size = metadata.len() as i64;
             let mtime = metadata
                 .modified()
                 .ok()
@@ -213,8 +245,18 @@ fn validate_one(
                 cache.get(&key).cloned()
             };
 
+            // Reuse the cached hash only while the local file is unchanged AND
+            // the manifest still expects the same hash. After a server update
+            // the recorded server hash differs, forcing a real re-hash.
             let hash = match cached {
-                Some(entry) if entry.size == size && entry.mtime == mtime => entry.hash,
+                Some(entry)
+                    if entry.size == size
+                        && entry.mtime == mtime
+                        && (entry.server_hash.is_empty()
+                            || entry.server_hash.eq_ignore_ascii_case(expected)) =>
+                {
+                    entry.hash
+                }
                 _ => match hash_file(&target) {
                     Ok(hash) => {
                         let mut cache = cache.lock().unwrap();
@@ -224,6 +266,7 @@ fn validate_one(
                                 size,
                                 mtime,
                                 hash: hash.clone(),
+                                server_hash: expected.to_string(),
                             },
                         );
                         hash
@@ -233,13 +276,6 @@ fn validate_one(
             };
 
             if hash.eq_ignore_ascii_case(expected) {
-                return None;
-            }
-
-            if white_list
-                .iter()
-                .any(|allowed| allowed.directory.contains(&file.directory))
-            {
                 return None;
             }
         }
@@ -272,6 +308,7 @@ async fn download_one(
     task: &DownloadTask,
     state: &Arc<ProgressState>,
     progress: &ProgressFn,
+    cache: &Arc<Mutex<ValidationCache>>,
 ) -> Result<()> {
     let hash = task
         .file
@@ -297,7 +334,35 @@ async fn download_one(
         )
         .await
         {
-            Ok(()) => return Ok(()),
+            Ok(()) => {
+                // Record the freshly downloaded file so the next launch does not
+                // hash it again. The server hash is stored too, so a later
+                // manifest change still invalidates the entry.
+                if let Ok(metadata) = tokio::fs::metadata(&task.target).await {
+                    let size = metadata.len() as i64;
+                    let mtime = metadata
+                        .modified()
+                        .ok()
+                        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|duration| duration.as_secs() as i64)
+                        .unwrap_or(0);
+                    let key = cache_key(&task.file.directory);
+
+                    if let Ok(mut cache) = cache.lock() {
+                        cache.insert(
+                            key,
+                            CacheEntry {
+                                size,
+                                mtime,
+                                hash: hash.to_lowercase(),
+                                server_hash: hash.to_lowercase(),
+                            },
+                        );
+                    }
+                }
+
+                return Ok(());
+            }
             Err(error) => {
                 last_error = Some(error);
                 if attempt < 3 {
@@ -358,4 +423,123 @@ async fn download_once(
     let _ = tokio::fs::remove_file(target).await;
     tokio::fs::rename(&temporary, target).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file_entry(directory: &str, size: i64, hash: &str) -> ProfileFile {
+        ProfileFile {
+            name: directory
+                .rsplit('/')
+                .next()
+                .unwrap_or(directory)
+                .to_string(),
+            directory: directory.to_string(),
+            hash: Some(hash.to_string()),
+            size,
+        }
+    }
+
+    fn temp_root(label: &str) -> PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("vestalis-test-{label}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn changed_manifest_size_forces_download_without_hashing() {
+        let root = temp_root("size");
+        let relative = "game data/Surv10/mods/test.jar";
+        let target = resolve_below(&root, relative).unwrap();
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        std::fs::write(&target, b"old").unwrap();
+
+        // Server reports a different size (e.g. mod was replaced) and a hash
+        // that is intentionally not the local one.
+        let entry = file_entry(relative, 999, "0000000000000000000000000000000000000000");
+        let cache = Arc::new(Mutex::new(ValidationCache::new()));
+
+        let task = validate_one(&root, &entry, &cache, &[]);
+        assert!(task.is_some(), "size mismatch must schedule an update");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn matching_size_and_hash_is_skipped() {
+        let root = temp_root("same");
+        let relative = "game data/Surv10/mods/test.jar";
+        let target = resolve_below(&root, relative).unwrap();
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        std::fs::write(&target, b"same-content").unwrap();
+
+        let metadata = std::fs::metadata(&target).unwrap();
+        let size = metadata.len() as i64;
+        let mtime = metadata
+            .modified()
+            .unwrap()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let hash = hash_file(&target).unwrap();
+
+        let entry = file_entry(relative, size, &hash);
+        let mut cache = ValidationCache::new();
+        cache.insert(
+            cache_key(relative),
+            CacheEntry {
+                size,
+                mtime,
+                hash: hash.clone(),
+                server_hash: hash.clone(),
+            },
+        );
+        let cache = Arc::new(Mutex::new(cache));
+
+        assert!(validate_one(&root, &entry, &cache, &[]).is_none());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn changed_manifest_hash_invalidates_cache_entry() {
+        let root = temp_root("hash");
+        let relative = "game data/Surv10/mods/test.jar";
+        let target = resolve_below(&root, relative).unwrap();
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        // Same length as "new-content", so only the hash comparison can catch it.
+        std::fs::write(&target, b"old-content").unwrap();
+
+        let metadata = std::fs::metadata(&target).unwrap();
+        let size = metadata.len() as i64;
+        let mtime = metadata
+            .modified()
+            .unwrap()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let old_hash = hash_file(&target).unwrap();
+        let new_hash = hex::encode(Sha1::digest(b"new-content"));
+
+        let entry = file_entry(relative, size, &new_hash);
+        let mut cache = ValidationCache::new();
+        cache.insert(
+            cache_key(relative),
+            CacheEntry {
+                size,
+                mtime,
+                hash: old_hash.clone(),
+                server_hash: old_hash,
+            },
+        );
+        let cache = Arc::new(Mutex::new(cache));
+
+        assert!(validate_one(&root, &entry, &cache, &[]).is_some());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

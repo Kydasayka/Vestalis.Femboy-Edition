@@ -471,6 +471,9 @@ impl Worker {
     }
 
     async fn select_server(&mut self, index: usize) {
+        if index == 3 && !crate::model::PL1_AVAILABLE {
+            return;
+        }
         let Some((_, host)) = SERVERS.get(index) else {
             return;
         };

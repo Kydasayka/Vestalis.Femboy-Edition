@@ -282,7 +282,8 @@ export component AppWindow inherits Window {
     in-out property <bool> show-2fa: false;
     in-out property <string> twofa: "";
     in-out property <int> server-index: 0;
-    in-out property <string> server-label: "PL-1";
+    in-out property <bool> pl1-available: false;
+    in-out property <string> server-label: "RU-2";
     in-out property <string> server-host-label: "";
     in-out property <string> background-effect: "none";
     in-out property <string> set-background-effect: "none";
@@ -1662,7 +1663,7 @@ export component AppWindow inherits Window {
         x: root.width - 262px;
         y: 38px;
         width: 160px;
-        height: 150px;
+        height: root.pl1-available ? 150px : 114px;
         border-radius: 10px;
         background: #14141af5;
         border-width: 1px;
@@ -1686,7 +1687,7 @@ export component AppWindow inherits Window {
                 active: root.server-index == 2;
                 clicked => { root.server-menu-open = false; root.server-clicked(2); }
             }
-            ServerMenuItem {
+            if root.pl1-available: ServerMenuItem {
                 label: "PL-1";
                 active: root.server-index == 3;
                 clicked => { root.server-menu-open = false; root.server-clicked(3); }

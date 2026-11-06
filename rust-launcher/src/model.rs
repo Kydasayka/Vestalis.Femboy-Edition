@@ -20,6 +20,10 @@ pub const DEFAULT_HOST: &str = SERVERS[3].1;
 /// "official launcher required" gate. Its upstream is the RU-2 backend.
 pub const MIRROR_HOST: &str = SERVERS[3].1;
 
+/// PL-1 is a read-only mirror and currently disabled in the UI. Keep the host
+/// entry so the service-access code can be re-enabled later without a rewrite.
+pub const PL1_AVAILABLE: bool = false;
+
 pub fn server_index(host: &str) -> usize {
     let normalized = host.trim_end_matches('/');
     SERVERS
@@ -226,6 +230,10 @@ pub struct ProfileFile {
     pub directory: String,
     #[serde(default)]
     pub hash: Option<String>,
+    /// Server-side size. A mismatch is a fast "must update" signal even when
+    /// the hash is missing or stale in the manifest.
+    #[serde(default)]
+    pub size: i64,
 }
 
 #[derive(Clone, Debug, Deserialize)]
