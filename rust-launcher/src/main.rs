@@ -139,6 +139,11 @@ fn initialize_ui(ui: &AppWindow, state: &Persisted) {
     ui.set_server_index(server_index as i32);
     ui.set_server_label(model::SERVERS[server_index].0.into());
     ui.set_server_host_label(state.server_host.clone().into());
+    if server_index == 3 {
+        ui.set_main_status(
+            "PL-1 — зеркало для просмотра. Для входа в игру выберите RU-1, RU-2 или EU-1.".into(),
+        );
+    }
     ui.set_is_kydasay(
         state
             .user
@@ -410,7 +415,6 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
                 xms: ui.get_set_xms() as u32,
                 xmx: ui.get_set_xmx() as u32,
                 custom_jvm: ui.get_set_custom_jvm().to_string(),
-                client_secret: ui.get_set_client_secret().to_string(),
                 send_hwid: ui.get_set_send_hwid(),
                 sounds: ui.get_set_sounds(),
                 hide_on_launch: ui.get_set_hide_on_launch(),
@@ -735,7 +739,6 @@ fn apply_settings(ui: &AppWindow, settings: &Settings, max_ram: u64) {
     ui.set_set_height_text(settings.game_height.to_string().into());
     ui.set_set_fullscreen(settings.fullscreen);
     ui.set_set_custom_jvm(settings.custom_jvm.clone().into());
-    ui.set_set_client_secret(settings.client_secret.clone().into());
     ui.set_set_send_hwid(settings.send_hwid);
     ui.set_set_sounds(settings.sounds);
     ui.set_set_hide_on_launch(settings.hide_on_launch);

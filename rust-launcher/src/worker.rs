@@ -155,18 +155,19 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn new(state: Persisted, tx: UnboundedSender<Event>) -> Self {
-        let secret = resolve_client_secret(&state.settings);
+    pub fn new(mut state: Persisted, tx: UnboundedSender<Event>) -> Self {
+        let secret = client_secret();
         let backend =
             Backend::new(&state.server_host).with_client(Some(secret.clone()), String::new());
         let mirror = Backend::new(MIRROR_HOST).with_client(Some(secret), String::new());
-        let via_mirror = state.auth_via_mirror;
+        // Mirror-issued sessions are no longer used for data or launching.
+        state.auth_via_mirror = false;
         Self {
             tx,
             state,
             backend,
             mirror,
-            via_mirror,
+            via_mirror: false,
             profiles: Vec::new(),
             views: Vec::new(),
             mods: Vec::new(),
@@ -207,41 +208,30 @@ impl Worker {
         }
     }
 
-    async fn signin_with_fallback(
+    /// The selected backend is always authoritative. The old silent fallback to
+    /// the PL-1 mirror produced a login that could not join a game server: the
+    /// mirror issues its own token, while the server verifies against RU/EU
+    /// (`join` answers 401 and `hasJoined` 204, which the game reports as an
+    /// invalid session). Failing loudly is better than a broken session.
+    async fn signin(
         &self,
         login: &str,
         password: &str,
         code: &str,
         hwid: &str,
     ) -> Result<(crate::api::AuthOutcome, bool)> {
-        let first = self.backend.signin(login, password, code, hwid).await?;
-
-        if first.session.is_none() && first.blocked && self.backend.base() != self.mirror.base() {
-            info!("sign-in blocked by the selected host, retrying through the mirror");
-            let second = self.mirror.signin(login, password, code, hwid).await?;
-            if second.session.is_some() {
-                return Ok((second, true));
-            }
-        }
-
-        Ok((first, false))
+        Ok((
+            self.backend.signin(login, password, code, hwid).await?,
+            false,
+        ))
     }
 
-    async fn check_token_with_fallback(
+    async fn check_session_token(
         &self,
         token: &str,
         hwid: &str,
     ) -> Result<(crate::api::AuthOutcome, bool)> {
-        let first = self.backend.check_token(token, hwid).await?;
-
-        if first.session.is_none() && first.blocked && self.backend.base() != self.mirror.base() {
-            let second = self.mirror.check_token(token, hwid).await?;
-            if second.session.is_some() {
-                return Ok((second, true));
-            }
-        }
-
-        Ok((first, false))
+        Ok((self.backend.check_token(token, hwid).await?, false))
     }
 
     pub async fn run(mut self, mut rx: UnboundedReceiver<Command>) {
@@ -310,14 +300,11 @@ impl Worker {
                 }
                 _ = profiles_tick.tick() => {
                     if !self.offline && self.state.user.is_some() && !self.busy {
-                        if self.validate_session().await {
-                            self.load_data().await;
-                        } else {
-                            self.logout();
-                            self.emit(Event::LoginError(
-                                "Сессия истекла, войдите заново".into(),
-                            ));
-                        }
+                        // Refresh quietly: a transient backend error must not
+                        // log the player out and rotate the token while the
+                        // game is running (that makes the in-game session
+                        // invalid). The token is validated once at startup.
+                        self.load_data_inner(false).await;
                     }
                 }
             }
@@ -335,7 +322,7 @@ impl Worker {
                 let hwid = hwid::hwid_for(&self.state.settings);
                 let check = tokio::time::timeout(
                     Duration::from_secs(15),
-                    self.check_token_with_fallback(&session.access_token, &hwid),
+                    self.check_session_token(&session.access_token, &hwid),
                 )
                 .await;
 
@@ -392,9 +379,7 @@ impl Worker {
         self.backend.set_hwid(hwid.clone());
         self.mirror.set_hwid(hwid.clone());
         info!(login = %login, "sign-in requested");
-        let result = self
-            .signin_with_fallback(&login, &password, &code, &hwid)
-            .await;
+        let result = self.signin(&login, &password, &code, &hwid).await;
 
         if let Ok((outcome, via_mirror)) = &result {
             info!(
@@ -446,6 +431,11 @@ impl Worker {
                 if !outcome.errors.is_empty() {
                     message.push_str(&format!(": {}", outcome.errors.join(", ")));
                 }
+                if outcome.blocked {
+                    message.push_str(
+                        ". Официальный хост отклонил подпись клиента; проверьте версию лаунчера",
+                    );
+                }
                 self.emit(Event::LoginError(message));
             }
             Err(error) => {
@@ -493,7 +483,7 @@ impl Worker {
         self.state.last_profile = None;
         save_state(&self.state);
 
-        let secret = resolve_client_secret(&self.state.settings);
+        let secret = client_secret();
         let hwid = hwid::hwid_for(&self.state.settings);
         self.backend = Backend::new(host).with_client(Some(secret.clone()), hwid.clone());
         self.mirror.set_client(Some(secret), hwid);
@@ -509,6 +499,15 @@ impl Worker {
         self.emit(Event::LoggedOut);
         self.emit(Event::Busy(false));
         self.spawn_check();
+
+        if index == 3 {
+            self.emit(Event::MainStatus(
+                "PL-1 — зеркало для просмотра. Для входа в игру выберите RU-1, RU-2 или EU-1."
+                    .into(),
+            ));
+        } else {
+            self.emit(Event::MainStatus(String::new()));
+        }
 
         if let Some(saved) = saved_login {
             self.login(saved.login, saved.password, String::new()).await;
@@ -555,29 +554,6 @@ impl Worker {
 
             let _ = tx.send(event);
         });
-    }
-
-    /// Returns false only when the backend explicitly rejects the token.
-    /// Network errors keep the current session.
-    async fn validate_session(&mut self) -> bool {
-        let Some(token) = self.token() else {
-            return false;
-        };
-        let hwid = hwid::hwid_for(&self.state.settings);
-
-        match self.check_token_with_fallback(&token, &hwid).await {
-            Ok((outcome, via_mirror)) => {
-                if outcome.session.is_some() {
-                    self.via_mirror = via_mirror;
-                    self.state.auth_via_mirror = via_mirror;
-                    save_state(&self.state);
-                    true
-                } else {
-                    false
-                }
-            }
-            Err(_) => true,
-        }
     }
 
     /// Downloads the player's Minecraft skin and renders just the head (with
@@ -634,6 +610,10 @@ impl Worker {
     }
 
     async fn load_data(&mut self) {
+        self.load_data_inner(true).await;
+    }
+
+    async fn load_data_inner(&mut self, logout_on_auth_error: bool) {
         if self.offline {
             self.load_offline().await;
             return;
@@ -681,14 +661,16 @@ impl Worker {
             }
             Err(error) => {
                 let text = error.to_string();
-                if text.contains("401") || text.contains("403") || text.contains("Сессия") {
+                let auth_error =
+                    text.contains("401") || text.contains("403") || text.contains("Сессия");
+                if auth_error && logout_on_auth_error {
                     self.state.user = None;
                     save_state(&self.state);
                     self.emit(Event::Screen(0));
                     self.emit(Event::LoginError(
                         "Сессия истекла, войдите заново".to_string(),
                     ));
-                } else {
+                } else if !auth_error {
                     self.emit(Event::Error(format!(
                         "Не удалось загрузить профили: {error}"
                     )));
@@ -1366,7 +1348,7 @@ impl Worker {
         self.state.settings = settings.clone();
         save_state(&self.state);
 
-        let secret = resolve_client_secret(&settings);
+        let secret = client_secret();
         let hwid = self.backend.client_hwid().to_string();
         self.backend.set_client(Some(secret.clone()), hwid.clone());
         self.mirror.set_client(Some(secret), hwid);
@@ -1382,21 +1364,11 @@ impl Worker {
     }
 }
 
-/// Client signature key. The Settings override wins, then an environment
-/// variable, then the obfuscated build-time value so a clean install works
-/// without exposing the key as a plain string in the binary.
-fn resolve_client_secret(settings: &Settings) -> String {
-    let configured = settings.client_secret.trim();
-    if !configured.is_empty() {
-        return configured.to_string();
-    }
-
-    if let Ok(value) = std::env::var("VESTALIS_CLIENT_SECRET") {
-        if !value.trim().is_empty() {
-            return value.trim().to_string();
-        }
-    }
-
+/// Client signature key, embedded in the build as XOR-obfuscated bytes so the
+/// launcher works out of the box and the key is not a plain string in the exe.
+/// The previous Settings override was removed: a mistyped key silently broke
+/// sessions on the official hosts.
+fn client_secret() -> String {
     const OBFUSCATED: &[u8] = &[
         241, 194, 212, 211, 198, 203, 206, 212, 248, 224, 210, 198, 213, 195, 248, 209, 149, 151,
         149, 145, 248, 244, 194, 196, 210, 213, 194, 239, 234, 230, 228, 248, 230, 201, 211, 206,

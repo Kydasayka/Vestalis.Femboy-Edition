@@ -9,9 +9,9 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
 - Sign-in with login/password, 2FA challenge, saved credentials and silent
   token validation (`/api/v1/integrations/auth/signin`, `/checkToken`).
 - Official RU/EU backends: every request is signed with
-  `X-Client-Signature` (HMAC-SHA256). The key is **not** in the repository; the
-  build embeds an obfuscated copy, and an override can be entered in Settings →
-  «Ключ подписи клиента» and stored locally in `state.json`.
+  `X-Client-Signature` (HMAC-SHA256). The key is embedded in the build as
+  XOR-obfuscated bytes and is not configurable — the old Settings field was
+  removed because a mistyped key silently broke sessions.
 - Server selector as a dropdown in the top-right corner (RU-1, RU-2, EU-1,
   PL-1). Switching a server keeps the saved credentials and signs in again
   automatically; the branded start screen stays up until the auto-login
@@ -55,7 +55,10 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
 - Optional «Скрывать лаунчер при запуске игры» in Settings → Окно игры
   (minimizes the launcher once the game process starts).
 - Profiles are refreshed every 90 s and asynchronously after the first load
-  (a lightweight substitute for the C# SignalR `RefreshProfiles` event).
+  (a lightweight substitute for the C# SignalR `RefreshProfiles` event). The
+  periodic refresh never logs the player out, so a transient backend error
+  cannot rotate the token and invalidate a running game session; the token is
+  validated once at startup.
 - Backend mode badge (`ЗЕРКАЛО` / `ПРОКСИ` / `ОСНОВНОЙ` / `ОНЛАЙН` / `ОФФЛАЙН`).
 
 ## Requirements (Windows)
@@ -110,7 +113,7 @@ No blocking I/O happens in a Slint callback.
 
 | What | Where |
 | --- | --- |
-| Settings/session/client-signature key | `%APPDATA%\Vestalis\rust-launcher\state.json` |
+| Settings/session | `%APPDATA%\Vestalis\rust-launcher\state.json` |
 | Game files | `%APPDATA%\Vestalis` (same as the C# launcher) |
 | SHA-1 cache | `%LOCALAPPDATA%\Vestalis\validation-cache-rust.json` |
 | Player head avatars | `%LOCALAPPDATA%\Vestalis\avatars\<uuid>.png` |
@@ -126,10 +129,12 @@ so an existing C# installation does not re-hash its whole 16k-file client.
   is off, a fresh random identifier is generated per request.
 - Official hosts require a valid `X-Client-Signature`:
   `HMAC-SHA256(secret, "{unixSeconds}:{guidN}:{hwid}:Vestalis")`, sent as
-  `unixSeconds:guidN:hexDigest`. Without the project-issued key the host answers
-  `403 «Требуется запуск через официальный лаунчер»` before credential checks.
-  In that case the launcher can fall back to the PL-1 mirror (badge `ЗЕРКАЛО`);
-  a mirror session is not accepted by the official RU/EU servers.
+  `unixSeconds:guidN:hexDigest`. The project key is embedded in the binary, so
+  the host normally answers `200`. A `403 «Требуется запуск через официальный
+  лаунчер»` is shown as-is: the old silent fallback to PL-1 is gone because a
+  mirror-issued token cannot join a game server (`join` returns `401`, the
+  server sees `204` from `hasJoined`, and Minecraft reports an invalid
+  session). Selecting PL-1 explicitly is still possible, but for browsing only.
 - `OsArchitecture` must be `"64"` (not `"x64"`): the backend returns an empty
   profile with `state=Error` for `"x64"` but the full launch manifest for `"64"`.
 - PL-1 accepts the same API and is the default host. The client-signature key

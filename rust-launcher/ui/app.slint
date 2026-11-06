@@ -261,7 +261,7 @@ export component AppWindow inherits Window {
     in-out property <string> set-height-text: "600";
     in-out property <bool> set-fullscreen: false;
     in-out property <string> set-custom-jvm: "";
-    in-out property <string> set-client-secret: "";
+
     in-out property <bool> set-send-hwid: true;
     in-out property <bool> set-sounds: true;
     in-out property <bool> set-hide-on-launch: true;
@@ -1109,17 +1109,6 @@ export component AppWindow inherits Window {
                                 TextField {
                                     text <=> root.set-install-dir;
                                     placeholder: "%APPDATA%\\Vestalis";
-                                }
-
-                                Text {
-                                    text: "Ключ подписи клиента (X-Client-Signature)";
-                                    color: #b9b9c4;
-                                    font-size: 14px;
-                                }
-                                TextField {
-                                    text <=> root.set-client-secret;
-                                    placeholder: "Выдаётся администрацией проекта";
-                                    password: true;
                                 }
 
                                 HorizontalLayout {
