@@ -60,6 +60,7 @@ fn main() -> anyhow::Result<()> {
 
     let log_dir = model::local_app_dir().join("logs");
     let _ = std::fs::create_dir_all(&log_dir);
+    storage::cleanup_cache_dir(&log_dir, Duration::from_secs(30 * 24 * 60 * 60), 60);
     let file_appender = tracing_appender::rolling::daily(&log_dir, "launcher.log");
     let (non_blocking, _log_guard) = tracing_appender::non_blocking(file_appender);
     tracing_subscriber::fmt()
@@ -1683,6 +1684,13 @@ fn apply_texts(ui: &AppWindow, item: &ThemeItem) {
     set!("buttons.rename", set_rename);
     set!("buttons.download", set_download);
     set!("buttons.downloading", set_downloading);
+    set!("buttons.cancel", set_cancel);
+    set!("settings.interface.discord", set_interface_discord);
+    set!("settings.utility.install", set_utility_install);
+    set!("settings.utility.logs", set_utility_logs);
+    set!("settings.utility.reset_window", set_utility_reset_window);
+    set!("settings.utility.check_files", set_utility_check_files);
+    set!("settings.utility.clear_cache", set_utility_clear_cache);
 
     set!("settings.memory.title", set_memory_title);
     set!("settings.memory.desc", set_memory_desc);

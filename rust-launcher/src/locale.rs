@@ -254,6 +254,38 @@ pub fn get(lang: &str, key: &str) -> &'static str {
             "This profile has no optional mods.",
             "Для цього профілю немає опціональних модів.",
         ),
+        "buttons.cancel" => pick(lang, "Отмена", "Cancel", "Скасувати"),
+        "settings.interface.discord" => pick(
+            lang,
+            "Discord Rich Presence",
+            "Discord Rich Presence",
+            "Discord Rich Presence",
+        ),
+        "settings.utility.install" => pick(
+            lang,
+            "Папка установки",
+            "Install folder",
+            "Папка встановлення",
+        ),
+        "settings.utility.logs" => pick(lang, "Логи", "Logs", "Логи"),
+        "settings.utility.reset_window" => pick(
+            lang,
+            "Сбросить окно",
+            "Reset window",
+            "Скинути вікно",
+        ),
+        "settings.utility.check_files" => pick(
+            lang,
+            "Проверить файлы",
+            "Verify files",
+            "Перевірити файли",
+        ),
+        "settings.utility.clear_cache" => pick(
+            lang,
+            "Очистить кэш",
+            "Clear cache",
+            "Очистити кеш",
+        ),
         _ => "",
     }
 }

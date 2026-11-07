@@ -94,6 +94,13 @@ export global Texts {
     in-out property <string> rename: "Переименовать";
     in-out property <string> download: "Скачать";
     in-out property <string> downloading: "Скачивание…";
+    in-out property <string> cancel: "Отмена";
+    in-out property <string> interface-discord: "Discord Rich Presence";
+    in-out property <string> utility-install: "Папка установки";
+    in-out property <string> utility-logs: "Логи";
+    in-out property <string> utility-reset-window: "Сбросить окно";
+    in-out property <string> utility-check-files: "Проверить файлы";
+    in-out property <string> utility-clear-cache: "Очистить кэш";
 
     in-out property <string> memory-title: "Память";
     in-out property <string> memory-desc: "Выделите оперативную память под Minecraft. Оставьте запас системе: ";
@@ -1860,7 +1867,7 @@ export component AppWindow inherits Window {
                             horizontal-stretch: 1;
                         }
                         ActionButton {
-                            label: "Отмена";
+                            label: Texts.cancel;
                             width: 110px;
                             height: 30px;
                             clicked => { root.cancel-launch-clicked(); }
@@ -2239,7 +2246,7 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     spacing: 8px;
                                     ActionButton {
-                                        label: "Папка установки";
+                                        label: Texts.utility-install;
                                         width: 185px;
                                         height: 34px;
                                         icon: ThemeIcons.folder;
@@ -2247,13 +2254,13 @@ export component AppWindow inherits Window {
                                         clicked => { root.open-install-clicked(); }
                                     }
                                     ActionButton {
-                                        label: "Логи";
+                                        label: Texts.utility-logs;
                                         width: 90px;
                                         height: 34px;
                                         clicked => { root.open-logs-clicked(); }
                                     }
                                     ActionButton {
-                                        label: "Сбросить окно";
+                                        label: Texts.utility-reset-window;
                                         width: 155px;
                                         height: 34px;
                                         clicked => { root.reset-window-clicked(); }
@@ -2262,13 +2269,13 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     spacing: 8px;
                                     ActionButton {
-                                        label: "Проверить файлы";
+                                        label: Texts.utility-check-files;
                                         width: 160px;
                                         height: 34px;
                                         clicked => { root.check-files-clicked(); }
                                     }
                                     ActionButton {
-                                        label: "Очистить кэш";
+                                        label: Texts.utility-clear-cache;
                                         width: 150px;
                                         height: 34px;
                                         clicked => { root.clear-cache-clicked(); }
@@ -2326,7 +2333,7 @@ export component AppWindow inherits Window {
                                 }
                                 HorizontalLayout {
                                     spacing: 10px;
-                                    Text { text: "Discord Rich Presence"; color: Theme.text-muted; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Text { text: Texts.interface-discord; color: Theme.text-muted; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
                                     Toggle {
                                         checked: root.set-discord-rpc;
                                         toggled(v) => { root.set-discord-rpc = v; }
