@@ -43,6 +43,86 @@ pub const TEXT_KEYS: &[&str] = &[
     "sections.news",
     "settings.title",
     "settings.back",
+    "login.username",
+    "login.password",
+    "login.hwid",
+    "login.2fa",
+    "login.2fa_submit",
+    "login.busy",
+    "login.checking",
+    "login.profile_select",
+    "buttons.save",
+    "buttons.apply",
+    "buttons.pick",
+    "buttons.load",
+    "buttons.delete",
+    "buttons.rename",
+    "buttons.download",
+    "buttons.downloading",
+    "settings.memory.title",
+    "settings.memory.desc",
+    "settings.memory.xms",
+    "settings.memory.xmx",
+    "settings.jvm.title",
+    "settings.jvm.desc",
+    "settings.game.title",
+    "settings.game.fullscreen",
+    "settings.game.resolution",
+    "settings.interface.title",
+    "settings.interface.sounds",
+    "settings.interface.hwid",
+    "settings.interface.hide_on_launch",
+    "settings.interface.background",
+    "settings.interface.effects",
+    "settings.appearance.title",
+    "settings.appearance.desc",
+    "settings.appearance.mode",
+    "settings.appearance.accent_hint",
+    "settings.appearance.windows",
+    "settings.appearance.manual",
+    "settings.appearance.follow",
+    "settings.appearance.light",
+    "settings.appearance.dark",
+    "settings.appearance.builtin",
+    "settings.appearance.custom",
+    "settings.appearance.refresh",
+    "settings.appearance.open",
+    "settings.appearance.reset",
+    "settings.language.title",
+    "settings.language.hint",
+    "layout.title",
+    "layout.desc",
+    "layout.zone_left",
+    "layout.zone_right",
+    "layout.zone_header",
+    "layout.zone_content_top",
+    "layout.zone_content_bottom",
+    "layout.zone_footer",
+    "layout.widths",
+    "layout.width_left",
+    "layout.width_right",
+    "layout.profiles",
+    "layout.profile_item",
+    "layout.active",
+    "layout.name_placeholder",
+    "layout.save_profile",
+    "layout.reset",
+    "layout.server",
+    "layout.user",
+    "layout.profiles",
+    "layout.countdown",
+    "layout.sidebar_actions",
+    "layout.news",
+    "layout.main_actions",
+    "layout.pinned",
+    "layout.hidden",
+    "layout.visible",
+    "layout.empty",
+    "mods.title",
+    "mods.count",
+    "mods.refresh",
+    "mods.desc",
+    "mods.empty",
 ];
 
 /// sRGB triplet, 0..=255 per channel.
@@ -150,6 +230,106 @@ impl Default for Theme {
             glass_border: "#ffffff2e".into(),
             glass_highlight: "#ffffff1f".into(),
         }
+    }
+}
+
+impl Theme {
+    /// Intermediate palette used by the theme cross-fade. Colors are mixed in
+    /// straight sRGB, which is what the eye expects for short UI transitions.
+    pub fn mix(from: &Theme, to: &Theme, t: f32) -> Theme {
+        let t = t.clamp(0.0, 1.0);
+        let mix = |a: &str, b: &str| mix_color(a, b, t);
+        let radius = |a: u32, b: u32| -> u32 {
+            (a as f32 + (b as f32 - a as f32) * t).round().max(0.0) as u32
+        };
+
+        Theme {
+            mode: if t >= 1.0 {
+                to.mode.clone()
+            } else {
+                from.mode.clone()
+            },
+            background: mix(&from.background, &to.background),
+            background_alt: mix(&from.background_alt, &to.background_alt),
+            surface: mix(&from.surface, &to.surface),
+            surface_hover: mix(&from.surface_hover, &to.surface_hover),
+            border: mix(&from.border, &to.border),
+            text: mix(&from.text, &to.text),
+            text_muted: mix(&from.text_muted, &to.text_muted),
+            accent: mix(&from.accent, &to.accent),
+            accent_hover: mix(&from.accent_hover, &to.accent_hover),
+            accent_text: mix(&from.accent_text, &to.accent_text),
+            success: mix(&from.success, &to.success),
+            warning: mix(&from.warning, &to.warning),
+            danger: mix(&from.danger, &to.danger),
+            gradient_start: mix(&from.gradient_start, &to.gradient_start),
+            gradient_end: mix(&from.gradient_end, &to.gradient_end),
+            radius_xs: radius(from.radius_xs, to.radius_xs),
+            radius_sm: radius(from.radius_sm, to.radius_sm),
+            radius_md: radius(from.radius_md, to.radius_md),
+            radius_lg: radius(from.radius_lg, to.radius_lg),
+            radius_pill: radius(from.radius_pill, to.radius_pill),
+            card_opacity: from.card_opacity + (to.card_opacity - from.card_opacity) * t,
+            font_family: to.font_family.clone(),
+            base_font_weight: to.base_font_weight,
+            background_effect: to.background_effect.clone(),
+            shadow: mix(&from.shadow, &to.shadow),
+            scrim: mix(&from.scrim, &to.scrim),
+            primary_container: mix(&from.primary_container, &to.primary_container),
+            on_primary_container: mix(&from.on_primary_container, &to.on_primary_container),
+            secondary: mix(&from.secondary, &to.secondary),
+            on_secondary: mix(&from.on_secondary, &to.on_secondary),
+            tertiary: mix(&from.tertiary, &to.tertiary),
+            on_tertiary: mix(&from.on_tertiary, &to.on_tertiary),
+            surface_low: mix(&from.surface_low, &to.surface_low),
+            surface_high: mix(&from.surface_high, &to.surface_high),
+            surface_variant: mix(&from.surface_variant, &to.surface_variant),
+            on_surface_variant: mix(&from.on_surface_variant, &to.on_surface_variant),
+            outline: mix(&from.outline, &to.outline),
+            error: mix(&from.error, &to.error),
+            on_error: mix(&from.on_error, &to.on_error),
+            glass_tint: mix(&from.glass_tint, &to.glass_tint),
+            glass_border: mix(&from.glass_border, &to.glass_border),
+            glass_highlight: mix(&from.glass_highlight, &to.glass_highlight),
+        }
+    }
+}
+
+/// Mixes `#RRGGBB` / `#RRGGBBAA` values and keeps the alpha channel when any
+/// input is translucent. Invalid values switch at the end of the transition.
+fn mix_color(from: &str, to: &str, t: f32) -> String {
+    let parse = |value: &str| -> Option<(u8, u8, u8, u8)> {
+        let hex = value.trim().strip_prefix('#')?;
+        let byte = |slice: &str| u8::from_str_radix(slice, 16).ok();
+        let alpha = if hex.len() == 8 {
+            byte(hex.get(6..8)?)?
+        } else {
+            255
+        };
+        Some((
+            byte(hex.get(0..2)?)?,
+            byte(hex.get(2..4)?)?,
+            byte(hex.get(4..6)?)?,
+            alpha,
+        ))
+    };
+
+    let (Some(a), Some(b)) = (parse(from), parse(to)) else {
+        return if t >= 1.0 { to } else { from }.to_string();
+    };
+
+    let channel = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * t).round() as u8;
+    let (r, g, bl, al) = (
+        channel(a.0, b.0),
+        channel(a.1, b.1),
+        channel(a.2, b.2),
+        channel(a.3, b.3),
+    );
+
+    if a.3 == 255 && b.3 == 255 {
+        format!("#{r:02X}{g:02X}{bl:02X}")
+    } else {
+        format!("#{r:02X}{g:02X}{bl:02X}{al:02X}")
     }
 }
 
@@ -290,6 +470,80 @@ fn dark_theme() -> Theme {
     Theme::default()
 }
 
+fn apple_theme() -> Theme {
+    Theme {
+        background: "#f5f5f7".into(),
+        background_alt: "#ececee".into(),
+        surface: "#ffffff".into(),
+        surface_hover: "#f0f0f3".into(),
+        border: "#d2d2d7".into(),
+        text: "#1d1d1f".into(),
+        text_muted: "#5f5f66".into(),
+        accent: "#007aff".into(),
+        accent_hover: "#0a84ff".into(),
+        accent_text: "#ffffff".into(),
+        success: "#1f9d55".into(),
+        warning: "#b45309".into(),
+        danger: "#c62828".into(),
+        gradient_start: "#0a84ff".into(),
+        gradient_end: "#5e5ce6".into(),
+        radius_xs: 6,
+        radius_sm: 12,
+        radius_md: 18,
+        radius_lg: 24,
+        card_opacity: 0.98,
+        background_effect: "none".into(),
+        shadow: "#0000001F".into(),
+        ..Theme::default()
+    }
+}
+
+fn discord_theme() -> Theme {
+    Theme {
+        background: "#1e1f22".into(),
+        background_alt: "#17181a".into(),
+        surface: "#2b2d31".into(),
+        surface_hover: "#35373c".into(),
+        border: "#3f4147".into(),
+        text: "#f2f3f5".into(),
+        text_muted: "#b5bac1".into(),
+        accent: "#5865f2".into(),
+        accent_hover: "#7289da".into(),
+        accent_text: "#ffffff".into(),
+        success: "#23a55a".into(),
+        warning: "#f0b232".into(),
+        danger: "#f23f43".into(),
+        gradient_start: "#5865f2".into(),
+        gradient_end: "#9b59b6".into(),
+        card_opacity: 0.94,
+        background_effect: "none".into(),
+        ..Theme::default()
+    }
+}
+
+fn minecraft_theme() -> Theme {
+    Theme {
+        background: "#14180f".into(),
+        background_alt: "#0e120a".into(),
+        surface: "#1e2617".into(),
+        surface_hover: "#27331d".into(),
+        border: "#34452a".into(),
+        text: "#f2f7ea".into(),
+        text_muted: "#b8c8a7".into(),
+        accent: "#78b84a".into(),
+        accent_hover: "#9bd86a".into(),
+        accent_text: "#10170b".into(),
+        success: "#78b84a".into(),
+        warning: "#d8a63c".into(),
+        danger: "#d9534f".into(),
+        gradient_start: "#4f7a2e".into(),
+        gradient_end: "#2f5d7c".into(),
+        card_opacity: 0.93,
+        background_effect: "leaves".into(),
+        ..Theme::default()
+    }
+}
+
 fn light_theme() -> Theme {
     Theme {
         background: "#f4f1f7".into(),
@@ -392,6 +646,27 @@ pub fn builtin_themes() -> Vec<ThemeItem> {
             icons: HashMap::new(),
             texts: HashMap::new(),
         },
+        ThemeItem {
+            name: "Apple".into(),
+            builtin: true,
+            theme: apple_theme(),
+            icons: HashMap::new(),
+            texts: HashMap::new(),
+        },
+        ThemeItem {
+            name: "Discord".into(),
+            builtin: true,
+            theme: discord_theme(),
+            icons: HashMap::new(),
+            texts: HashMap::new(),
+        },
+        ThemeItem {
+            name: "Minecraft".into(),
+            builtin: true,
+            theme: minecraft_theme(),
+            icons: HashMap::new(),
+            texts: HashMap::new(),
+        },
     ]
 }
 
@@ -432,6 +707,10 @@ fn relative_luminance(rgb: Rgb) -> f64 {
         }
     };
     0.2126 * channel(rgb.0) + 0.7152 * channel(rgb.1) + 0.0722 * channel(rgb.2)
+}
+
+pub fn parse_hex_rgb(value: &str) -> Option<Rgb> {
+    parse_rgb(value)
 }
 
 fn parse_rgb(value: &str) -> Option<Rgb> {
@@ -544,6 +823,24 @@ fn winrt_accent() -> Option<Rgb> {
     None
 }
 
+/// Reads the Windows "app mode" preference. `AppsUseLightTheme` matches the
+/// look of the shell and is preferred; `SystemUsesLightTheme` is the fallback.
+pub fn system_uses_light_theme() -> bool {
+    let Ok(personalize) = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+    else {
+        return false;
+    };
+
+    for name in ["AppsUseLightTheme", "SystemUsesLightTheme"] {
+        if let Ok(value) = personalize.get_value::<u32, _>(name) {
+            return value != 0;
+        }
+    }
+
+    false
+}
+
 pub fn system_accent() -> Option<Rgb> {
     // The WinRT setting is the exact colour shown in Windows Settings. It is
     // authoritative and also works when DWM colourisation is disabled.
@@ -616,14 +913,20 @@ pub fn normalize_mode(value: &str) -> &'static str {
 
 /// Applies a presentation mode on top of a palette. Material 3 derives its
 /// tonal roles from the Windows accent (falling back to the palette accent).
-pub fn apply_mode(base: &Theme, mode: &str, accent: Option<Rgb>) -> Theme {
+pub fn apply_mode(
+    base: &Theme,
+    mode: &str,
+    accent: Option<Rgb>,
+    glass_opacity: f32,
+    glass_blur: f32,
+) -> Theme {
     let mode = normalize_mode(mode);
     let mut theme = base.clone();
     theme.mode = mode.to_string();
 
     match mode {
         "material3" => apply_material3(&mut theme, accent),
-        "liquid-glass" => apply_glass(&mut theme),
+        "liquid-glass" => apply_glass(&mut theme, glass_opacity, glass_blur),
         _ => {}
     }
 
@@ -718,26 +1021,44 @@ fn apply_material3(theme: &mut Theme, accent: Option<Rgb>) {
     theme.glass_highlight = with_alpha("#FFFFFF", 0x1A);
 }
 
-fn apply_glass(theme: &mut Theme) {
+fn apply_glass(theme: &mut Theme, opacity: f32, blur: f32) {
     let light = rgb_to_oklch(&theme.background)
         .map(|(l, _, _)| l >= 0.5)
         .unwrap_or(false);
 
-    // Apple-like Liquid Glass: a very translucent tint, a bright specular
-    // top edge and a soft outer shadow. Slint 1.18 has no backdrop blur, so
-    // the depth comes from layered translucency and gradients.
-    theme.glass_tint = with_alpha(&theme.surface, if light { 0x8C } else { 0x73 });
+    // Slint 1.18 has no backdrop blur, so "blur strength" only changes how
+    // soft the layered imitation looks: stronger specular/highlight layers and
+    // a deeper ambient shadow. It is a documented imitation, not real blur.
+    let opacity = opacity.clamp(0.25, 0.9);
+    let blur = blur.clamp(0.0, 1.0);
+    let alpha = |base: u8| -> u8 {
+        ((base as f32) * (0.55 + opacity * 0.75))
+            .round()
+            .clamp(0.0, 255.0) as u8
+    };
+
+    theme.glass_tint = with_alpha(&theme.surface, alpha(if light { 0x8C } else { 0x73 }));
     theme.glass_border = with_alpha(
         if light { "#000000" } else { "#FFFFFF" },
-        if light { 0x2E } else { 0x47 },
+        alpha(if light { 0x2E } else { 0x47 }),
     );
-    theme.glass_highlight = with_alpha("#FFFFFF", if light { 0x80 } else { 0x40 });
-    theme.card_opacity = 0.46;
+    theme.glass_highlight = with_alpha(
+        "#FFFFFF",
+        ((if light { 0x80u8 } else { 0x40 }) as f32 * (0.6 + blur * 0.8))
+            .round()
+            .clamp(0.0, 255.0) as u8,
+    );
+    theme.card_opacity = opacity;
     theme.radius_xs = 5;
     theme.radius_sm = 12;
     theme.radius_md = 18;
     theme.radius_lg = 26;
-    theme.shadow = if light { "#00000033" } else { "#00000066" }.into();
+    theme.shadow = with_alpha(
+        "#000000",
+        ((if light { 0x33u8 } else { 0x66 }) as f32 * (0.55 + blur))
+            .round()
+            .clamp(0.0, 255.0) as u8,
+    );
 }
 
 pub fn themes_dir() -> PathBuf {
@@ -935,6 +1256,27 @@ fn resolve_asset(base: &Path, relative: &str) -> Option<PathBuf> {
     Some(canonical)
 }
 
+/// Picks the theme for the current Windows app mode when following the
+/// system, otherwise resolves the explicitly selected theme.
+pub fn resolve_of_pair<'a>(
+    follow_windows: bool,
+    light_theme: &str,
+    dark_theme: &str,
+    selected: &str,
+    items: &'a [ThemeItem],
+) -> &'a ThemeItem {
+    if follow_windows {
+        let name = if system_uses_light_theme() {
+            light_theme
+        } else {
+            dark_theme
+        };
+        resolve(name, items)
+    } else {
+        resolve(selected, items)
+    }
+}
+
 pub fn resolve<'a>(name: &str, items: &'a [ThemeItem]) -> &'a ThemeItem {
     items
         .iter()
@@ -1017,7 +1359,7 @@ mod tests {
     fn material3_keeps_the_palette_lightness() {
         for item in builtin_themes() {
             let dark = luminance(&item.theme.background) < 0.5;
-            let themed = apply_mode(&item.theme, "material3", None);
+            let themed = apply_mode(&item.theme, "material3", None, 0.55, 0.5);
             let generated_dark = luminance(&themed.background) < 0.5;
             assert_eq!(
                 dark, generated_dark,
@@ -1025,6 +1367,48 @@ mod tests {
                 item.name, themed.background
             );
         }
+    }
+
+    #[test]
+    fn mix_interpolates_endpoints_and_alpha() {
+        let from = Theme {
+            background: "#000000".into(),
+            shadow: "#00000000".into(),
+            ..Theme::default()
+        };
+        let to = Theme {
+            background: "#FFFFFF".into(),
+            shadow: "#FFFFFF80".into(),
+            ..Theme::default()
+        };
+
+        assert_eq!(Theme::mix(&from, &to, 0.0).background, "#000000");
+        assert_eq!(Theme::mix(&from, &to, 1.0).background, "#FFFFFF");
+        assert_eq!(Theme::mix(&from, &to, 0.0).shadow, "#00000000");
+        assert_eq!(Theme::mix(&from, &to, 1.0).shadow, "#FFFFFF80");
+        assert!(Theme::mix(&from, &to, 0.5).background.starts_with('#'));
+    }
+
+    #[test]
+    fn glass_settings_are_clamped_and_affect_depth() {
+        let base = Theme::default();
+        let translucent = apply_mode(&base, "liquid-glass", None, 0.25, 0.0);
+        let solid = apply_mode(&base, "liquid-glass", None, 0.9, 1.0);
+
+        assert!(translucent.card_opacity >= 0.25);
+        assert!(solid.card_opacity <= 0.9);
+        assert!(solid.card_opacity > translucent.card_opacity);
+
+        let clamped = apply_mode(&base, "liquid-glass", None, -5.0, 5.0);
+        assert!(clamped.card_opacity >= 0.25 && clamped.card_opacity <= 0.9);
+    }
+
+    #[test]
+    fn theme_text_allowlist_does_not_include_critical_errors() {
+        assert!(TEXT_KEYS.contains(&"buttons.play"));
+        assert!(TEXT_KEYS.contains(&"settings.appearance.title"));
+        assert!(!TEXT_KEYS.contains(&"errors.session_expired"));
+        assert!(!TEXT_KEYS.contains(&"window.close"));
     }
 
     #[test]
@@ -1085,7 +1469,7 @@ mod tests {
     fn material3_accent_palettes_stay_readable() {
         for accent in [(0, 120, 215), (220, 20, 60), (0, 200, 110), (107, 107, 107)] {
             for base in [Theme::default(), light_theme()] {
-                let theme = apply_mode(&base, "material3", Some(accent));
+                let theme = apply_mode(&base, "material3", Some(accent), 0.55, 0.5);
                 assert!(contrast(&theme.text, &theme.background) >= 4.5);
                 assert!(contrast(&theme.text, &theme.surface) >= 4.5);
                 assert!(contrast(&theme.accent_text, &theme.accent) >= 4.5);

@@ -12,7 +12,7 @@ use uuid::Uuid;
 type HmacSha256 = Hmac<Sha256>;
 
 use crate::model::{
-    ApiResponse, LoginRequest, MirrorResponse, News, Player, PlayerTexture, Profile, ProfileInfo,
+    ApiResponse, LoginRequest, News, Player, PlayerTexture, Profile, ProfileInfo,
     ProfileInfoRequest, Session, TokenRequest,
 };
 
@@ -427,98 +427,6 @@ impl Backend {
         } else {
             Vec::new()
         }
-    }
-
-    pub async fn mirror_mode(&self, key: &str) -> Option<String> {
-        let mut request = self.client.get(self.url("api/v1/mirror/mode"));
-        if !key.trim().is_empty() {
-            request = request.header("X-Mirror-Control-Key", key.trim());
-        }
-
-        let response = self.sign(request, &self.hwid).send().await.ok()?;
-        if !response.status().is_success() {
-            return None;
-        }
-
-        let parsed: ApiResponse<MirrorResponse> = response.json().await.ok()?;
-        parsed.data.and_then(|value| value.mode)
-    }
-
-    pub async fn mirror_state(&self, key: &str) -> Option<crate::model::MirrorState> {
-        let mut request = self.client.get(self.url("api/v1/mirror/mode"));
-        if !key.trim().is_empty() {
-            request = request.header("X-Mirror-Control-Key", key.trim());
-        }
-
-        let response = self.sign(request, &self.hwid).send().await.ok()?;
-        if !response.status().is_success() {
-            return None;
-        }
-
-        let parsed: ApiResponse<crate::model::MirrorState> = response.json().await.ok()?;
-        parsed.data
-    }
-
-    pub async fn set_mirror_mode(&self, key: &str, mode: &str) -> Result<String> {
-        let request = self
-            .client
-            .put(self.url("api/v1/mirror/mode"))
-            .header("X-Mirror-Control-Key", key.trim())
-            .json(&serde_json::json!({ "mode": mode }));
-        let response = self.sign(request, &self.hwid).send().await?;
-
-        self.mirror_action_result(response, "Не удалось переключить режим")
-            .await
-    }
-
-    pub async fn set_tor(&self, key: &str, enabled: bool) -> Result<String> {
-        let request = self
-            .client
-            .put(self.url("api/v1/mirror/tor"))
-            .header("X-Mirror-Control-Key", key.trim())
-            .json(&serde_json::json!({ "enabled": enabled }));
-        let response = self.sign(request, &self.hwid).send().await?;
-
-        self.mirror_action_result(response, "Не удалось изменить маршрутизацию через Tor")
-            .await
-    }
-
-    async fn mirror_action_result(
-        &self,
-        response: reqwest::Response,
-        fallback: &str,
-    ) -> Result<String> {
-        let status = response.status();
-        let text = response.text().await.unwrap_or_default();
-        let message = serde_json::from_str::<ApiResponse<serde_json::Value>>(&text)
-            .ok()
-            .and_then(|value| value.message)
-            .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| fallback.to_string());
-
-        if status.is_success() {
-            Ok(message)
-        } else if matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
-            Err(anyhow!("Сервисный ключ не принят сервером"))
-        } else {
-            Err(anyhow!(message))
-        }
-    }
-
-    pub async fn self_test(&self, key: &str) -> Option<crate::model::SelfTestReport> {
-        let request = self
-            .client
-            .get(self.url("api/v1/mirror/selftest"))
-            .header("X-Mirror-Control-Key", key.trim())
-            .timeout(Duration::from_secs(60));
-        let response = self.sign(request, &self.hwid).send().await.ok()?;
-
-        if !response.status().is_success() {
-            return None;
-        }
-
-        let parsed: ApiResponse<crate::model::SelfTestReport> = response.json().await.ok()?;
-        parsed.data
     }
 
     pub async fn is_reachable(&self) -> bool {

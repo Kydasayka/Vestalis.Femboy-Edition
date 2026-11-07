@@ -22,6 +22,12 @@ pub struct SyncProgress {
     pub total: usize,
     pub speed_bps: u64,
     pub current: String,
+    /// Bytes transferred in the current phase, when a byte-based progress bar
+    /// makes more sense than a file counter (single mod download).
+    pub bytes: u64,
+    pub total_bytes: u64,
+    /// Remaining time estimate for the current phase, e.g. "2:14".
+    pub eta: String,
 }
 
 pub type ProgressFn = Arc<dyn Fn(SyncProgress) + Send + Sync>;
@@ -34,6 +40,7 @@ struct DownloadTask {
 
 struct ProgressState {
     total: usize,
+    total_bytes: u64,
     done: AtomicUsize,
     bytes: AtomicU64,
     start: Instant,
@@ -43,8 +50,13 @@ struct ProgressState {
 
 impl ProgressState {
     fn new(total: usize, phase: &str) -> Self {
+        Self::with_bytes(total, 0, phase)
+    }
+
+    fn with_bytes(total: usize, total_bytes: u64, phase: &str) -> Self {
         Self {
             total,
+            total_bytes,
             done: AtomicUsize::new(0),
             bytes: AtomicU64::new(0),
             start: Instant::now(),
@@ -63,6 +75,15 @@ impl ProgressState {
 
         let bytes = self.bytes.load(Ordering::Relaxed);
         let seconds = self.start.elapsed().as_secs_f64().max(0.001);
+        let eta = if self.total_bytes > 0 && bytes > 0 && bytes < self.total_bytes {
+            let remaining = (self.total_bytes - bytes) as f64 / (bytes as f64 / seconds);
+            format_eta(remaining)
+        } else if done > 0 && done < self.total {
+            let remaining = (self.total - done) as f64 * (seconds / done as f64);
+            format_eta(remaining)
+        } else {
+            String::new()
+        };
 
         callback(SyncProgress {
             phase: self.phase.clone(),
@@ -70,8 +91,61 @@ impl ProgressState {
             total: self.total,
             speed_bps: (bytes as f64 / seconds) as u64,
             current: current.to_string(),
+            bytes,
+            total_bytes: self.total_bytes,
+            eta,
         });
     }
+}
+
+fn format_eta(seconds: f64) -> String {
+    let seconds = seconds.clamp(0.0, 86_400.0) as u64;
+    if seconds >= 3600 {
+        format!(
+            "{}:{:02}:{:02}",
+            seconds / 3600,
+            (seconds / 60) % 60,
+            seconds % 60
+        )
+    } else {
+        format!("{}:{:02}", seconds / 60, seconds % 60)
+    }
+}
+
+/// Downloads a single optional mod into `target` with retries. The caller
+/// chooses the `.disabled` path when the mod should stay off after download.
+pub async fn download_optional(
+    backend: &Backend,
+    hash: &str,
+    target: &Path,
+    expected_size: u64,
+    name: &str,
+    progress: ProgressFn,
+) -> Result<()> {
+    if let Some(parent) = target.parent() {
+        tokio::fs::create_dir_all(parent).await.ok();
+    }
+
+    let state = Arc::new(ProgressState::with_bytes(1, expected_size, "Загрузка мода"));
+    let mut last_error = None;
+
+    for attempt in 1..=3 {
+        match download_once(backend, hash, target, &state, &progress, name).await {
+            Ok(()) => {
+                state.done.store(1, Ordering::Relaxed);
+                state.emit(&progress, name, true);
+                return Ok(());
+            }
+            Err(error) => {
+                last_error = Some(error);
+                if attempt < 3 {
+                    tokio::time::sleep(Duration::from_millis(250 * attempt as u64)).await;
+                }
+            }
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| anyhow!("Не удалось скачать мод {name}")))
 }
 
 /// Validates every manifest entry and downloads the missing or changed files.
@@ -84,7 +158,7 @@ pub async fn sync_profile(
     progress: ProgressFn,
 ) -> Result<()> {
     let total = info.files.len();
-    let state = Arc::new(ProgressState::new(total, "Проверка файлов"));
+    let state = Arc::new(ProgressState::new(total, "Этап 1/3 · Проверка файлов"));
     let cache = Arc::new(Mutex::new(load_cache()));
 
     let candidate_whitelist = Arc::new(info.white_list_files.clone());
@@ -135,7 +209,7 @@ pub async fn sync_profile(
 
     if tasks.is_empty() {
         state.done.store(total, Ordering::Relaxed);
-        state.emit(&progress, "Все файлы актуальны", true);
+        state.emit(&progress, "Этап 2/3 · Файлы актуальны", true);
         return Ok(());
     }
 
@@ -144,7 +218,10 @@ pub async fn sync_profile(
     }
 
     let files_total = tasks.len();
-    let download_state = Arc::new(ProgressState::new(files_total, "Загрузка файлов"));
+    let download_state = Arc::new(ProgressState::new(
+        files_total,
+        "Этап 2/3 · Загрузка файлов",
+    ));
     download_state.done.store(0, Ordering::Relaxed);
 
     let mut downloads = stream::iter(tasks)
@@ -184,7 +261,7 @@ pub async fn sync_profile(
         save_cache(&cache);
     }
 
-    download_state.emit(&progress, "Готово", true);
+    download_state.emit(&progress, "Этап 3/3 · Подготовка завершена", true);
     Ok(())
 }
 

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// Servers offered in the UI. The order matches the four chips in the Slint view.
+/// Servers offered in the UI. The order matches the dropdown items.
 pub const SERVERS: [(&str, &str); 4] = [
     ("RU-1", "https://gmlfrr.vestalis.xyz/"),
     ("RU-2", "https://msk1.gmlfr.vestalis.xyz/"),
@@ -11,17 +11,10 @@ pub const SERVERS: [(&str, &str); 4] = [
     ("PL-1", "https://201-58-180-2.sslip.io/"),
 ];
 
-// The RU/EU deployments currently reject clients whose HTTP fingerprint is not
-// the official C# build. PL-1 accepts the same API without that gate, so it is
-// the safe default; other hosts stay selectable.
-pub const DEFAULT_HOST: &str = SERVERS[3].1;
+pub const DEFAULT_HOST: &str = SERVERS[1].1;
 
-/// Local mirror used when a main deployment rejects sign-in with the
-/// "official launcher required" gate. Its upstream is the RU-2 backend.
-pub const MIRROR_HOST: &str = SERVERS[3].1;
-
-/// PL-1 is a read-only mirror and currently disabled in the UI. Keep the host
-/// entry so the service-access code can be re-enabled later without a rewrite.
+/// PL-1 is a read-only mirror and is shown as a disabled W.I.P entry. The host
+/// entry stays in the list so it can be re-enabled later without a rewrite.
 pub const PL1_AVAILABLE: bool = false;
 
 pub fn server_index(host: &str) -> usize {
@@ -82,8 +75,26 @@ pub struct Settings {
     pub theme: String,
     /// Presentation mode: "base", "material3" or "liquid-glass".
     pub theme_mode: String,
+    /// Interface language: "ru", "en" or "ua".
+    pub language: String,
+    /// Optional manual accent (#RRGGBB) overriding the Windows accent for M3.
+    pub accent: String,
+    /// Liquid Glass panel opacity (imitation: Slint 1.18 has no backdrop blur).
+    pub glass_opacity: f32,
+    /// Strength of the layered glass imitation (specular/shadow depth).
+    pub glass_blur: f32,
+    /// Follow the Windows light/dark app mode instead of a fixed theme.
+    pub follow_windows_theme: bool,
+    /// Theme applied when Windows is in light mode.
+    pub light_theme: String,
+    /// Theme applied when Windows is in dark mode.
+    pub dark_theme: String,
     /// Main-screen zone layout, independent from the selected theme.
     pub layout: crate::layout::LayoutConfig,
+    /// Named layout presets.
+    pub layouts: Vec<crate::layout::LayoutProfile>,
+    /// Name of the preset the active layout was loaded from.
+    pub layout_profile: String,
     pub install_dir: String,
 }
 
@@ -102,7 +113,16 @@ impl Default for Settings {
             background_effect: "none".to_string(),
             theme: "dark".to_string(),
             theme_mode: "base".to_string(),
+            language: "ru".to_string(),
+            accent: String::new(),
+            glass_opacity: 0.55,
+            glass_blur: 0.5,
+            follow_windows_theme: false,
+            light_theme: "light".to_string(),
+            dark_theme: "dark".to_string(),
             layout: crate::layout::LayoutConfig::default(),
+            layouts: Vec::new(),
+            layout_profile: "По умолчанию".to_string(),
             install_dir: app_dir().to_string_lossy().into_owned(),
         }
     }
@@ -170,10 +190,8 @@ pub struct Persisted {
     pub user: Option<Session>,
     pub saved_login: Option<SavedLogin>,
     pub last_profile: Option<String>,
-    /// The session was issued through the mirror because the selected host is
-    /// gated for this client/IP.
-    pub auth_via_mirror: bool,
-    pub mirror_key: String,
+    /// News items already shown to the user, used for toast de-duplication.
+    pub seen_news: Vec<String>,
 }
 
 impl Default for Persisted {
@@ -184,8 +202,7 @@ impl Default for Persisted {
             user: None,
             saved_login: None,
             last_profile: None,
-            auth_via_mirror: false,
-            mirror_key: String::new(),
+            seen_news: Vec::new(),
         }
     }
 }
@@ -334,58 +351,6 @@ impl Default for DiscordConfig {
             small_image_text: "Vestalis FemBoy Edition".to_string(),
         }
     }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MirrorResponse {
-    #[serde(default)]
-    pub mode: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MirrorState {
-    #[serde(default)]
-    pub mode: String,
-    #[serde(default)]
-    pub upstream: Option<String>,
-    #[serde(default)]
-    pub can_control: bool,
-    #[serde(default)]
-    pub tor_enabled: bool,
-    #[serde(default)]
-    pub tor_available: bool,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SelfTestCheck {
-    #[serde(default)]
-    pub key: String,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub status: String,
-    #[serde(default)]
-    pub message: String,
-    #[serde(default)]
-    pub duration_ms: i64,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SelfTestReport {
-    #[serde(default)]
-    pub status: String,
-    #[serde(default)]
-    pub mode: String,
-    #[serde(default)]
-    pub upstream: String,
-    #[serde(default)]
-    pub duration_ms: i64,
-    #[serde(default)]
-    pub checks: Vec<SelfTestCheck>,
 }
 
 #[derive(Serialize)]

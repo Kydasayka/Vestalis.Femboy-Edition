@@ -7,12 +7,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod api;
+mod diagnostics;
 mod discord;
 mod files;
 mod hwid;
 mod launch;
 mod layout;
+mod locale;
 mod model;
+mod signalr;
 mod storage;
 mod theme;
 mod window;
@@ -36,6 +39,18 @@ use crate::worker::{Command, Event, ProfileView, Worker};
 thread_local! {
     static THEME_CATALOG: RefCell<Vec<ThemeItem>> = const { RefCell::new(Vec::new()) };
     static SYSTEM_ACCENT: std::cell::Cell<Option<crate::theme::Rgb>> = const { std::cell::Cell::new(None) };
+    static CURRENT_THEME: RefCell<Option<crate::theme::Theme>> = const { RefCell::new(None) };
+    static THEME_TRANSITION: RefCell<Option<ThemeTransition>> = const { RefCell::new(None) };
+    static THEME_TIMER: slint::Timer = slint::Timer::default();
+    static TOAST_TIMER: slint::Timer = slint::Timer::default();
+    static LAYOUT_PROFILES: RefCell<Vec<crate::layout::LayoutProfile>> = const { RefCell::new(Vec::new()) };
+    static DRAG_ITEM: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
+struct ThemeTransition {
+    from: crate::theme::Theme,
+    to: crate::theme::Theme,
+    started: std::time::Instant,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -59,13 +74,18 @@ fn main() -> anyhow::Result<()> {
         "starting Vestalis launcher"
     );
 
+    storage::cleanup_cache_dir(
+        &model::local_app_dir().join("theme-icons"),
+        Duration::from_secs(30 * 24 * 60 * 60),
+        500,
+    );
+
     let mut state = load_state();
     // PL-1 is disabled: migrate a saved selection to RU-2 and let the normal
     // auto-login issue a fresh session on the working backend.
     if !model::PL1_AVAILABLE && model::server_index(&state.server_host) == 3 {
         state.server_host = model::SERVERS[1].1.to_string();
         state.user = None;
-        state.auth_via_mirror = false;
         storage::save_state(&state);
     }
 
@@ -95,19 +115,35 @@ fn main() -> anyhow::Result<()> {
     themes.retain(|item| !item.name.eq_ignore_ascii_case(crate::theme::WINDOWS_THEME));
     themes.push(windows_theme_item(accent));
 
-    let active = crate::theme::resolve(&state.settings.theme, &themes).clone();
-    if state.settings.theme != active.name {
-        state.settings.theme = active.name.clone();
+    let selected = crate::theme::resolve(&state.settings.theme, &themes).clone();
+    if state.settings.theme != selected.name {
+        state.settings.theme = selected.name.clone();
         storage::save_state(&state);
     }
+    let active = crate::theme::resolve_of_pair(
+        state.settings.follow_windows_theme,
+        &state.settings.light_theme,
+        &state.settings.dark_theme,
+        &selected.name,
+        &themes,
+    )
+    .clone();
     info!(
         theme = %active.name,
         mode = %state.settings.theme_mode,
+        follow_windows = state.settings.follow_windows_theme,
         "theme applied"
     );
     THEME_CATALOG.with(|catalog| *catalog.borrow_mut() = themes);
 
     ui.set_set_theme_mode(state.settings.theme_mode.clone().into());
+    ui.set_set_accent(state.settings.accent.clone().into());
+    ui.set_set_language(crate::locale::normalize(&state.settings.language).into());
+    ui.set_set_glass_opacity(state.settings.glass_opacity.clamp(0.25, 0.9));
+    ui.set_set_glass_blur(state.settings.glass_blur.clamp(0.0, 1.0));
+    ui.set_follow_windows_theme(state.settings.follow_windows_theme);
+    ui.set_light_theme(state.settings.light_theme.clone().into());
+    ui.set_dark_theme(state.settings.dark_theme.clone().into());
     // Apply before the first frame so a non-dark theme never flashes.
     apply_item(&ui, &active, &state.settings.theme_mode);
     initialize_ui(&ui, &state);
@@ -192,6 +228,30 @@ fn main() -> anyhow::Result<()> {
         },
     );
 
+    // Windows light/dark can change while the launcher is open. Poll the
+    // personalization registry (cheap) and re-apply the paired theme.
+    let follow_ui = ui.as_weak();
+    let last_light = std::cell::Cell::new(crate::theme::system_uses_light_theme());
+    let theme_timer = slint::Timer::default();
+    theme_timer.start(
+        slint::TimerMode::Repeated,
+        Duration::from_secs(3),
+        move || {
+            let Some(ui) = follow_ui.upgrade() else {
+                return;
+            };
+            if !ui.get_follow_windows_theme() {
+                last_light.set(crate::theme::system_uses_light_theme());
+                return;
+            }
+
+            let light = crate::theme::system_uses_light_theme();
+            if last_light.replace(light) != light {
+                apply_theme_by_name(&ui, &ui.get_set_theme());
+            }
+        },
+    );
+
     let timer = slint::Timer::default();
     let ui_weak = ui.as_weak();
     timer.start(
@@ -221,20 +281,6 @@ fn initialize_ui(ui: &AppWindow, state: &Persisted) {
     ui.set_server_index(server_index as i32);
     ui.set_server_label(model::SERVERS[server_index].0.into());
     ui.set_server_host_label(state.server_host.clone().into());
-    ui.set_pl1_available(model::PL1_AVAILABLE);
-    if server_index == 3 {
-        ui.set_main_status(
-            "PL-1 — зеркало для просмотра. Для входа в игру выберите RU-1, RU-2 или EU-1.".into(),
-        );
-    }
-    ui.set_is_kydasay(
-        state
-            .user
-            .as_ref()
-            .map(|session| session.name.eq_ignore_ascii_case("Kydasay"))
-            .unwrap_or(false),
-    );
-
     ui.set_themes(ModelRc::new(VecModel::from(theme_options())));
     ui.set_set_theme(state.settings.theme.clone().into());
 
@@ -346,13 +392,11 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
 
     ui.on_settings_clicked({
         let ui = ui.as_weak();
-        let tx = tx.clone();
         move || {
             if let Some(ui) = ui.upgrade() {
                 play_sound(&ui, Sound::Click);
                 switch_screen(&ui, 2);
             }
-            let _ = tx.send(Command::RefreshMirror);
         }
     });
 
@@ -421,6 +465,17 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
                 id: id as usize,
                 enabled,
             });
+        }
+    });
+
+    ui.on_mod_download_clicked({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move |id| {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
+            let _ = tx.send(Command::DownloadMod(id as usize));
         }
     });
 
@@ -507,7 +562,16 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
                 background_effect: ui.get_set_background_effect().to_string(),
                 theme: ui.get_set_theme().to_string(),
                 theme_mode: ui.get_set_theme_mode().to_string(),
+                language: ui.get_set_language().to_string(),
+                glass_opacity: ui.get_set_glass_opacity(),
+                glass_blur: ui.get_set_glass_blur(),
+                accent: ui.get_set_accent().to_string(),
+                follow_windows_theme: ui.get_follow_windows_theme(),
+                light_theme: ui.get_light_theme().to_string(),
+                dark_theme: ui.get_dark_theme().to_string(),
                 layout: ui_layout(&ui),
+                layouts: LAYOUT_PROFILES.with(|profiles| profiles.borrow().clone()),
+                layout_profile: ui.get_layout_profile().to_string(),
                 install_dir: ui.get_set_install_dir().to_string(),
             };
 
@@ -566,6 +630,142 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
                 }
                 .into(),
             );
+        }
+    });
+
+    ui.on_pick_accent_clicked({
+        let ui = ui.as_weak();
+        move || {
+            let Some(ui) = ui.upgrade() else { return };
+            play_sound(&ui, Sound::Click);
+            let current = crate::theme::parse_hex_rgb(&ui.get_set_accent());
+            if let Some((r, g, b)) = window::pick_color(current) {
+                ui.set_set_accent(format!("#{r:02X}{g:02X}{b:02X}").into());
+                apply_theme_by_name(&ui, &ui.get_set_theme());
+                ui.set_settings_status("Ручной accent применён".into());
+            }
+        }
+    });
+
+    ui.on_accent_applied({
+        let ui = ui.as_weak();
+        move || {
+            let Some(ui) = ui.upgrade() else { return };
+            let value = ui.get_set_accent().trim().to_string();
+            if value.is_empty() {
+                ui.set_settings_status("Accent очищен, используется Windows".into());
+                apply_theme_by_name(&ui, &ui.get_set_theme());
+                return;
+            }
+            match crate::theme::parse_hex_rgb(&value) {
+                Some((r, g, b)) => {
+                    ui.set_set_accent(format!("#{r:02X}{g:02X}{b:02X}").into());
+                    apply_theme_by_name(&ui, &ui.get_set_theme());
+                    ui.set_settings_status(format!("Accent: #{r:02X}{g:02X}{b:02X}").into());
+                }
+                None => ui.set_settings_status("Некорректный HEX, нужен #RRGGBB".into()),
+            }
+        }
+    });
+
+    ui.on_follow_windows_toggled({
+        let ui = ui.as_weak();
+        move |enabled| {
+            let Some(ui) = ui.upgrade() else { return };
+            play_sound(&ui, Sound::Toggle);
+            ui.set_follow_windows_theme(enabled);
+            apply_theme_by_name(&ui, &ui.get_set_theme());
+            ui.set_settings_status(
+                if enabled {
+                    "Тема будет следовать режиму Windows"
+                } else {
+                    "Используется выбранная тема"
+                }
+                .into(),
+            );
+        }
+    });
+
+    ui.on_export_diagnostics_clicked({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+                ui.set_settings_status("Сбор диагностики…".into());
+            }
+            let _ = tx.send(Command::ExportDiagnostics);
+        }
+    });
+
+    ui.on_toast_close({
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                ui.set_toast_visible(false);
+            }
+            TOAST_TIMER.with(|timer| timer.stop());
+        }
+    });
+
+    ui.on_glass_changed({
+        let ui = ui.as_weak();
+        move || {
+            let Some(ui) = ui.upgrade() else { return };
+            apply_theme_by_name(&ui, &ui.get_set_theme());
+        }
+    });
+
+    ui.on_language_clicked({
+        let ui = ui.as_weak();
+        move |code| {
+            let Some(ui) = ui.upgrade() else { return };
+            play_sound(&ui, Sound::Click);
+            let code = crate::locale::normalize(&code);
+            ui.set_set_language(code.into());
+            apply_theme_by_name(&ui, &ui.get_set_theme());
+            ui.set_settings_status("Язык изменён".into());
+        }
+    });
+
+    ui.on_pair_theme_step({
+        let ui = ui.as_weak();
+        move |side, forward| {
+            let Some(ui) = ui.upgrade() else { return };
+            play_sound(&ui, Sound::Click);
+
+            let names: Vec<String> = THEME_CATALOG.with(|catalog| {
+                catalog
+                    .borrow()
+                    .iter()
+                    .map(|item| item.name.clone())
+                    .collect()
+            });
+            if names.is_empty() {
+                return;
+            }
+
+            let current = if side.as_str() == "light" {
+                ui.get_light_theme().to_string()
+            } else {
+                ui.get_dark_theme().to_string()
+            };
+            let index = names
+                .iter()
+                .position(|name| name.eq_ignore_ascii_case(&current))
+                .unwrap_or(0);
+            let next = if forward {
+                (index + 1) % names.len()
+            } else {
+                (index + names.len() - 1) % names.len()
+            };
+
+            if side.as_str() == "light" {
+                ui.set_light_theme(names[next].clone().into());
+            } else {
+                ui.set_dark_theme(names[next].clone().into());
+            }
+            apply_theme_by_name(&ui, &ui.get_set_theme());
         }
     });
 
@@ -630,60 +830,111 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         }
     });
 
-    ui.on_mirror_save_key({
+    ui.on_layout_drop({
         let tx = tx.clone();
         let ui = ui.as_weak();
-        move || {
-            let Some(ui) = ui.upgrade() else { return };
-            play_sound(&ui, Sound::Click);
-            let _ = tx.send(Command::SaveMirrorKey(ui.get_mirror_key().to_string()));
-        }
-    });
-
-    ui.on_mirror_clear_key({
-        let tx = tx.clone();
-        let ui = ui.as_weak();
-        move || {
-            if let Some(ui) = ui.upgrade() {
-                play_sound(&ui, Sound::Click);
-                ui.set_mirror_key("".into());
-            }
-            let _ = tx.send(Command::ClearMirrorKey);
-        }
-    });
-
-    ui.on_mirror_mode_clicked({
-        let tx = tx.clone();
-        let ui = ui.as_weak();
-        move |mode| {
+        move |item, zone, before| {
             if let Some(ui) = ui.upgrade() {
                 play_sound(&ui, Sound::Click);
             }
-            let _ = tx.send(Command::SetMirrorMode(mode.to_string()));
+            let _ = tx.send(Command::LayoutDrop {
+                item: item.to_string(),
+                zone: zone.to_string(),
+                before: before.to_string(),
+            });
         }
     });
 
-    ui.on_mirror_tor_toggled({
+    ui.on_layout_widths_changed({
         let tx = tx.clone();
-        let ui = ui.as_weak();
-        move |enabled| {
-            if let Some(ui) = ui.upgrade() {
-                play_sound(&ui, Sound::Toggle);
-            }
-            let _ = tx.send(Command::SetTor(enabled));
+        move |left, right| {
+            let _ = tx.send(Command::LayoutWidths {
+                left: left.max(0) as u32,
+                right: right.max(0) as u32,
+            });
         }
     });
 
-    ui.on_selftest_clicked({
+    ui.on_layout_profile_save({
         let tx = tx.clone();
         let ui = ui.as_weak();
-        move || {
+        move |name| {
             if let Some(ui) = ui.upgrade() {
                 play_sound(&ui, Sound::Click);
             }
-            let _ = tx.send(Command::SelfTest);
+            let _ = tx.send(Command::LayoutProfileSave(name.to_string()));
         }
     });
+
+    ui.on_layout_profile_switch({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move |name| {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
+            let _ = tx.send(Command::LayoutProfileSwitch(name.to_string()));
+        }
+    });
+
+    ui.on_layout_profile_delete({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move |name| {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
+            let _ = tx.send(Command::LayoutProfileDelete(name.to_string()));
+        }
+    });
+
+    ui.on_layout_profile_rename({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move |old, new| {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
+            let _ = tx.send(Command::LayoutProfileRename {
+                old: old.to_string(),
+                new: new.to_string(),
+            });
+        }
+    });
+
+    // LayoutState / LayoutDrag globals: visibility checks and the drag payload.
+    ui.global::<LayoutState>().on_toggle_hidden({
+        let tx = tx.clone();
+        move |item, hidden| {
+            let _ = tx.send(Command::LayoutToggle {
+                item: item.to_string(),
+                hidden,
+            });
+        }
+    });
+
+    ui.global::<LayoutDrag>().on_begin({
+        let ui = ui.as_weak();
+        move |item| {
+            let changed = DRAG_ITEM.with(|current| {
+                if current.borrow().as_str() == item.as_str() {
+                    false
+                } else {
+                    *current.borrow_mut() = item.to_string();
+                    true
+                }
+            });
+            if !changed {
+                return;
+            }
+            if let Some(ui) = ui.upgrade() {
+                ui.global::<LayoutDrag>()
+                    .set_payload(i_slint_core::data_transfer::DataTransfer::from(item));
+            }
+        }
+    });
+    ui.global::<LayoutDrag>()
+        .on_transfer_text(|data| data.plain_text().ok().unwrap_or_default());
 
     // Borderless windows maximize over the taskbar. Keep the window inside the
     // Windows work area instead and remember the previous rectangle.
@@ -731,7 +982,6 @@ fn apply_event(ui: &AppWindow, event: Event) {
             ui.set_error_text("Введите код из приложения-аутентификатора".into());
         }
         Event::Auth { name, initial } => {
-            ui.set_is_kydasay(name.eq_ignore_ascii_case("Kydasay"));
             ui.set_user_name(name.into());
             ui.set_user_initial(initial.into());
             ui.set_show_2fa(false);
@@ -774,6 +1024,8 @@ fn apply_event(ui: &AppWindow, event: Event) {
                     name: view.name.into(),
                     description: view.description.into(),
                     enabled: view.enabled,
+                    downloaded: view.downloaded,
+                    downloading: view.downloading,
                 })
                 .collect();
 
@@ -782,34 +1034,6 @@ fn apply_event(ui: &AppWindow, event: Event) {
             ui.set_mods_total(total as i32);
         }
         Event::CanPlay(value) => ui.set_can_play(value),
-        Event::MirrorState {
-            key,
-            mode,
-            upstream,
-            can_control,
-            tor_enabled,
-            tor_available,
-        } => {
-            ui.set_mirror_key(key.into());
-            ui.set_mirror_mode(mode.into());
-            ui.set_mirror_upstream(upstream.into());
-            ui.set_mirror_can_control(can_control);
-            ui.set_mirror_tor(tor_enabled);
-            ui.set_mirror_tor_available(tor_available);
-        }
-        Event::SelfTest { rows, summary } => {
-            let items: Vec<SelfTestItem> = rows
-                .into_iter()
-                .map(|row| SelfTestItem {
-                    name: row.name.into(),
-                    status: row.status.into(),
-                    message: row.message.into(),
-                    duration: row.duration.into(),
-                })
-                .collect();
-            ui.set_selftest(ModelRc::new(VecModel::from(items)));
-            ui.set_selftest_summary(summary.into());
-        }
         Event::News(news) => {
             let items: Vec<NewsItem> = news
                 .into_iter()
@@ -861,10 +1085,37 @@ fn apply_event(ui: &AppWindow, event: Event) {
             ui.set_settings_status("Темы обновлены".into());
         }
         Event::Layout(layout) => apply_layout(ui, &layout),
+        Event::Notification { title, body } => {
+            ui.set_toast_title(title.into());
+            ui.set_toast_body(body.into());
+            ui.set_toast_visible(true);
+
+            let weak = ui.as_weak();
+            TOAST_TIMER.with(|timer| {
+                timer.start(
+                    slint::TimerMode::SingleShot,
+                    Duration::from_secs(6),
+                    move || {
+                        if let Some(ui) = weak.upgrade() {
+                            ui.set_toast_visible(false);
+                        }
+                    },
+                );
+            });
+        }
+        Event::LayoutProfiles { profiles, active } => {
+            ui.set_layout_profiles(string_model(
+                &profiles
+                    .iter()
+                    .map(|profile| profile.name.clone())
+                    .collect::<Vec<_>>(),
+            ));
+            ui.set_layout_profile(active.into());
+            LAYOUT_PROFILES.with(|value| *value.borrow_mut() = profiles);
+        }
         Event::Settings { settings, max_ram } => {
-            ui.set_set_theme_mode(settings.theme_mode.clone().into());
-            apply_theme_by_name(ui, &settings.theme);
             apply_settings(ui, &settings, max_ram);
+            apply_theme_by_name(ui, &settings.theme);
         }
         Event::SettingsStatus(status) => ui.set_settings_status(status.into()),
         Event::MainStatus(status) => ui.set_main_status(status.into()),
@@ -882,7 +1133,6 @@ fn apply_event(ui: &AppWindow, event: Event) {
         }
         Event::LoggedOut => {
             ui.set_screen(0);
-            ui.set_is_kydasay(false);
             ui.set_user_name("".into());
             ui.set_user_initial("?".into());
             ui.set_has_avatar(false);
@@ -991,8 +1241,15 @@ fn update_windows_theme(ui: &AppWindow, accent: crate::theme::Rgb) {
 }
 
 fn apply_item(ui: &AppWindow, item: &ThemeItem, mode: &str) {
-    let accent = SYSTEM_ACCENT.with(|value| value.get());
-    let theme = crate::theme::apply_mode(&item.theme, mode, accent);
+    let manual = crate::theme::parse_hex_rgb(&ui.get_set_accent());
+    let accent = manual.or_else(|| SYSTEM_ACCENT.with(|value| value.get()));
+    let theme = crate::theme::apply_mode(
+        &item.theme,
+        mode,
+        accent,
+        ui.get_set_glass_opacity(),
+        ui.get_set_glass_blur(),
+    );
     info!(
         theme = %item.name,
         mode,
@@ -1000,9 +1257,76 @@ fn apply_item(ui: &AppWindow, item: &ThemeItem, mode: &str) {
         effective_background = %theme.background,
         "applying theme"
     );
-    apply_theme(ui, &theme);
+    apply_theme_transition(ui, &theme);
     apply_icons(ui, item, &theme);
     apply_texts(ui, item);
+}
+
+/// Cross-fades the palette over ~280 ms. Slint globals cannot declare
+/// animations, so the interpolation is driven from Rust and pushed through the
+/// same `apply_theme` path.
+fn apply_theme_transition(ui: &AppWindow, target: &crate::theme::Theme) {
+    let from = CURRENT_THEME.with(|value| value.borrow().clone());
+    let Some(from) = from else {
+        apply_theme(ui, target);
+        return;
+    };
+
+    if from.background == target.background
+        && from.surface == target.surface
+        && from.accent == target.accent
+        && from.mode == target.mode
+    {
+        apply_theme(ui, target);
+        return;
+    }
+
+    THEME_TRANSITION.with(|state| {
+        *state.borrow_mut() = Some(ThemeTransition {
+            from,
+            to: target.clone(),
+            started: std::time::Instant::now(),
+        });
+    });
+
+    let weak = ui.as_weak();
+    let to = target.clone();
+    THEME_TIMER.with(|timer| {
+        timer.start(
+            slint::TimerMode::Repeated,
+            Duration::from_millis(16),
+            move || {
+                let Some(ui) = weak.upgrade() else {
+                    THEME_TIMER.with(|timer| timer.stop());
+                    return;
+                };
+
+                let (from, to, progress) = THEME_TRANSITION.with(|state| {
+                    let state = state.borrow();
+                    match state.as_ref() {
+                        Some(transition) => (
+                            transition.from.clone(),
+                            transition.to.clone(),
+                            (transition.started.elapsed().as_secs_f32() / 0.28).clamp(0.0, 1.0),
+                        ),
+                        None => (to.clone(), to.clone(), 1.0),
+                    }
+                });
+
+                if progress >= 1.0 {
+                    apply_theme(&ui, &to);
+                    THEME_TRANSITION.with(|state| *state.borrow_mut() = None);
+                    THEME_TIMER.with(|timer| timer.stop());
+                    return;
+                }
+
+                // smoothstep for an ease-in-out feel
+                let eased = progress * progress * (3.0 - 2.0 * progress);
+                let mixed = crate::theme::Theme::mix(&from, &to, eased);
+                apply_theme(&ui, &mixed);
+            },
+        );
+    });
 }
 
 fn icon_tint<'a>(id: &str, theme: &'a crate::theme::Theme) -> &'a str {
@@ -1010,7 +1334,7 @@ fn icon_tint<'a>(id: &str, theme: &'a crate::theme::Theme) -> &'a str {
         "warning" => &theme.warning,
         "error" | "close" => &theme.danger,
         "success" => &theme.success,
-        "chevron" | "minimize" | "maximize" | "restore" => &theme.text_muted,
+        "chevron" | "minimize" | "maximize" | "restore" | "folder" | "user" => &theme.text_muted,
         _ => &theme.accent,
     }
 }
@@ -1044,7 +1368,9 @@ fn load_theme_icon(path: &str, tint: &str) -> Option<slint::Image> {
     std::fs::create_dir_all(&dir).ok()?;
     let cache = dir.join(format!("{key}.svg"));
     if !cache.exists() {
-        std::fs::write(&cache, replaced).ok()?;
+        let temporary = dir.join(format!("{key}.tmp"));
+        std::fs::write(&temporary, replaced).ok()?;
+        std::fs::rename(&temporary, &cache).ok()?;
     }
 
     slint::Image::load_from_path(&cache).ok()
@@ -1082,36 +1408,129 @@ fn apply_icons(ui: &AppWindow, item: &ThemeItem, theme: &crate::theme::Theme) {
     set_icon!("warning", set_warning, set_has_warning);
     set_icon!("error", set_error, set_has_error);
     set_icon!("success", set_success, set_has_success);
+    set_icon!("download", set_download, set_has_download);
+    set_icon!("folder", set_folder, set_has_folder);
+    set_icon!("user", set_user, set_has_user);
 }
 
 fn apply_texts(ui: &AppWindow, item: &ThemeItem) {
+    let lang = ui.get_set_language().to_string();
     let texts = ui.global::<Texts>();
-    let value = |key: &str, fallback: &str| -> slint::SharedString {
+    let value = |key: &str| -> slint::SharedString {
         item.texts
             .get(key)
             .cloned()
-            .unwrap_or_else(|| fallback.to_string())
+            .unwrap_or_else(|| crate::locale::get(&lang, key).to_string())
             .into()
     };
 
-    texts.set_app_title(value("app.title", "Vestalis Launcher"));
-    texts.set_app_subtitle(value("app.subtitle", "Femboy"));
-    texts.set_login_title(value("login.title", "Вход в аккаунт"));
-    texts.set_login_subtitle(value(
-        "login.subtitle",
-        "Войдите, чтобы играть на серверах Vestalis",
-    ));
-    texts.set_login_submit(value("login.submit", "Войти"));
-    texts.set_login_offline(value("login.offline", "Оффлайн-режим"));
-    texts.set_play(value("buttons.play", "Играть"));
-    texts.set_settings(value("buttons.settings", "Настройки"));
-    texts.set_logout(value("buttons.logout", "Выйти"));
-    texts.set_refresh(value("buttons.refresh", "Обновить"));
-    texts.set_mods(value("buttons.mods", "Моды"));
-    texts.set_profiles(value("sections.profiles", "ПРОФИЛИ"));
-    texts.set_news(value("sections.news", "НОВОСТИ"));
-    texts.set_settings_title(value("settings.title", "Настройки"));
-    texts.set_back(value("settings.back", "← Назад"));
+    macro_rules! set {
+        ($key:literal, $setter:ident) => {
+            texts.$setter(value($key))
+        };
+    }
+
+    set!("app.title", set_app_title);
+    set!("app.subtitle", set_app_subtitle);
+    set!("login.title", set_login_title);
+    set!("login.subtitle", set_login_subtitle);
+    set!("login.submit", set_login_submit);
+    set!("login.offline", set_login_offline);
+    set!("buttons.play", set_play);
+    set!("buttons.settings", set_settings);
+    set!("buttons.logout", set_logout);
+    set!("buttons.refresh", set_refresh);
+    set!("buttons.mods", set_mods);
+    set!("sections.profiles", set_profiles);
+    set!("sections.news", set_news);
+    set!("settings.title", set_settings_title);
+    set!("settings.back", set_back);
+
+    set!("login.username", set_login_username);
+    set!("login.password", set_login_password);
+    set!("login.hwid", set_login_hwid);
+    set!("login.2fa", set_login_2fa);
+    set!("login.2fa_submit", set_login_2fa_submit);
+    set!("login.busy", set_login_busy);
+    set!("login.checking", set_login_checking);
+    set!("login.profile_select", set_profile_select);
+    set!("buttons.save", set_save);
+    set!("buttons.apply", set_apply);
+    set!("buttons.pick", set_pick);
+    set!("buttons.load", set_load);
+    set!("buttons.delete", set_delete);
+    set!("buttons.rename", set_rename);
+    set!("buttons.download", set_download);
+    set!("buttons.downloading", set_downloading);
+
+    set!("settings.memory.title", set_memory_title);
+    set!("settings.memory.desc", set_memory_desc);
+    set!("settings.memory.xms", set_memory_xms);
+    set!("settings.memory.xmx", set_memory_xmx);
+    set!("settings.jvm.title", set_jvm_title);
+    set!("settings.jvm.desc", set_jvm_desc);
+    set!("settings.game.title", set_game_title);
+    set!("settings.game.fullscreen", set_game_fullscreen);
+    set!("settings.game.resolution", set_game_resolution);
+    set!("settings.interface.title", set_interface_title);
+    set!("settings.interface.sounds", set_interface_sounds);
+    set!("settings.interface.hwid", set_interface_hwid);
+    set!("settings.interface.hide_on_launch", set_interface_hide);
+    set!("settings.interface.background", set_interface_background);
+    set!("settings.interface.effects", set_interface_effects);
+    set!("settings.appearance.title", set_appearance_title);
+    set!("settings.appearance.desc", set_appearance_desc);
+    set!("settings.appearance.mode", set_appearance_mode);
+    set!(
+        "settings.appearance.accent_hint",
+        set_appearance_accent_hint
+    );
+    set!("settings.appearance.windows", set_appearance_windows);
+    set!("settings.appearance.manual", set_appearance_manual);
+    set!("settings.appearance.follow", set_appearance_follow);
+    set!("settings.appearance.light", set_appearance_light);
+    set!("settings.appearance.dark", set_appearance_dark);
+    set!("settings.appearance.builtin", set_appearance_builtin);
+    set!("settings.appearance.custom", set_appearance_custom);
+    set!("settings.appearance.refresh", set_appearance_refresh);
+    set!("settings.appearance.open", set_appearance_open);
+    set!("settings.appearance.reset", set_appearance_reset);
+    set!("settings.language.title", set_language_title);
+    set!("settings.language.hint", set_language_hint);
+
+    set!("layout.title", set_layout_title);
+    set!("layout.desc", set_layout_desc);
+    set!("layout.zone_left", set_layout_zone_left);
+    set!("layout.zone_right", set_layout_zone_right);
+    set!("layout.zone_header", set_layout_zone_header);
+    set!("layout.zone_content_top", set_layout_zone_content_top);
+    set!("layout.zone_content_bottom", set_layout_zone_content_bottom);
+    set!("layout.zone_footer", set_layout_zone_footer);
+    set!("layout.widths", set_layout_widths);
+    set!("layout.width_left", set_layout_width_left);
+    set!("layout.width_right", set_layout_width_right);
+    set!("layout.profiles", set_layout_profiles);
+    set!("layout.active", set_layout_active);
+    set!("layout.name_placeholder", set_layout_name_placeholder);
+    set!("layout.save_profile", set_layout_save_profile);
+    set!("layout.reset", set_layout_reset);
+    set!("layout.server", set_layout_server);
+    set!("layout.user", set_layout_user);
+    set!("layout.profile_item", set_layout_profiles_item);
+    set!("layout.countdown", set_layout_countdown);
+    set!("layout.sidebar_actions", set_layout_sidebar_actions);
+    set!("layout.news", set_layout_news);
+    set!("layout.main_actions", set_layout_main_actions);
+    set!("layout.pinned", set_layout_pinned);
+    set!("layout.hidden", set_layout_hidden);
+    set!("layout.visible", set_layout_visible);
+    set!("layout.empty", set_layout_empty);
+
+    set!("mods.title", set_mods_title);
+    set!("mods.count", set_mods_count);
+    set!("mods.refresh", set_mods_refresh);
+    set!("mods.desc", set_mods_desc);
+    set!("mods.empty", set_mods_empty);
 }
 
 fn apply_theme(ui: &AppWindow, theme: &crate::theme::Theme) {
@@ -1162,20 +1581,22 @@ fn apply_theme(ui: &AppWindow, theme: &crate::theme::Theme) {
 
     ui.set_background_effect(theme.background_effect.clone().into());
     ui.set_set_background_effect(theme.background_effect.clone().into());
+    CURRENT_THEME.with(|value| *value.borrow_mut() = Some(theme.clone()));
 }
 
 fn apply_theme_by_name(ui: &AppWindow, name: &str) {
     let item = THEME_CATALOG.with(|catalog| {
-        catalog
-            .borrow()
-            .iter()
-            .find(|item| item.name.eq_ignore_ascii_case(name))
-            .cloned()
+        crate::theme::resolve_of_pair(
+            ui.get_follow_windows_theme(),
+            &ui.get_light_theme(),
+            &ui.get_dark_theme(),
+            name,
+            &catalog.borrow(),
+        )
+        .clone()
     });
 
-    if let Some(item) = item {
-        apply_item(ui, &item, &ui.get_set_theme_mode());
-    }
+    apply_item(ui, &item, &ui.get_set_theme_mode());
 }
 
 fn string_model(items: &[String]) -> ModelRc<slint::SharedString> {
@@ -1188,12 +1609,26 @@ fn string_model(items: &[String]) -> ModelRc<slint::SharedString> {
 }
 
 fn apply_layout(ui: &AppWindow, layout: &crate::layout::LayoutConfig) {
-    ui.set_layout_sidebar_left(string_model(&layout.sidebar_left));
-    ui.set_layout_sidebar_right(string_model(&layout.sidebar_right));
-    ui.set_layout_header(string_model(&layout.header));
-    ui.set_layout_content_top(string_model(&layout.content_top));
-    ui.set_layout_content_bottom(string_model(&layout.content_bottom));
-    ui.set_layout_footer(string_model(&layout.footer));
+    let mut normalized = layout.clone();
+    normalized.normalize();
+    ui.set_layout_sidebar_left(string_model(&normalized.sidebar_left));
+    ui.set_layout_sidebar_right(string_model(&normalized.sidebar_right));
+    ui.set_layout_header(string_model(&normalized.header));
+    ui.set_layout_content_top(string_model(&normalized.content_top));
+    ui.set_layout_content_bottom(string_model(&normalized.content_bottom));
+    ui.set_layout_footer(string_model(&normalized.footer));
+    ui.set_layout_hidden(string_model(&normalized.hidden));
+    ui.set_layout_sidebar_left_width(normalized.sidebar_left_width as i32);
+    ui.set_layout_sidebar_right_width(normalized.sidebar_right_width as i32);
+
+    let hidden = ui.global::<LayoutState>();
+    hidden.set_hidden_user(normalized.is_hidden("user"));
+    hidden.set_hidden_profiles(normalized.is_hidden("profiles"));
+    hidden.set_hidden_countdown(normalized.is_hidden("countdown"));
+    hidden.set_hidden_sidebar_actions(normalized.is_hidden("sidebar-actions"));
+    hidden.set_hidden_news(normalized.is_hidden("news"));
+    hidden.set_hidden_main_actions(normalized.is_hidden("main-actions"));
+    hidden.set_hidden_server(normalized.is_hidden("server"));
 }
 
 fn ui_layout(ui: &AppWindow) -> crate::layout::LayoutConfig {
@@ -1208,6 +1643,9 @@ fn ui_layout(ui: &AppWindow) -> crate::layout::LayoutConfig {
         content_top: collect(&ui.get_layout_content_top()),
         content_bottom: collect(&ui.get_layout_content_bottom()),
         footer: collect(&ui.get_layout_footer()),
+        hidden: collect(&ui.get_layout_hidden()),
+        sidebar_left_width: ui.get_layout_sidebar_left_width().max(0) as u32,
+        sidebar_right_width: ui.get_layout_sidebar_right_width().max(0) as u32,
     }
 }
 
@@ -1223,12 +1661,28 @@ fn apply_settings(ui: &AppWindow, settings: &Settings, max_ram: u64) {
     ui.set_set_sounds(settings.sounds);
     ui.set_set_hide_on_launch(settings.hide_on_launch);
     ui.set_set_theme(settings.theme.clone().into());
+    ui.set_set_accent(settings.accent.clone().into());
+    ui.set_follow_windows_theme(settings.follow_windows_theme);
+    ui.set_light_theme(settings.light_theme.clone().into());
+    ui.set_dark_theme(settings.dark_theme.clone().into());
+    ui.set_set_language(crate::locale::normalize(&settings.language).into());
+    ui.set_set_glass_opacity(settings.glass_opacity.clamp(0.25, 0.9));
+    ui.set_set_glass_blur(settings.glass_blur.clamp(0.0, 1.0));
     ui.set_set_theme_mode(
         crate::theme::normalize_mode(&settings.theme_mode)
             .to_string()
             .into(),
     );
     apply_layout(ui, &settings.layout);
+    LAYOUT_PROFILES.with(|profiles| *profiles.borrow_mut() = settings.layouts.clone());
+    ui.set_layout_profiles(string_model(
+        &settings
+            .layouts
+            .iter()
+            .map(|profile| profile.name.clone())
+            .collect::<Vec<_>>(),
+    ));
+    ui.set_layout_profile(settings.layout_profile.clone().into());
 
     let effect = match settings.background_effect.as_str() {
         "fireflies" | "leaves" | "snow" => settings.background_effect.clone(),

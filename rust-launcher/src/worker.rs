@@ -9,21 +9,27 @@ use tracing::{error, info};
 
 use crate::api::Backend;
 use crate::discord::DiscordRpc;
-use crate::files::{sync_profile, SyncProgress};
+use crate::files::{sync_profile, ProgressFn, SyncProgress};
 use crate::hwid;
 use crate::launch;
-use crate::layout::LayoutConfig;
+use crate::layout::{LayoutConfig, LayoutProfile};
 use crate::model::{
-    app_dir, avatar_path, ApiResponse, News, Persisted, Profile, ProfileInfoRequest, Settings,
-    DEFAULT_HOST, MIRROR_HOST, SERVERS,
+    app_dir, avatar_path, local_app_dir, ApiResponse, News, Persisted, Profile, ProfileInfoRequest,
+    Settings, DEFAULT_HOST, SERVERS,
 };
+use crate::signalr::{self, HubEvent};
 use crate::storage::{load_state, save_state};
 use crate::theme::{self, ThemeItem};
 
 #[derive(Debug)]
 pub enum Command {
-    Login { login: String, password: String },
-    Verify2Fa { code: String },
+    Login {
+        login: String,
+        password: String,
+    },
+    Verify2Fa {
+        code: String,
+    },
     Offline,
     SetHwid(bool),
     Logout,
@@ -35,16 +41,38 @@ pub enum Command {
     RefreshThemes,
     OpenThemesFolder,
     SaveTheme(String),
-    MoveLayoutItem { item: String, direction: String },
+    MoveLayoutItem {
+        item: String,
+        direction: String,
+    },
+    LayoutDrop {
+        item: String,
+        zone: String,
+        before: String,
+    },
+    LayoutToggle {
+        item: String,
+        hidden: bool,
+    },
+    LayoutWidths {
+        left: u32,
+        right: u32,
+    },
+    LayoutProfileSave(String),
+    LayoutProfileSwitch(String),
+    LayoutProfileDelete(String),
+    LayoutProfileRename {
+        old: String,
+        new: String,
+    },
     ResetLayout,
     OpenMods,
-    ToggleMod { id: usize, enabled: bool },
-    RefreshMirror,
-    SaveMirrorKey(String),
-    ClearMirrorKey,
-    SetMirrorMode(String),
-    SetTor(bool),
-    SelfTest,
+    ToggleMod {
+        id: usize,
+        enabled: bool,
+    },
+    DownloadMod(usize),
+    ExportDiagnostics,
     Shutdown,
 }
 
@@ -67,14 +95,8 @@ pub struct ModView {
     pub name: String,
     pub description: String,
     pub enabled: bool,
-}
-
-#[derive(Clone)]
-pub struct SelfTestRowView {
-    pub name: String,
-    pub status: String,
-    pub message: String,
-    pub duration: String,
+    pub downloaded: bool,
+    pub downloading: bool,
 }
 
 #[derive(Clone)]
@@ -107,18 +129,6 @@ pub enum Event {
         total: usize,
     },
     CanPlay(bool),
-    MirrorState {
-        key: String,
-        mode: String,
-        upstream: String,
-        can_control: bool,
-        tor_enabled: bool,
-        tor_available: bool,
-    },
-    SelfTest {
-        rows: Vec<SelfTestRowView>,
-        summary: String,
-    },
     Progress {
         visible: bool,
         value: f32,
@@ -136,8 +146,12 @@ pub enum Event {
         active: String,
     },
     Layout(LayoutConfig),
+    LayoutProfiles {
+        profiles: Vec<LayoutProfile>,
+        active: String,
+    },
     Settings {
-        settings: Settings,
+        settings: Box<Settings>,
         max_ram: u64,
     },
     SettingsStatus(String),
@@ -147,6 +161,10 @@ pub enum Event {
         hide: bool,
     },
     Error(String),
+    Notification {
+        title: String,
+        body: String,
+    },
     LoggedOut,
 }
 
@@ -154,8 +172,6 @@ pub struct Worker {
     tx: UnboundedSender<Event>,
     state: Persisted,
     backend: Backend,
-    mirror: Backend,
-    via_mirror: bool,
     profiles: Vec<Profile>,
     views: Vec<ProfileView>,
     mods: Vec<ModView>,
@@ -164,22 +180,19 @@ pub struct Worker {
     busy: bool,
     pending_login: (String, String),
     discord: Option<DiscordRpc>,
+    profiles_signature: String,
+    hub: Option<tokio::task::JoinHandle<()>>,
+    hub_tx: Option<UnboundedSender<HubEvent>>,
 }
 
 impl Worker {
-    pub fn new(mut state: Persisted, tx: UnboundedSender<Event>) -> Self {
+    pub fn new(state: Persisted, tx: UnboundedSender<Event>) -> Self {
         let secret = client_secret();
-        let backend =
-            Backend::new(&state.server_host).with_client(Some(secret.clone()), String::new());
-        let mirror = Backend::new(MIRROR_HOST).with_client(Some(secret), String::new());
-        // Mirror-issued sessions are no longer used for data or launching.
-        state.auth_via_mirror = false;
+        let backend = Backend::new(&state.server_host).with_client(Some(secret), String::new());
         Self {
             tx,
             state,
             backend,
-            mirror,
-            via_mirror: false,
             profiles: Vec::new(),
             views: Vec::new(),
             mods: Vec::new(),
@@ -188,6 +201,9 @@ impl Worker {
             busy: false,
             pending_login: (String::new(), String::new()),
             discord: None,
+            profiles_signature: String::new(),
+            hub: None,
+            hub_tx: None,
         }
     }
 
@@ -203,28 +219,10 @@ impl Worker {
             .filter(|token| !token.is_empty())
     }
 
-    /// Mirror control endpoints exist only on PL-1; RU/EU answer 404 there.
-    fn is_pl_host(&self) -> bool {
-        self.state
-            .server_host
-            .trim_end_matches('/')
-            .eq_ignore_ascii_case(MIRROR_HOST.trim_end_matches('/'))
-    }
-
-    /// Data and token operations use the host that actually issued the session.
     fn data_backend(&self) -> &Backend {
-        if self.via_mirror {
-            &self.mirror
-        } else {
-            &self.backend
-        }
+        &self.backend
     }
 
-    /// The selected backend is always authoritative. The old silent fallback to
-    /// the PL-1 mirror produced a login that could not join a game server: the
-    /// mirror issues its own token, while the server verifies against RU/EU
-    /// (`join` answers 401 and `hasJoined` 204, which the game reports as an
-    /// invalid session). Failing loudly is better than a broken session.
     async fn signin(
         &self,
         login: &str,
@@ -247,10 +245,15 @@ impl Worker {
     }
 
     pub async fn run(mut self, mut rx: UnboundedReceiver<Command>) {
+        self.ensure_layout_profiles();
         self.emit(Event::Settings {
-            settings: self.state.settings.clone(),
+            settings: Box::new(self.state.settings.clone()),
             max_ram: hwid::total_ram_mb(),
         });
+        self.emit_layout_profiles();
+
+        let (hub_tx, mut hub_rx) = tokio::sync::mpsc::unbounded_channel();
+        self.hub_tx = Some(hub_tx);
 
         self.startup().await;
 
@@ -295,20 +298,30 @@ impl Worker {
                         Some(Command::MoveLayoutItem { item, direction }) => {
                             self.move_layout_item(&item, &direction)
                         }
+                        Some(Command::LayoutDrop { item, zone, before }) => {
+                            self.drop_layout_item(&item, &zone, &before)
+                        }
+                        Some(Command::LayoutToggle { item, hidden }) => {
+                            self.toggle_layout_item(&item, hidden)
+                        }
+                        Some(Command::LayoutWidths { left, right }) => {
+                            self.set_layout_widths(left, right)
+                        }
+                        Some(Command::LayoutProfileSave(name)) => self.save_layout_profile(&name),
+                        Some(Command::LayoutProfileSwitch(name)) => {
+                            self.switch_layout_profile(&name)
+                        }
+                        Some(Command::LayoutProfileDelete(name)) => {
+                            self.delete_layout_profile(&name)
+                        }
+                        Some(Command::LayoutProfileRename { old, new }) => {
+                            self.rename_layout_profile(&old, &new)
+                        }
                         Some(Command::ResetLayout) => self.save_layout(LayoutConfig::default()),
                         Some(Command::OpenMods) => self.open_mods().await,
                         Some(Command::ToggleMod { id, enabled }) => self.toggle_mod(id, enabled),
-                        Some(Command::RefreshMirror) => self.refresh_mirror().await,
-                        Some(Command::SaveMirrorKey(key)) => self.save_mirror_key(key).await,
-                        Some(Command::ClearMirrorKey) => {
-                            self.state.mirror_key.clear();
-                            save_state(&self.state);
-                            self.emit(Event::SettingsStatus("Ключ удалён".into()));
-                            self.emit_mirror(None);
-                        }
-                        Some(Command::SetMirrorMode(mode)) => self.set_mirror_mode(mode).await,
-                        Some(Command::SetTor(enabled)) => self.set_tor(enabled).await,
-                        Some(Command::SelfTest) => self.run_self_test().await,
+                        Some(Command::DownloadMod(id)) => self.download_mod(id).await,
+                        Some(Command::ExportDiagnostics) => self.export_diagnostics(),
                         Some(Command::Shutdown) | None => break,
                     }
                 }
@@ -317,23 +330,68 @@ impl Worker {
                         self.spawn_check();
                     }
                 }
+                event = hub_rx.recv() => {
+                    if let Some(HubEvent::RefreshProfiles) = event {
+                        if !self.offline && self.state.user.is_some() && !self.busy {
+                            self.load_data_inner(false).await;
+                        }
+                    }
+                }
                 _ = profiles_tick.tick() => {
                     if !self.offline && self.state.user.is_some() && !self.busy {
-                        // Refresh quietly: a transient backend error must not
-                        // log the player out and rotate the token while the
-                        // game is running (that makes the in-game session
+                        // Fallback poll only; the SignalR hub normally delivers
+                        // RefreshProfiles immediately. A transient backend error
+                        // must not log the player out and rotate the token while
+                        // the game is running (that makes the in-game session
                         // invalid). The token is validated once at startup.
                         self.load_data_inner(false).await;
                     }
                 }
             }
         }
+
+        self.stop_hub();
+    }
+
+    /// (Re)starts the SignalR listener for the current backend and session.
+    fn start_hub(&mut self) {
+        self.stop_hub();
+
+        if self.offline {
+            return;
+        }
+
+        let Some(token) = self.token() else {
+            return;
+        };
+        let name = self
+            .state
+            .user
+            .as_ref()
+            .map(|session| session.name.clone())
+            .unwrap_or_default();
+        let Some(tx) = self.hub_tx.clone() else {
+            return;
+        };
+
+        let base = self.backend.base().to_string();
+        self.hub = Some(tokio::spawn(signalr::run(base, token, name, tx)));
+    }
+
+    fn stop_hub(&mut self) {
+        if let Some(handle) = self.hub.take() {
+            handle.abort();
+        }
     }
 
     async fn startup(&mut self) {
+        crate::storage::cleanup_cache_dir(
+            &local_app_dir().join("avatars"),
+            Duration::from_secs(30 * 24 * 60 * 60),
+            200,
+        );
         let hwid = hwid::hwid_for(&self.state.settings);
-        self.backend.set_hwid(hwid.clone());
-        self.mirror.set_hwid(hwid);
+        self.backend.set_hwid(hwid);
         self.spawn_check();
 
         if let Some(session) = self.state.user.clone() {
@@ -345,7 +403,7 @@ impl Worker {
                 )
                 .await;
 
-                if let Ok(Ok((outcome, via_mirror))) = check {
+                if let Ok(Ok((outcome, _))) = check {
                     if let Some(mut fresh) = outcome.session {
                         if fresh.name.is_empty() {
                             fresh.name = session.name;
@@ -353,8 +411,6 @@ impl Worker {
                         if fresh.uuid.is_empty() {
                             fresh.uuid = session.uuid;
                         }
-                        self.via_mirror = via_mirror;
-                        self.state.auth_via_mirror = via_mirror;
                         self.state.user = Some(fresh);
                         save_state(&self.state);
                         if let Some(user) = self.state.user.clone() {
@@ -365,6 +421,7 @@ impl Worker {
                         }
                         self.offline = false;
                         self.emit(Event::Screen(1));
+                        self.start_hub();
                         self.load_data().await;
                         self.load_avatar().await;
                         self.emit(Event::Ready);
@@ -396,24 +453,20 @@ impl Worker {
 
         let hwid = hwid::hwid_for(&self.state.settings);
         self.backend.set_hwid(hwid.clone());
-        self.mirror.set_hwid(hwid.clone());
         info!(login = %login, "sign-in requested");
         let result = self.signin(&login, &password, &code, &hwid).await;
 
-        if let Ok((outcome, via_mirror)) = &result {
+        if let Ok((outcome, _)) = &result {
             info!(
                 authenticated = outcome.session.is_some(),
                 requires_2fa = outcome.requires_2fa,
-                via_mirror,
                 "sign-in finished"
             );
         }
 
         match result {
-            Ok((outcome, via_mirror)) if outcome.session.is_some() => {
+            Ok((outcome, _)) if outcome.session.is_some() => {
                 let session = outcome.session.expect("checked");
-                self.via_mirror = via_mirror;
-                self.state.auth_via_mirror = via_mirror;
                 self.state.user = Some(session.clone());
                 self.state.saved_login = Some(crate::model::SavedLogin { login, password });
                 save_state(&self.state);
@@ -426,11 +479,7 @@ impl Worker {
                     initial: session.initial(),
                 });
                 self.emit(Event::Screen(1));
-                if via_mirror {
-                    self.emit(Event::MainStatus(
-                        "Сессия зеркала: официальный хост отклонил клиент. Для RU/EU-серверов нужен доступ от их администратора.".into(),
-                    ));
-                }
+                self.start_hub();
                 self.load_data().await;
                 self.load_avatar().await;
             }
@@ -470,13 +519,12 @@ impl Worker {
     }
 
     fn logout(&mut self) {
+        self.stop_hub();
         self.state.user = None;
         self.state.saved_login = None;
         self.state.last_profile = None;
-        self.state.auth_via_mirror = false;
         save_state(&self.state);
 
-        self.via_mirror = false;
         self.offline = false;
         self.profiles.clear();
         self.views.clear();
@@ -499,6 +547,7 @@ impl Worker {
 
         // Auth is bound to a backend, so switching drops the current session.
         // The saved credentials are kept so the launcher can sign in again.
+        self.stop_hub();
         let saved_login = self.state.saved_login.clone();
         self.state.server_host = (*host).to_string();
         self.state.user = None;
@@ -507,10 +556,7 @@ impl Worker {
 
         let secret = client_secret();
         let hwid = hwid::hwid_for(&self.state.settings);
-        self.backend = Backend::new(host).with_client(Some(secret.clone()), hwid.clone());
-        self.mirror.set_client(Some(secret), hwid);
-        self.via_mirror = false;
-        self.state.auth_via_mirror = false;
+        self.backend = Backend::new(host).with_client(Some(secret), hwid);
         self.offline = false;
         self.busy = false;
         self.profiles.clear();
@@ -522,14 +568,7 @@ impl Worker {
         self.emit(Event::Busy(false));
         self.spawn_check();
 
-        if index == 3 {
-            self.emit(Event::MainStatus(
-                "PL-1 — зеркало для просмотра. Для входа в игру выберите RU-1, RU-2 или EU-1."
-                    .into(),
-            ));
-        } else {
-            self.emit(Event::MainStatus(String::new()));
-        }
+        self.emit(Event::MainStatus(String::new()));
 
         if let Some(saved) = saved_login {
             self.login(saved.login, saved.password, String::new()).await;
@@ -560,16 +599,9 @@ impl Worker {
                     visible: false,
                 }
             } else {
-                let mode = backend.mirror_mode("").await;
-                let (label, color) = match mode.as_deref() {
-                    Some("local") => ("ЗЕРКАЛО", "#2E9E5B"),
-                    Some("proxy") => ("ПРОКСИ", "#D9822B"),
-                    Some("direct") => ("ОСНОВНОЙ", "#3B82F6"),
-                    _ => ("ОНЛАЙН", "#2E9E5B"),
-                };
                 Event::Backend {
-                    label: label.into(),
-                    color: color.into(),
+                    label: "ОНЛАЙН".into(),
+                    color: "#2E9E5B".into(),
                     visible: true,
                 }
             };
@@ -620,11 +652,15 @@ impl Worker {
                 return;
             }
         }
-        let save_path = path.clone();
+        // Write through a temporary file so a crash mid-save cannot leave a
+        // truncated PNG in the cache.
+        let temporary = path.with_extension("tmp.png");
+        let save_path = temporary.clone();
         let saved = tokio::task::spawn_blocking(move || head.save(save_path))
             .await
             .map(|result| result.is_ok())
-            .unwrap_or(false);
+            .unwrap_or(false)
+            && std::fs::rename(&temporary, &path).is_ok();
         if saved {
             info!(player = %user.name, "avatar rendered");
             self.emit(Event::Avatar(path.to_string_lossy().into_owned()));
@@ -646,28 +682,10 @@ impl Worker {
             return;
         };
 
-        // A token issued through the mirror may still be accepted by the
-        // selected host (the mirror proxies to the same upstream). Prefer the
-        // real server's data when that works, so RU/EU labels are not cosmetic.
-        if self.via_mirror && self.backend.base() != self.mirror.base() {
-            if let Ok(profiles) = self.backend.profiles(&token).await {
-                if !profiles.is_empty() {
-                    info!("mirror token accepted by the selected host");
-                    self.via_mirror = false;
-                    self.state.auth_via_mirror = false;
-                    save_state(&self.state);
-                    self.apply_profiles(profiles);
-                    let news = self.backend.news(&token).await;
-                    self.emit(Event::News(map_news(&news)));
-                    return;
-                }
-            }
-        }
-
-        let backend = self.data_backend().clone();
+        let backend = self.backend.clone();
         let mut result = backend.profiles(&token).await;
 
-        // A mirror can briefly answer with an empty snapshot while syncing;
+        // The backend can briefly answer with an empty snapshot while syncing;
         // retry once instead of showing an empty sidebar.
         if matches!(&result, Ok(profiles) if profiles.is_empty()) {
             tokio::time::sleep(Duration::from_millis(600)).await;
@@ -680,6 +698,7 @@ impl Worker {
                 self.ensure_discord().await;
                 let news = backend.news(&token).await;
                 self.emit(Event::News(map_news(&news)));
+                self.notify_news(&news);
             }
             Err(error) => {
                 let text = error.to_string();
@@ -703,6 +722,19 @@ impl Worker {
 
     fn apply_profiles(&mut self, mut profiles: Vec<Profile>) {
         profiles.sort_by_key(|profile| std::cmp::Reverse(profile.priority));
+
+        let signature = profiles
+            .iter()
+            .map(|profile| profile.name.as_str())
+            .collect::<Vec<_>>()
+            .join("|");
+        if !self.profiles_signature.is_empty() && signature != self.profiles_signature {
+            self.emit(Event::Notification {
+                title: "Профили обновлены".into(),
+                body: "Список профилей сервера изменился".into(),
+            });
+        }
+        self.profiles_signature = signature;
 
         let selected = self
             .state
@@ -729,6 +761,60 @@ impl Worker {
         }
 
         self.update_discord_presence();
+    }
+
+    /// Shows a toast only for news that were not seen before. The first load
+    /// marks everything as seen, so a fresh install is not spammed.
+    fn notify_news(&mut self, news: &[News]) {
+        if news.is_empty() {
+            return;
+        }
+
+        let keys: Vec<String> = news
+            .iter()
+            .map(|item| {
+                format!(
+                    "{}|{}",
+                    item.title,
+                    item.date.as_deref().unwrap_or_default()
+                )
+            })
+            .collect();
+
+        let first_run = self.state.seen_news.is_empty();
+        let unseen: Vec<&News> = news
+            .iter()
+            .zip(keys.iter())
+            .filter(|(_, key)| !self.state.seen_news.contains(key))
+            .map(|(item, _)| item)
+            .collect();
+
+        for key in keys {
+            if !self.state.seen_news.contains(&key) {
+                self.state.seen_news.push(key);
+            }
+        }
+        if self.state.seen_news.len() > 200 {
+            let excess = self.state.seen_news.len() - 200;
+            self.state.seen_news.drain(..excess);
+        }
+        save_state(&self.state);
+
+        if first_run || unseen.is_empty() {
+            return;
+        }
+
+        let title = if unseen.len() == 1 {
+            "Новая новость".to_string()
+        } else {
+            format!("Новые новости: {}", unseen.len())
+        };
+        let body = unseen
+            .first()
+            .map(|item| item.title.clone())
+            .unwrap_or_default();
+
+        self.emit(Event::Notification { title, body });
     }
 
     async fn ensure_discord(&mut self) {
@@ -851,7 +937,7 @@ impl Worker {
         self.emit(Event::Progress {
             visible: true,
             value: 0.0,
-            title: "Подготовка".into(),
+            title: "Этап 1/3 · Подготовка".into(),
             text: "Получаем параметры профиля…".into(),
             speed: String::new(),
         });
@@ -922,25 +1008,7 @@ impl Worker {
         info!(xms, xmx, "heap configured");
 
         let install_dir = settings.install_path();
-        let tx = self.tx.clone();
-        let progress = Arc::new(move |event: SyncProgress| {
-            let value = if event.total == 0 {
-                0.0
-            } else {
-                (event.done as f32 / event.total as f32).clamp(0.0, 1.0)
-            };
-            let _ = tx.send(Event::Progress {
-                visible: true,
-                value,
-                title: event.phase,
-                text: format!("{} / {} · {}", event.done, event.total, event.current),
-                speed: if event.speed_bps > 0 {
-                    format!("{}/s", format_bytes(event.speed_bps))
-                } else {
-                    String::new()
-                },
-            });
-        });
+        let progress = progress_callback(self.tx.clone());
 
         if let Err(error) = sync_profile(&self.backend, &info, &install_dir, progress).await {
             self.emit(Event::Progress {
@@ -959,7 +1027,7 @@ impl Worker {
         self.emit(Event::Progress {
             visible: true,
             value: 1.0,
-            title: "Запуск".into(),
+            title: "Этап 3/3 · Запуск".into(),
             text: "Запускаем Minecraft…".into(),
             speed: String::new(),
         });
@@ -1014,19 +1082,61 @@ impl Worker {
             .join("mods")
     }
 
-    fn mod_file_is_enabled(&self, profile: &str, name: &str) -> bool {
+    /// Local files that belong to the optional mod, best match first. Mojang
+    /// file names and display names differ (dashes, versions, spaces), so the
+    /// comparison is done on alphanumerics only.
+    fn mod_paths(&self, profile: &str, name: &str) -> Vec<PathBuf> {
         let directory = self.mods_dir(profile);
         let Ok(entries) = std::fs::read_dir(&directory) else {
-            return false;
+            return Vec::new();
         };
-        let needle = name.to_lowercase();
 
-        entries.flatten().any(|entry| {
-            let file_name = entry.file_name().to_string_lossy().to_lowercase();
-            file_name.contains(&needle)
-                && file_name.ends_with(".jar")
-                && !file_name.ends_with(".jar.disabled")
-        })
+        let needle = normalize_name(name);
+        if needle.is_empty() {
+            return Vec::new();
+        }
+
+        let mut matches: Vec<(u8, PathBuf)> = entries
+            .flatten()
+            .map(|entry| entry.path())
+            .filter_map(|path| {
+                let file_name = path.file_name()?.to_string_lossy().to_lowercase();
+                if !file_name.contains(".jar") {
+                    return None;
+                }
+
+                let base = file_name
+                    .trim_end_matches(".disabled")
+                    .trim_end_matches(".jar");
+                let normalized = normalize_name(base);
+                if normalized.is_empty() {
+                    return None;
+                }
+
+                let rank = if normalized == needle {
+                    0
+                } else if normalized.contains(&needle) || needle.contains(&normalized) {
+                    1
+                } else {
+                    return None;
+                };
+
+                Some((rank, path))
+            })
+            .collect();
+
+        matches.sort_by_key(|(rank, _)| *rank);
+        matches.into_iter().map(|(_, path)| path).collect()
+    }
+
+    fn mod_file_state(&self, profile: &str, name: &str) -> (bool, bool) {
+        let paths = self.mod_paths(profile, name);
+        let downloaded = !paths.is_empty();
+        let enabled = paths
+            .iter()
+            .any(|path| !path.to_string_lossy().to_lowercase().ends_with(".disabled"));
+
+        (downloaded, enabled)
     }
 
     async fn open_mods(&mut self) {
@@ -1073,11 +1183,15 @@ impl Worker {
                             })
                             .unwrap_or_default();
 
+                        let (downloaded, enabled) = self.mod_file_state(&profile.name, &item.name);
+
                         ModView {
                             id: 0,
                             name: item.name.clone(),
                             description,
-                            enabled: self.mod_file_is_enabled(&profile.name, &item.name),
+                            enabled,
+                            downloaded,
+                            downloading: false,
                         }
                     })
                     .collect();
@@ -1107,43 +1221,9 @@ impl Worker {
             return;
         };
 
-        let directory = self.mods_dir(&profile.name);
-        let Ok(entries) = std::fs::read_dir(&directory) else {
+        let Some(source) = self.mod_paths(&profile.name, &view.name).into_iter().next() else {
             self.emit(Event::Error(format!(
-                "Папка модов не найдена: {}",
-                directory.display()
-            )));
-            return;
-        };
-
-        let needle = view.name.to_lowercase();
-        let mut candidates: Vec<PathBuf> = entries
-            .flatten()
-            .map(|entry| entry.path())
-            .filter(|path| {
-                let name = path
-                    .file_name()
-                    .map(|value| value.to_string_lossy().to_lowercase())
-                    .unwrap_or_default();
-                name.contains(&needle) && name.contains(".jar")
-            })
-            .collect();
-
-        candidates.sort_by_key(|path| {
-            let name = path
-                .file_name()
-                .map(|value| value.to_string_lossy().to_lowercase())
-                .unwrap_or_default();
-            if name.starts_with(&needle) {
-                0
-            } else {
-                1
-            }
-        });
-
-        let Some(source) = candidates.into_iter().next() else {
-            self.emit(Event::Error(format!(
-                "Файл мода «{}» ещё не скачан. Запустите игру один раз.",
+                "Файл мода «{}» ещё не скачан. Нажмите «Скачать».",
                 view.name
             )));
             return;
@@ -1177,6 +1257,159 @@ impl Worker {
         self.emit_mods();
     }
 
+    async fn download_mod(&mut self, id: usize) {
+        if self.offline {
+            self.emit(Event::Error(
+                "Скачивание модов доступно только при подключённом бэкенде".into(),
+            ));
+            return;
+        }
+
+        let Some(profile) = self.profiles.get(self.selected).cloned() else {
+            self.emit(Event::Error("Профиль не выбран".into()));
+            return;
+        };
+        let Some(view) = self.mods.get(id).cloned() else {
+            return;
+        };
+
+        if view.downloading {
+            return;
+        }
+        if view.downloaded {
+            self.emit(Event::MainStatus(format!("Мод «{}» уже скачан", view.name)));
+            return;
+        }
+
+        if let Some(item) = self.mods.get_mut(id) {
+            item.downloading = true;
+        }
+        self.emit_mods();
+        self.emit(Event::MainStatus(format!(
+            "Скачивание мода «{}»…",
+            view.name
+        )));
+
+        let result = async {
+            let info = self.fetch_profile_info(&profile).await?;
+            let file = find_optional_file(&info, &view.name)
+                .ok_or_else(|| anyhow::anyhow!("Сервер не отдал файл для мода «{}»", view.name))?;
+            let hash = file
+                .hash
+                .as_deref()
+                .filter(|hash| !hash.is_empty())
+                .ok_or_else(|| anyhow::anyhow!("В манифесте нет хэша для мода"))?;
+
+            let root = self.state.settings.install_path();
+            let target = crate::storage::resolve_below(&root, &file.directory)
+                .ok_or_else(|| anyhow::anyhow!("Некорректный путь мода: {}", file.directory))?;
+
+            if target.exists() {
+                return Ok::<(), anyhow::Error>(());
+            }
+
+            // New optional mods stay disabled, exactly like the first launch
+            // sync does; the user enables them with the toggle afterwards.
+            let target = PathBuf::from(format!("{}.disabled", target.display()));
+            if target.exists() {
+                return Ok(());
+            }
+
+            crate::files::download_optional(
+                &self.backend,
+                hash,
+                &target,
+                file.size.max(0) as u64,
+                &file.name,
+                progress_callback(self.tx.clone()),
+            )
+            .await
+        }
+        .await;
+
+        if let Some(item) = self.mods.get_mut(id) {
+            item.downloading = false;
+        }
+
+        match result {
+            Ok(()) => {
+                let (downloaded, enabled) = self.mod_file_state(&profile.name, &view.name);
+                if let Some(item) = self.mods.get_mut(id) {
+                    item.downloaded = downloaded;
+                    item.enabled = enabled;
+                }
+                self.emit_mods();
+                self.emit(Event::Progress {
+                    visible: false,
+                    value: 0.0,
+                    title: String::new(),
+                    text: String::new(),
+                    speed: String::new(),
+                });
+                self.emit(Event::MainStatus(format!(
+                    "Мод «{}» скачан (выключен)",
+                    view.name
+                )));
+            }
+            Err(error) => {
+                self.emit_mods();
+                self.emit(Event::Progress {
+                    visible: false,
+                    value: 0.0,
+                    title: String::new(),
+                    text: String::new(),
+                    speed: String::new(),
+                });
+                self.emit(Event::Error(format!(
+                    "Не удалось скачать мод «{}»: {error}",
+                    view.name
+                )));
+            }
+        }
+    }
+
+    /// Profile manifest used by both launch and mod downloads.
+    async fn fetch_profile_info(&self, profile: &Profile) -> Result<crate::model::ProfileInfo> {
+        if self.offline {
+            return load_offline_info(&profile.name);
+        }
+
+        let token = self
+            .token()
+            .ok_or_else(|| anyhow::anyhow!("Сессия истекла"))?;
+        let session = self
+            .state
+            .user
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Сессия истекла"))?;
+        let settings = &self.state.settings;
+        let (window_width, window_height) = if settings.fullscreen {
+            hwid::screen_size()
+        } else {
+            (settings.game_width, settings.game_height)
+        };
+
+        let request = ProfileInfoRequest {
+            user_name: &session.name,
+            profile_name: &profile.name,
+            user_access_token: &token,
+            window_width,
+            window_height,
+            game_address: "",
+            game_port: 0,
+            is_full_screen: settings.fullscreen,
+            ram_size: settings.xmx,
+            user_uuid: &session.uuid,
+            os_type: hwid::os_type(),
+            os_architecture: hwid::os_architecture(),
+        };
+
+        match self.backend.profile_info(&token, &request).await? {
+            Some(info) => Ok(info),
+            None => Err(anyhow::anyhow!("Сервер не вернул параметры профиля")),
+        }
+    }
+
     fn emit_mods(&self) {
         let enabled = self.mods.iter().filter(|item| item.enabled).count();
         self.emit(Event::Mods {
@@ -1184,173 +1417,6 @@ impl Worker {
             enabled,
             total: self.mods.len(),
         });
-    }
-
-    async fn refresh_mirror(&mut self) {
-        if !self.is_pl_host() {
-            self.emit_mirror(None);
-            return;
-        }
-
-        let key = self.state.mirror_key.clone();
-        let state = self.mirror.mirror_state(&key).await;
-        self.emit_mirror(state);
-    }
-
-    fn emit_mirror(&self, state: Option<crate::model::MirrorState>) {
-        let key = self.state.mirror_key.clone();
-        match state {
-            Some(state) => self.emit(Event::MirrorState {
-                key,
-                mode: state.mode,
-                upstream: state.upstream.unwrap_or_default(),
-                can_control: state.can_control,
-                tor_enabled: state.tor_enabled,
-                tor_available: state.tor_available,
-            }),
-            None => self.emit(Event::MirrorState {
-                key,
-                mode: String::new(),
-                upstream: String::new(),
-                can_control: false,
-                tor_enabled: false,
-                tor_available: false,
-            }),
-        }
-    }
-
-    async fn save_mirror_key(&mut self, key: String) {
-        if !self.is_pl_host() {
-            self.emit(Event::SettingsStatus(
-                "Сервисный доступ доступен только на PL-1".into(),
-            ));
-            return;
-        }
-
-        let key = key.trim().to_string();
-        if key.is_empty() {
-            self.emit(Event::SettingsStatus("Введите сервисный ключ".into()));
-            return;
-        }
-
-        let state = self.mirror.mirror_state(&key).await;
-
-        if state
-            .as_ref()
-            .map(|value| value.can_control)
-            .unwrap_or(false)
-        {
-            self.state.mirror_key = key;
-            save_state(&self.state);
-            self.emit(Event::SettingsStatus("Сервисный ключ принят".into()));
-            self.emit_mirror(state);
-        } else {
-            self.emit(Event::SettingsStatus(
-                "Сервисный ключ не принят сервером".into(),
-            ));
-        }
-    }
-
-    async fn set_mirror_mode(&mut self, mode: String) {
-        if !self.is_pl_host() {
-            self.emit(Event::SettingsStatus(
-                "Сервисный доступ доступен только на PL-1".into(),
-            ));
-            return;
-        }
-
-        let key = self.state.mirror_key.clone();
-        if key.is_empty() {
-            self.emit(Event::SettingsStatus(
-                "Сервисный ключ не подтверждён".into(),
-            ));
-            return;
-        }
-
-        let backend = self.mirror.clone();
-        match backend.set_mirror_mode(&key, &mode).await {
-            Ok(message) => {
-                self.emit(Event::SettingsStatus(message));
-                self.refresh_mirror().await;
-            }
-            Err(error) => self.emit(Event::SettingsStatus(error.to_string())),
-        }
-    }
-
-    async fn set_tor(&mut self, enabled: bool) {
-        if !self.is_pl_host() {
-            self.emit(Event::SettingsStatus(
-                "Сервисный доступ доступен только на PL-1".into(),
-            ));
-            return;
-        }
-
-        let key = self.state.mirror_key.clone();
-        if key.is_empty() {
-            self.emit(Event::SettingsStatus(
-                "Сервисный ключ не подтверждён".into(),
-            ));
-            return;
-        }
-
-        let backend = self.mirror.clone();
-        match backend.set_tor(&key, enabled).await {
-            Ok(message) => {
-                self.emit(Event::SettingsStatus(message));
-                self.refresh_mirror().await;
-            }
-            Err(error) => self.emit(Event::SettingsStatus(error.to_string())),
-        }
-    }
-
-    async fn run_self_test(&mut self) {
-        if !self.is_pl_host() {
-            self.emit(Event::SettingsStatus(
-                "Сервисный доступ доступен только на PL-1".into(),
-            ));
-            return;
-        }
-
-        let key = self.state.mirror_key.clone();
-        if key.is_empty() {
-            self.emit(Event::SettingsStatus(
-                "Сервисный ключ не подтверждён".into(),
-            ));
-            return;
-        }
-
-        self.emit(Event::SettingsStatus("Самодиагностика…".into()));
-        let backend = self.mirror.clone();
-        let report = backend.self_test(&key).await;
-
-        match report {
-            Some(report) => {
-                let rows: Vec<SelfTestRowView> = report
-                    .checks
-                    .into_iter()
-                    .map(|check| SelfTestRowView {
-                        name: if check.name.is_empty() {
-                            check.key
-                        } else {
-                            check.name
-                        },
-                        status: check.status,
-                        message: check.message,
-                        duration: format!("{} мс", check.duration_ms),
-                    })
-                    .collect();
-
-                let summary = format!(
-                    "Статус: {} · режим: {} · upstream: {} · {} мс",
-                    report.status, report.mode, report.upstream, report.duration_ms
-                );
-                self.emit(Event::SelfTest { rows, summary });
-                self.emit(Event::SettingsStatus("Самодиагностика завершена".into()));
-            }
-            None => self.emit(Event::SettingsStatus(
-                "Самодиагностика недоступна (ключ не принят)".into(),
-            )),
-        }
     }
 
     fn save_settings(&mut self, mut settings: Settings) {
@@ -1369,18 +1435,32 @@ impl Worker {
 
         let themes = theme::load_all();
         settings.theme = theme::resolve(&settings.theme, &themes).name.clone();
+        settings.light_theme = theme::resolve(&settings.light_theme, &themes).name.clone();
+        settings.dark_theme = theme::resolve(&settings.dark_theme, &themes).name.clone();
+        settings.accent = if theme::parse_hex_rgb(&settings.accent).is_some() {
+            settings.accent.trim().to_uppercase()
+        } else {
+            String::new()
+        };
         settings.theme_mode = theme::normalize_mode(&settings.theme_mode).to_string();
+        settings.language = crate::locale::normalize(&settings.language).to_string();
+        settings.glass_opacity = settings.glass_opacity.clamp(0.25, 0.9);
+        settings.glass_blur = settings.glass_blur.clamp(0.0, 1.0);
         settings.layout.normalize();
 
-        self.state.settings = settings.clone();
+        self.state.settings = settings;
+        self.ensure_layout_profiles();
         save_state(&self.state);
+        let settings = self.state.settings.clone();
 
         let secret = client_secret();
         let hwid = self.backend.client_hwid().to_string();
-        self.backend.set_client(Some(secret.clone()), hwid.clone());
-        self.mirror.set_client(Some(secret), hwid);
+        self.backend.set_client(Some(secret), hwid);
 
-        self.emit(Event::Settings { settings, max_ram });
+        self.emit(Event::Settings {
+            settings: Box::new(settings),
+            max_ram,
+        });
         self.emit(Event::SettingsStatus("Сохранено".into()));
     }
 
@@ -1447,7 +1527,210 @@ impl Worker {
         self.emit(Event::SettingsStatus("Layout сохранён".into()));
     }
 
+    fn drop_layout_item(&mut self, item: &str, zone: &str, before: &str) {
+        let mut layout = self.state.settings.layout.clone();
+        let before = if before.is_empty() {
+            None
+        } else {
+            Some(before)
+        };
+        layout.move_to_zone(item, zone, before);
+        layout.normalize();
+        self.state.settings.layout = layout;
+        save_state(&self.state);
+        self.emit(Event::Layout(self.state.settings.layout.clone()));
+        self.emit(Event::SettingsStatus("Layout обновлён".into()));
+    }
+
+    fn toggle_layout_item(&mut self, item: &str, hidden: bool) {
+        let mut layout = self.state.settings.layout.clone();
+        layout.set_hidden(item, hidden);
+        layout.normalize();
+        self.state.settings.layout = layout;
+        save_state(&self.state);
+        self.emit(Event::Layout(self.state.settings.layout.clone()));
+    }
+
+    fn set_layout_widths(&mut self, left: u32, right: u32) {
+        let mut layout = self.state.settings.layout.clone();
+        layout.set_widths(left, right);
+        self.state.settings.layout = layout;
+        save_state(&self.state);
+        self.emit(Event::Layout(self.state.settings.layout.clone()));
+    }
+
+    fn ensure_layout_profiles(&mut self) {
+        if self.state.settings.layouts.is_empty() {
+            self.state.settings.layouts.push(LayoutProfile {
+                name: "По умолчанию".into(),
+                layout: LayoutConfig::default(),
+            });
+        }
+        let active_exists = self
+            .state
+            .settings
+            .layouts
+            .iter()
+            .any(|profile| profile.name == self.state.settings.layout_profile);
+        if !active_exists {
+            self.state.settings.layout_profile = self.state.settings.layouts[0].name.clone();
+        }
+    }
+
+    fn emit_layout_profiles(&self) {
+        self.emit(Event::LayoutProfiles {
+            profiles: self.state.settings.layouts.clone(),
+            active: self.state.settings.layout_profile.clone(),
+        });
+    }
+
+    fn save_layout_profile(&mut self, name: &str) {
+        let name = name.trim();
+        if name.is_empty() {
+            self.emit(Event::SettingsStatus(
+                "Введите название профиля layout".into(),
+            ));
+            return;
+        }
+
+        self.ensure_layout_profiles();
+        let mut layout = self.state.settings.layout.clone();
+        layout.normalize();
+
+        if let Some(profile) = self
+            .state
+            .settings
+            .layouts
+            .iter_mut()
+            .find(|profile| profile.name == name)
+        {
+            profile.layout = layout;
+        } else {
+            self.state.settings.layouts.push(LayoutProfile {
+                name: name.to_string(),
+                layout,
+            });
+        }
+
+        self.state.settings.layout_profile = name.to_string();
+        save_state(&self.state);
+        self.emit(Event::Layout(self.state.settings.layout.clone()));
+        self.emit_layout_profiles();
+        self.emit(Event::SettingsStatus(format!(
+            "Профиль layout «{name}» сохранён"
+        )));
+    }
+
+    fn switch_layout_profile(&mut self, name: &str) {
+        self.ensure_layout_profiles();
+        let Some(profile) = self
+            .state
+            .settings
+            .layouts
+            .iter()
+            .find(|profile| profile.name == name)
+            .cloned()
+        else {
+            self.emit(Event::SettingsStatus("Профиль layout не найден".into()));
+            return;
+        };
+
+        let mut layout = profile.layout;
+        layout.normalize();
+        self.state.settings.layout = layout;
+        self.state.settings.layout_profile = profile.name.clone();
+        save_state(&self.state);
+        self.emit(Event::Layout(self.state.settings.layout.clone()));
+        self.emit_layout_profiles();
+        self.emit(Event::SettingsStatus(format!(
+            "Загружен профиль «{}»",
+            profile.name
+        )));
+    }
+
+    fn delete_layout_profile(&mut self, name: &str) {
+        self.ensure_layout_profiles();
+        if self.state.settings.layouts.len() <= 1 {
+            self.emit(Event::SettingsStatus(
+                "Нельзя удалить последний профиль layout".into(),
+            ));
+            return;
+        }
+
+        self.state
+            .settings
+            .layouts
+            .retain(|profile| profile.name != name);
+
+        if self.state.settings.layout_profile == name {
+            let first = self.state.settings.layouts[0].clone();
+            self.state.settings.layout = first.layout;
+            self.state.settings.layout_profile = first.name;
+        }
+
+        save_state(&self.state);
+        self.emit(Event::Layout(self.state.settings.layout.clone()));
+        self.emit_layout_profiles();
+    }
+
+    fn rename_layout_profile(&mut self, old: &str, new: &str) {
+        let new = new.trim();
+        if new.is_empty() {
+            self.emit(Event::SettingsStatus(
+                "Введите новое название профиля".into(),
+            ));
+            return;
+        }
+        self.ensure_layout_profiles();
+        if self
+            .state
+            .settings
+            .layouts
+            .iter()
+            .any(|profile| profile.name == new && profile.name != old)
+        {
+            self.emit(Event::SettingsStatus(
+                "Профиль с таким названием уже есть".into(),
+            ));
+            return;
+        }
+
+        let mut renamed = false;
+        for profile in &mut self.state.settings.layouts {
+            if profile.name == old {
+                profile.name = new.to_string();
+                renamed = true;
+            }
+        }
+        if !renamed {
+            self.emit(Event::SettingsStatus("Профиль layout не найден".into()));
+            return;
+        }
+        if self.state.settings.layout_profile == old {
+            self.state.settings.layout_profile = new.to_string();
+        }
+
+        save_state(&self.state);
+        self.emit_layout_profiles();
+        self.emit(Event::SettingsStatus(format!(
+            "Профиль переименован в «{new}»"
+        )));
+    }
+
+    fn export_diagnostics(&mut self) {
+        match crate::diagnostics::export(&self.state.settings) {
+            Ok(path) => self.emit(Event::SettingsStatus(format!(
+                "Диагностика сохранена: {}",
+                path.display()
+            ))),
+            Err(error) => self.emit(Event::Error(format!(
+                "Не удалось сохранить диагностику: {error}"
+            ))),
+        }
+    }
+
     async fn enter_offline(&mut self) {
+        self.stop_hub();
         self.offline = true;
         self.load_offline().await;
         self.spawn_check();
@@ -1469,6 +1752,56 @@ fn client_secret() -> String {
         .iter()
         .map(|byte| (byte ^ 0xA7) as char)
         .collect()
+}
+
+fn normalize_name(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| character.is_alphanumeric())
+        .flat_map(|character| character.to_lowercase())
+        .collect()
+}
+
+/// Picks the manifest entry that belongs to an optional mod shown in the UI.
+fn find_optional_file<'a>(
+    info: &'a crate::model::ProfileInfo,
+    name: &str,
+) -> Option<&'a crate::model::ProfileFile> {
+    let needle = normalize_name(name);
+    if needle.is_empty() {
+        return None;
+    }
+
+    let mut best: Option<(u8, &crate::model::ProfileFile)> = None;
+
+    for file in info
+        .files
+        .iter()
+        .filter(|file| file.directory.contains("-optional-mod.jar"))
+    {
+        let base = file
+            .name
+            .trim_end_matches(".disabled")
+            .trim_end_matches(".jar");
+        let normalized = normalize_name(base);
+        if normalized.is_empty() {
+            continue;
+        }
+
+        let rank = if normalized == needle {
+            0
+        } else if normalized.contains(&needle) || needle.contains(&normalized) {
+            1
+        } else {
+            continue;
+        };
+
+        if best.map(|(current, _)| rank < current).unwrap_or(true) {
+            best = Some((rank, file));
+        }
+    }
+
+    best.map(|(_, file)| file)
 }
 
 fn view_for(id: usize, profile: &Profile) -> ProfileView {
@@ -1588,6 +1921,45 @@ fn format_date(value: Option<&str>) -> String {
     chrono::DateTime::parse_from_rfc3339(value)
         .map(|date| date.format("%d.%m.%Y").to_string())
         .unwrap_or_else(|_| value.to_string())
+}
+
+fn progress_callback(tx: UnboundedSender<Event>) -> ProgressFn {
+    Arc::new(move |event: SyncProgress| {
+        // A single-file download reports bytes; the regular sync reports files.
+        let value = if event.total_bytes > 0 {
+            (event.bytes as f32 / event.total_bytes as f32).clamp(0.0, 1.0)
+        } else if event.total == 0 {
+            0.0
+        } else {
+            (event.done as f32 / event.total as f32).clamp(0.0, 1.0)
+        };
+
+        let mut text = if event.total_bytes > 0 {
+            format!(
+                "{} / {} · {}",
+                format_bytes(event.bytes),
+                format_bytes(event.total_bytes),
+                event.current
+            )
+        } else {
+            format!("{} / {} · {}", event.done, event.total, event.current)
+        };
+        if !event.eta.is_empty() {
+            text.push_str(&format!(" · осталось {}", event.eta));
+        }
+
+        let _ = tx.send(Event::Progress {
+            visible: true,
+            value,
+            title: event.phase,
+            text,
+            speed: if event.speed_bps > 0 {
+                format!("{}/s", format_bytes(event.speed_bps))
+            } else {
+                String::new()
+            },
+        });
+    })
 }
 
 fn format_bytes(bytes: u64) -> String {

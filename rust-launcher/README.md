@@ -13,11 +13,15 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   XOR-obfuscated bytes and is not configurable — the old Settings field was
   removed because a mistyped key silently broke sessions.
 - Server selector as a dropdown in the top-right corner (RU-1, RU-2, EU-1).
-  PL-1 is temporarily hidden (`model::PL1_AVAILABLE = false`) because the mirror
-  backend is offline; a saved PL-1 selection is migrated to RU-2 on startup.
-  Switching a server keeps the saved credentials and signs in again
+  PL-1 is always visible but disabled and labelled `W.I.P`
+  (`model::PL1_AVAILABLE = false`); a saved PL-1 selection is migrated to RU-2
+  on startup. Switching a server keeps the saved credentials and signs in again
   automatically; the branded start screen stays up until the auto-login
   finishes, so the login form never flashes.
+- Real SignalR connection to `wss://<host>/ws/launcher?access_token=…`:
+  negotiation, JSON handshake, `RefreshProfiles`, `RequestLauncherHash` ↔
+  `ConfirmLauncherHash`, keep-alive pings and reconnect with exponential
+  backoff. The 90-second poll remains only as a fallback.
 - Profiles and news from the backend, with icons, version badges and online
   counters. The sidebar avatar is the player's real skin head (base layer plus
   hat overlay), cropped from `/api/v1/users/info/{name}` → texture endpoint and
@@ -33,23 +37,36 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   authlib endpoint rewrite for the active server, and removal of the authlib
   agent in offline mode.
 - Settings: install folder, RAM, window size/fullscreen, JVM args, HWID
-  sending, interface sounds.
-- Service access card (**PL-1 only, and only for the Kydasay account**):
-  service key, mirror/proxy switching, Tor routing and backend self-test
-  (`/api/v1/mirror/*`).
+  sending, interface sounds, language (RU/EN/UA), background effect, Liquid
+  Glass opacity/blur imitation and manual accent for Material 3.
 - Mods page: optional mods from `/api/v1/profiles/{name}/mods/optionals`,
-  enable/disable by renaming `.jar` ↔ `.jar.disabled`.
+  enable/disable by renaming `.jar` ↔ `.jar.disabled`. Mods that were never
+  downloaded get a «Скачать» button: the file hash is resolved from the profile
+  manifest, the existing downloader shows byte progress, retries and stores the
+  new file as `.jar.disabled`. The list updates without a game launch or a
+  launcher restart.
+- In-app toast notifications for new news (de-duplicated by title/date through
+  `seenNews` in `state.json`) and for server-side profile list changes. No
+  external notification service is used.
 - Rounded UI typography: Nunito (Regular/SemiBold/Bold, Cyrillic included),
   embedded in the binary and used as the default font family.
-- Visual themes: built-in `dark`, `light`, `femboy`, `ocean` plus user themes
-  in `%APPDATA%\Vestalis\rust-launcher\themes` (old `name.json` and new
-  `name/theme.json` layouts). Three presentation modes — `base`, `material3`
-  and `liquid-glass` — switch instantly and apply to every screen. Material 3
-  derives its tonal palette from the Windows accent (with a theme fallback);
-  Liquid Glass uses translucent panels, specular edges and blurred colour
-  fields. Themes may override semantic icons and safe UI strings.
+- Visual themes: built-in `dark`, `light`, `femboy`, `ocean`, `Apple`,
+  `Discord`, `Minecraft` and generated `Windows` (from the sampled Windows
+  accent), plus user themes in `%APPDATA%\Vestalis\rust-launcher\themes`
+  (old `name.json` and new `name/theme.json` layouts). Three presentation
+  modes — `base`, `material3` and `liquid-glass` — switch instantly and apply to
+  every screen. Material 3 accent priority is manual hex → Windows accent →
+  theme accent. Settings can follow the Windows light/dark app mode with a
+  separate theme for each, polled every 3 seconds without a restart. Theme
+  changes cross-fade over ~280 ms. Liquid Glass uses translucent panels,
+  specular edges and blurred colour fields; opacity and imitation strength are
+  configurable (real backdrop blur is not available in Slint 1.18). Themes may
+  override semantic icons and safe UI strings.
 - Main-screen layout editor (Settings → «Layout»): six zones and seven movable
-  blocks, persisted separately as `settings.layout` in `state.json`.
+  blocks, drag-and-drop between zones and onto rows (arrow buttons remain as a
+  fallback), per-block visibility, sidebar widths (240–420 px), and named layout
+  profiles. The active layout is `settings.layout`, presets are
+  `settings.layouts`, all persisted in `state.json`.
 - Ambient background in Settings → «Фон лаунчера»: «Нет», «Светлячки»,
   «Листья» or «Снежинки». The effects are drawn in Slint and driven by
   `animation-tick()`, so they do not need a Rust timer.
@@ -75,12 +92,19 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   900×600 window size, so the game is not stretched.
 - Optional «Скрывать лаунчер при запуске игры» in Settings → Окно игры
   (minimizes the launcher once the game process starts).
-- Profiles are refreshed every 90 s and asynchronously after the first load
-  (a lightweight substitute for the C# SignalR `RefreshProfiles` event). The
-  periodic refresh never logs the player out, so a transient backend error
-  cannot rotate the token and invalidate a running game session; the token is
-  validated once at startup.
-- Backend mode badge (`ЗЕРКАЛО` / `ПРОКСИ` / `ОСНОВНОЙ` / `ОНЛАЙН` / `ОФФЛАЙН`).
+- Profiles are refreshed instantly by SignalR `RefreshProfiles`, with the 90 s
+  poll only as a fallback. Neither path logs the player out, so a transient
+  backend error cannot rotate the token and invalidate a running game session;
+  the token is validated once at startup.
+- Backend status badge (`ОНЛАЙН` / `ОФФЛАЙН`).
+- Interface language RU/EN/UA with a settings switch; theme text overrides keep
+  priority over the built-in translation within the allowlist.
+- Diagnostic export (Settings → «Экспорт диагностики»): ZIP with logs, version,
+  themes and sanitized state. Tokens, passwords, saved credentials and secrets
+  are removed.
+- `state.json` is written atomically and rotated to `.bak`; a partially broken
+  file recovers every valid field instead of resetting all settings. Avatar and
+  theme-icon caches use a 30-day TTL and file-count caps with atomic writes.
 
 ## Requirements (Windows)
 
@@ -113,9 +137,12 @@ rust-launcher/
 ├─ ui/app.slint         Slint UI (login, main, settings)
 ├─ src/
 │  ├─ main.rs           composition root, Slint callbacks, event pump
-│  ├─ api.rs            reqwest backend client, auth, profiles, news, mirror
+│  ├─ api.rs            reqwest backend client, auth, profiles, news
+│  ├─ signalr.rs        minimal SignalR JSON client over WebSocket
 │  ├─ worker.rs         async worker: commands, auth flow, launch orchestration
 │  ├─ files.rs          manifest validation + parallel downloads
+│  ├─ locale.rs         built-in RU/EN/UA interface strings
+│  ├─ diagnostics.rs    sanitized support ZIP
 │  ├─ launch.rs         JVM argument rewriting and process spawn
 │  ├─ discord.rs        minimal Discord IPC rich presence
 │  ├─ window.rs         Win32 work-area maximize for the borderless window
@@ -135,22 +162,26 @@ No blocking I/O happens in a Slint callback.
 
 | What | Where |
 | --- | --- |
-| Settings/session | `%APPDATA%\Vestalis\rust-launcher\state.json` |
+| Settings/session | `%APPDATA%\Vestalis\rust-launcher\state.json` (+ `.bak`) |
 | Game files | `%APPDATA%\Vestalis` (same as the C# launcher) |
 | SHA-1 cache | `%LOCALAPPDATA%\Vestalis\validation-cache-rust.json` |
 | Player head avatars | `%LOCALAPPDATA%\Vestalis\avatars\<uuid>.png` |
 | Logs | `%LOCALAPPDATA%\Vestalis\logs\launcher.log.<date>` |
 | Offline snapshots | `%APPDATA%\Vestalis\offline-mode\...` |
+| Theme icon cache | `%LOCALAPPDATA%\Vestalis\theme-icons` |
+| Diagnostics ZIP | Desktop, or `%LOCALAPPDATA%\Vestalis` when Desktop is absent |
 
 The first validation imports `%LOCALAPPDATA%\Gml.Launcher\validation-cache-v1.json`,
 so an existing C# installation does not re-hash its whole 16k-file client.
 
 ## Themes and modes
 
-Built-in palettes live in `src/theme.rs`: `dark`, `light`, `femboy`, `ocean`.
-The palette is stored as `settings.theme` and the presentation mode as
-`settings.themeMode` in `state.json`. Settings → «Оформление» switches both
-live; «Сохранить настройки» persists the choice.
+Built-in palettes live in `src/theme.rs`: `dark`, `light`, `femboy`, `ocean`,
+`Apple`, `Discord`, `Minecraft` and `Windows` (generated from the current
+Windows accent). The palette is stored as `settings.theme` and the presentation
+mode as `settings.themeMode` in `state.json`. Settings → «Оформление» switches
+both live; «Сохранить настройки» persists the choice. A manual accent
+(`settings.accent`) overrides the Windows accent for Material 3.
 
 Modes:
 
@@ -167,7 +198,8 @@ Modes:
 - `liquid-glass` — translucent panels, gradient specular edges, soft blooms
   behind the UI and larger rounded corners. Slint 1.18 has no real backdrop
   blur, so this is an approximation made of layered translucency, gradients
-  and blurred colour fields; no network or GPU shader is involved.
+  and blurred colour fields; no network or GPU shader is involved. Opacity
+  (25–90%) and imitation strength (0–100%) are configurable in Settings.
 
 Modes are presentation layers over the selected palette. A user theme may set
 a default `mode`; selecting the theme switches to it, and the mode buttons can
@@ -225,17 +257,17 @@ Rules:
   `fireflies`, `leaves` or `snow`.
 - Icons use semantic IDs: `server`, `chevron`, `play`, `settings`, `mods`,
   `refresh`, `minimize`, `maximize`, `restore`, `close`, `warning`, `error`,
-  `success`. Only SVG/PNG files up to 512 KiB, relative to the theme folder,
-  are accepted. Absolute paths, `..`, symlinks and paths resolving outside the
-  theme folder are rejected. Missing or broken icons fall back to the built-in
-  vector icon. SVG files containing `currentColor` are tinted with the active
-  theme colour and cached in `%LOCALAPPDATA%\Vestalis\theme-icons`.
-- Themeable text keys are limited to `app.title`, `app.subtitle`,
-  `login.title`, `login.subtitle`, `login.submit`, `login.offline`,
-  `buttons.play`, `buttons.settings`, `buttons.logout`, `buttons.refresh`,
-  `buttons.mods`, `sections.profiles`, `sections.news`, `settings.title` and
-  `settings.back`. Unknown keys are logged and ignored. Error messages, warning
-  details and window-control labels are deliberately not themeable.
+  `success`, `download`, `folder`, `user`. Only SVG/PNG files up to 512 KiB,
+  relative to the theme folder, are accepted. Absolute paths, `..`, symlinks
+  and paths resolving outside the theme folder are rejected. Missing or broken
+  icons fall back to the built-in vector icon. SVG files containing
+  `currentColor` are tinted with the active theme colour and cached with a
+  30-day TTL / 500-file cap in `%LOCALAPPDATA%\Vestalis\theme-icons`.
+- Themeable text keys cover the main labels, settings cards, layout editor,
+  language switcher and mods page (see `TEXT_KEYS` in `src/theme.rs`). The
+  full list intentionally excludes error messages, warning details and
+  window-control labels. Unknown keys are logged and ignored. Theme overrides
+  take priority over the selected interface language.
 - Only regular files directly inside the themes folder (or one level of theme
   folders) are read; themes are capped at 256 KiB. Invalid JSON, duplicate
   names and unreadable files are logged and skipped. A UTF-8 BOM is accepted.
@@ -250,10 +282,15 @@ six zones: `sidebarLeft`, `sidebarRight`, `header`, `contentTop`,
 `contentBottom`, `footer`. Movable blocks are `user`, `profiles`, `countdown`,
 `sidebar-actions`, `news` and `main-actions`; the server selector is pinned to
 the header because the title bar owns its dropdown. Settings → «Layout» shows
-each zone and moves blocks with ←/↑/↓/→ buttons. Every move is normalised
-(unknown/duplicate items removed, missing blocks returned to their defaults),
-saved immediately and applied without a restart. There is no free canvas, which
-keeps the 1080×620 minimum size and the existing scrolling/clicks intact.
+each zone and supports drag-and-drop between zones and onto a specific row
+(`DragArea`/`DropArea`, payload prepared from the hovered row), with ←/↑/↓/→
+buttons as a fallback. Blocks can be hidden without losing their position.
+Sidebar widths are clamped to 240–420 px. Named profiles are stored in
+`settings.layouts`, the active one in `settings.layout` /
+`settings.layoutProfile`. Every change is normalised (unknown/duplicate items
+removed, missing blocks returned to their defaults), saved immediately and
+applied without a restart. There is no free canvas, which keeps the 1080×620
+minimum size and the existing scrolling/clicks intact.
 
 ## Backend notes
 
@@ -266,24 +303,22 @@ keeps the 1080×620 minimum size and the existing scrolling/clicks intact.
   лаунчер»` is shown as-is: the old silent fallback to PL-1 is gone because a
   mirror-issued token cannot join a game server (`join` returns `401`, the
   server sees `204` from `hasJoined`, and Minecraft reports an invalid
-  session). Selecting PL-1 explicitly is still possible, but for browsing only.
+  session). PL-1 stays visible in the dropdown only as a disabled `W.I.P`
+  entry; selecting it does nothing.
 - `OsArchitecture` must be `"64"` (not `"x64"`): the backend returns an empty
   profile with `state=Error` for `"x64"` but the full launch manifest for `"64"`.
-- PL-1 accepts the same API and is the default host. The client-signature key
-  is launcher-wide, not per server.
+- RU-2 is the default host. PL-1 mirror-control endpoints (`/api/v1/mirror/*`)
+  and the service-access card were removed from the Rust launcher.
 - The API speaks camelCase JSON; request bodies for sign-in keep the PascalCase
   names used by the C# client.
-- Mirror control is intentionally limited to PL-1: RU/EU answer `404` for
-  `/api/v1/mirror/*`, so the card is hidden for them in the UI and guarded in
-  the worker.
+- The hub is negotiated at `/ws/launcher/negotiate`; the token is passed as the
+  `access_token` query parameter, exactly like the C# client.
 
 ## Known gaps / next steps
 
-1. True SignalR connection (the 90 s refresh is a lightweight substitute).
-2. Localisation (ru/en/zh): the Rust UI currently ships Russian strings.
-3. Skin marketplace/page (the head avatar itself is already rendered) and Sentry.
-4. The exact splash-to-window morph of the Avalonia build (the Rust build uses
+1. Skin marketplace/page (the head avatar itself is already rendered) and Sentry.
+2. The exact splash-to-window morph of the Avalonia build (the Rust build uses
    an animated branded start overlay).
-5. Installer and code signing.
-6. Optional mods that are not downloaded yet: the mods page asks the user to
-   launch the game once instead of downloading the missing file on the spot.
+3. Installer and code signing.
+4. Background error/status strings from the backend stay in the language the
+   backend returns; static launcher strings are localized in `src/locale.rs`.

@@ -15,13 +15,16 @@
                 │ Event (40 ms Timer)               │ Command
 ┌───────────────┴───────────────────────────────────▼──────────────────┐
 │ worker.rs — application service / orchestrator                       │
-│ auth · profile loading · offline mode · launch · settings            │
-└───────┬───────────────────┬───────────────────┬──────────────────────┘
-        │                   │                   │
-   api.rs              files.rs             launch.rs
-   reqwest             SHA-1 + downloads    JVM args + process
-        │                   │                   │
-        └────────────── model.rs / storage.rs / hwid.rs ───────────────┘
+│ auth · profile loading · offline mode · launch · settings · layout   │
+└───────┬───────────────┬───────────────────┬──────────────────────────┘
+        │               │                   │
+   api.rs          files.rs             launch.rs
+   reqwest         SHA-1 + downloads    JVM args + process
+        │               │
+   signalr.rs      diagnostics.rs
+   hub events      sanitized ZIP
+        │
+        └── model.rs / storage.rs / hwid.rs / theme.rs / locale.rs / layout.rs ──
 ```
 
 - `main.rs` is the composition root: logging, runtime, Slint callbacks, event
@@ -34,6 +37,14 @@
   `Send + Sync` callback; the worker converts it into `Event::Progress`.
 - `launch.rs` is pure argument manipulation plus a process spawn. Its regex
   logic is covered by unit tests.
+- `signalr.rs` owns the WebSocket hub task. It reconnects with backoff and only
+  emits `RefreshProfiles`; the worker aborts the task on logout/server switch.
+- `theme.rs` owns palettes, modes, icon/text overrides and colour mixing;
+  `locale.rs` owns RU/EN/UA labels; `layout.rs` owns zones, profiles and
+  normalisation. None of them touch the network.
+- `diagnostics.rs` builds the support ZIP from logs and sanitized state.
+- `storage.rs` is also the single place for atomic state/cache writes, `.bak`
+  recovery and cache TTL cleanup.
 
 ## Threading
 
@@ -43,6 +54,12 @@
 - UI → worker: `tokio::sync::mpsc::UnboundedSender<Command>`.
 - Worker → UI: `UnboundedSender<Event>` plus a `slint::Timer` on the UI thread.
   This avoids sending non-`Send` Slint handles across threads.
+- The hub runs as a separate Tokio task and sends `HubEvent::RefreshProfiles`
+  through its own channel, so a slow backend never blocks the command queue.
+- Theme cross-fades and toast auto-hide use `slint::Timer` on the UI thread;
+  no Rust thread touches Slint handles directly.
+- `DragArea` payloads are `DataTransfer` values created on the UI thread from a
+  hovered row; `LayoutDrag.payload` is read declaratively by `DragArea`.
 
 ## Error model
 
@@ -69,8 +86,12 @@
 
 - Tokens and saved credentials live in `state.json` in the user profile. This
   matches the C# launcher's local storage; moving them to the Windows
-  Credential Manager is a future improvement.
+  Credential Manager is a future improvement. `state.json.bak` contains the
+  same data and must be treated as sensitive too.
+- The diagnostics ZIP scrubs `token`, `password`, `secret`, `credential`, `user`
+  and `savedLogin` keys recursively before writing.
 - Tokens and HWIDs must never be logged. Login logs only the login name and the
-  outcome.
+  outcome. The hub keeps the token in the WebSocket query string, mirroring the
+  C# client; logs only report connection state.
 - Paths from the manifest are sanitized (`..`, drive letters and absolute
   paths are rejected) before joining them to the install directory.

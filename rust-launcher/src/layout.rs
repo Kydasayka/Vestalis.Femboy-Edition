@@ -26,6 +26,11 @@ pub const ZONES: [&str; 6] = [
     "footer",
 ];
 
+pub const WIDTH_MIN: u32 = 240;
+pub const WIDTH_MAX: u32 = 420;
+pub const WIDTH_DEFAULT_LEFT: u32 = 316;
+pub const WIDTH_DEFAULT_RIGHT: u32 = 300;
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct LayoutConfig {
@@ -35,6 +40,11 @@ pub struct LayoutConfig {
     pub content_top: Vec<String>,
     pub content_bottom: Vec<String>,
     pub footer: Vec<String>,
+    /// Blocks hidden by the user. They stay in their zone so the layout can be
+    /// restored without losing the order.
+    pub hidden: Vec<String>,
+    pub sidebar_left_width: u32,
+    pub sidebar_right_width: u32,
 }
 
 impl Default for LayoutConfig {
@@ -51,8 +61,20 @@ impl Default for LayoutConfig {
             content_top: vec!["news".into()],
             content_bottom: vec!["main-actions".into()],
             footer: Vec::new(),
+            hidden: Vec::new(),
+            sidebar_left_width: WIDTH_DEFAULT_LEFT,
+            sidebar_right_width: WIDTH_DEFAULT_RIGHT,
         }
     }
+}
+
+/// Named layout preset stored next to the active layout.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LayoutProfile {
+    pub name: String,
+    #[serde(default)]
+    pub layout: LayoutConfig,
 }
 
 impl LayoutConfig {
@@ -115,6 +137,74 @@ impl LayoutConfig {
 
         self.header.retain(|item| item != "server");
         self.header.insert(0, "server".into());
+
+        let mut hidden = Vec::new();
+        for item in self.hidden.drain(..) {
+            if item != "server" && ITEMS.contains(&item.as_str()) && !hidden.contains(&item) {
+                hidden.push(item);
+            }
+        }
+        self.hidden = hidden;
+
+        self.sidebar_left_width = self.sidebar_left_width.clamp(WIDTH_MIN, WIDTH_MAX);
+        self.sidebar_right_width = self.sidebar_right_width.clamp(WIDTH_MIN, WIDTH_MAX);
+    }
+
+    /// Moves an item into `zone`, optionally before another item. Used by
+    /// drag-and-drop; the arrow buttons keep working through `move_item`.
+    pub fn move_to_zone(&mut self, item: &str, zone: &str, before: Option<&str>) {
+        self.normalize();
+        if item == "server" || !ITEMS.contains(&item) || !ZONES.contains(&zone) {
+            return;
+        }
+        if before == Some(item) {
+            return;
+        }
+
+        for list in self.zones_mut() {
+            list.retain(|value| value != item);
+        }
+
+        let before = before.filter(|value| *value != item && *value != "server");
+        let list = match zone {
+            "sidebar-left" => &mut self.sidebar_left,
+            "sidebar-right" => &mut self.sidebar_right,
+            "header" => &mut self.header,
+            "content-top" => &mut self.content_top,
+            "content-bottom" => &mut self.content_bottom,
+            _ => &mut self.footer,
+        };
+
+        let index = before
+            .and_then(|value| list.iter().position(|current| current == value))
+            .unwrap_or(list.len());
+        let index = if zone == "header" {
+            index.max(1)
+        } else {
+            index
+        };
+        list.insert(index.min(list.len()), item.to_string());
+    }
+
+    pub fn set_hidden(&mut self, item: &str, hidden: bool) {
+        self.normalize();
+        if item == "server" || !ITEMS.contains(&item) {
+            return;
+        }
+
+        self.hidden.retain(|value| value != item);
+        if hidden {
+            self.hidden.push(item.to_string());
+        }
+    }
+
+    pub fn is_hidden(&self, item: &str) -> bool {
+        self.hidden.iter().any(|value| value == item)
+    }
+
+    pub fn set_widths(&mut self, left: u32, right: u32) {
+        self.sidebar_left_width = left.clamp(WIDTH_MIN, WIDTH_MAX);
+        self.sidebar_right_width = right.clamp(WIDTH_MIN, WIDTH_MAX);
     }
 
     /// Moves an item up/down inside its zone or to the previous/next zone.
@@ -199,6 +289,54 @@ mod tests {
         layout.move_item("server", "left");
         layout.normalize();
         assert_eq!(layout.header.first().map(String::as_str), Some("server"));
+    }
+
+    #[test]
+    fn drag_and_drop_moves_and_inserts_without_duplicates() {
+        let mut layout = LayoutConfig::default();
+        layout.move_to_zone("news", "sidebar-right", None);
+        assert!(layout.sidebar_right.contains(&"news".to_string()));
+
+        layout.move_to_zone("countdown", "sidebar-right", Some("news"));
+        let right = &layout.sidebar_right;
+        let countdown = right.iter().position(|item| item == "countdown").unwrap();
+        let news = right.iter().position(|item| item == "news").unwrap();
+        assert!(countdown < news);
+
+        layout.move_to_zone("news", "sidebar-right", Some("news"));
+        layout.normalize();
+        let count = layout
+            .zones()
+            .iter()
+            .flat_map(|zone| zone.iter())
+            .filter(|item| item.as_str() == "news")
+            .count();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn hidden_blocks_stay_in_place_and_ignore_unknown_items() {
+        let mut layout = LayoutConfig::default();
+        layout.set_hidden("countdown", true);
+        layout.set_hidden("bogus", true);
+        layout.set_hidden("server", true);
+        layout.normalize();
+
+        assert!(layout.is_hidden("countdown"));
+        assert!(!layout.is_hidden("bogus"));
+        assert!(!layout.is_hidden("server"));
+        assert!(layout.sidebar_left.contains(&"countdown".to_string()));
+
+        layout.set_hidden("countdown", false);
+        assert!(!layout.is_hidden("countdown"));
+    }
+
+    #[test]
+    fn sidebar_widths_are_clamped() {
+        let mut layout = LayoutConfig::default();
+        layout.set_widths(10, 10_000);
+        assert_eq!(layout.sidebar_left_width, WIDTH_MIN);
+        assert_eq!(layout.sidebar_right_width, WIDTH_MAX);
     }
 
     #[test]

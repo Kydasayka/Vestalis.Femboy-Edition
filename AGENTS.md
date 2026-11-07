@@ -379,6 +379,41 @@ cargo clippy --all-targets -- -D warnings
   размер, mtime и `server_hash` (пустой у старых записей — доверяем). После
   скачивания запись кэша обновляется; количество файлов к обновлению пишется
   в лог (`profile files validated`).
+- SignalR (`src/signalr.rs`): реальный хаб `wss://<host>/ws/launcher?access_token=…`,
+  negotiate → WebSocket handshake `{"protocol":"json","version":1}` → события
+  `RefreshProfiles`, `RequestLauncherHash`/`ConfirmLauncherHash`, ping `{"type":6}`
+  каждые 15 с. Реконнект с backoff 1→30 с; задача отменяется при логауте, смене
+  сервера и оффлайне. Опрос 90 с оставлен только фолбэком. Токен идёт в query,
+  как в C#.
+- Моды: кнопка «Скачать» берёт хэш из манифеста `/profiles/info`, качает тем же
+  `files::download_optional` (3 попытки, прогресс по байтам) в `.jar.disabled`;
+  список обновляется без запуска игры. Имена сопоставляются по alphanumerics
+  (`normalize_name`), иначе `-1.0`/пробелы ломают поиск.
+- Тексты/иконки темы: `TEXT_KEYS` расширен под карточки настроек, layout, язык и
+  моды; приоритет theme override → `locale::get(lang, key)`. Ошибки и кнопки
+  окна по-прежнему не переопределяются. `locale.rs` — RU/EN/UA, язык в
+  `settings.language`; `Event::Settings` теперь `Box<Settings>` (clippy
+  large_enum_variant).
+- Смена темы анимируется в Rust (`Theme::mix`, 280 мс, `THEME_TIMER`), потому что
+  **глобалы Slint не поддерживают `animate`** (`A global component cannot have
+  animations`). Не возвращать animate в `global Theme`.
+- `DragArea`/`DropArea` в Slint 1.18: `data-transfer` нельзя создать из строки в
+  биндинге. Payload готовится заранее: `TouchArea.pointer-event` на hover/down
+  вызывает `LayoutDrag.begin(item)`, Rust кладёт `DataTransfer` в
+  `LayoutDrag.payload`; `data: LayoutDrag.payload`. Дроп читается через
+  `LayoutDrag.transfer-text(event.data)`. Стрелки в редакторе — обязательный
+  fallback.
+- Layout: `settings.layout` (активный) + `settings.layouts` (профили) +
+  `layoutProfile`; ширины 240–420 px, `hidden` хранит скрытые блоки в зоне.
+  DnD→`move_to_zone`, скрытие→`set_hidden`; всё нормализуется и сохраняется сразу.
+- `state.json`: атомарная запись tmp→rename + `.bak`; при частично битом JSON
+  `recover_state`/`merge_settings` сохраняют валидные поля. Не сбрасывать весь
+  файл на одной ошибке типа.
+- Кэши: аватары/иконки темы чистить `storage::cleanup_cache_dir` (30 дней,
+  200/500 файлов), запись только tmp→rename; битые файлы игнорировать.
+- Диагностика: `src/diagnostics.rs`, ZIP на рабочий стол (логи, версия, темы,
+  санитизированный state). Вычищать `token/password/secret/credential/user/
+  savedLogin` рекурсивно; в исходники секреты не класть.
 - Подводные камни: в Rust `regex` **нет look-around** — не тащить сюда C#-паттерны
   с `(?<!…)`/`(?=…)`; `slint` facade не экспортирует feature `svg`, она включается
   через прямую зависимость `i-slint-core = { features = ["svg"] }`; UI-поток обязан

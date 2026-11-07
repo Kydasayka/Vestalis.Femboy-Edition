@@ -1,4 +1,4 @@
-import { ScrollView } from "std-widgets.slint";
+import { ScrollView, Slider } from "std-widgets.slint";
 
 // Rounded UI font with Cyrillic coverage (Nunito, OFL).
 import "../assets/fonts/Nunito-Regular.ttf";
@@ -26,6 +26,7 @@ export global Theme {
     in-out property <color> gradient-end: #6d28d9;
     in-out property <color> shadow: #00000080;
     in-out property <color> scrim: #00000000;
+
 
     in-out property <color> primary-container: #4a044e;
     in-out property <color> on-primary-container: #f5d0fe;
@@ -75,6 +76,122 @@ export global Texts {
     in-out property <string> news: "НОВОСТИ";
     in-out property <string> settings-title: "Настройки";
     in-out property <string> back: "← Назад";
+
+    in-out property <string> login-username: "Логин";
+    in-out property <string> login-password: "Пароль";
+    in-out property <string> login-hwid: "Отправлять HWID";
+    in-out property <string> login-2fa: "Код двухфакторной аутентификации";
+    in-out property <string> login-2fa-submit: "Подтвердить код";
+    in-out property <string> login-busy: "Подключение…";
+    in-out property <string> login-checking: "Проверка…";
+    in-out property <string> profile-select: "Выберите профиль";
+
+    in-out property <string> save: "Сохранить";
+    in-out property <string> apply: "Применить";
+    in-out property <string> pick: "Пипетка";
+    in-out property <string> load: "Загрузить";
+    in-out property <string> delete: "Удалить";
+    in-out property <string> rename: "Переименовать";
+    in-out property <string> download: "Скачать";
+    in-out property <string> downloading: "Скачивание…";
+
+    in-out property <string> memory-title: "Память";
+    in-out property <string> memory-desc: "Выделите оперативную память под Minecraft. Оставьте запас системе: ";
+    in-out property <string> memory-xms: "Минимум (Xms)";
+    in-out property <string> memory-xmx: "Максимум (Xmx)";
+    in-out property <string> jvm-title: "Дополнительные параметры JVM";
+    in-out property <string> jvm-desc: "Без параметров памяти: -Xms/-Xmx задаются выше.";
+    in-out property <string> game-title: "Игра";
+    in-out property <string> game-fullscreen: "Полноэкранный режим";
+    in-out property <string> game-resolution: "Разрешение игры";
+    in-out property <string> interface-title: "Интерфейс";
+    in-out property <string> interface-sounds: "Звуки интерфейса";
+    in-out property <string> interface-hwid: "Отправлять реальный HWID";
+    in-out property <string> interface-hide: "Скрывать лаунчер при запуске игры";
+    in-out property <string> interface-background: "Фоновый эффект";
+    in-out property <string> interface-effects: "Фон: выкл / светлячки / листья / снег";
+    in-out property <string> appearance-title: "Оформление";
+    in-out property <string> appearance-desc: "Тема применяется сразу. Пользовательские темы берутся из папки themes рядом с state.json.";
+    in-out property <string> appearance-mode: "Режим оформления";
+    in-out property <string> appearance-accent-hint: "Material 3 использует цвет Windows; при недоступности — accent темы.";
+    in-out property <string> appearance-windows: "Тема Windows";
+    in-out property <string> appearance-manual: "Ручной accent для Material 3";
+    in-out property <string> appearance-follow: "Следовать светлой/тёмной теме Windows";
+    in-out property <string> appearance-light: "Светлая тема";
+    in-out property <string> appearance-dark: "Тёмная тема";
+    in-out property <string> appearance-builtin: "встроенная";
+    in-out property <string> appearance-custom: "своя";
+    in-out property <string> appearance-refresh: "Обновить темы";
+    in-out property <string> appearance-open: "Открыть папку тем";
+    in-out property <string> appearance-reset: "Сбросить тему";
+    in-out property <string> language-title: "Язык";
+    in-out property <string> language-hint: "Тексты темы имеют приоритет над переводом.";
+
+    in-out property <string> layout-title: "Layout";
+    in-out property <string> layout-desc: "Перетаскивайте блоки между зонами и на нужную строку; стрелки и переключатель видимости остаются как запасной вариант. Выбор сервера закреплён в шапке.";
+    in-out property <string> layout-zone-left: "Левый сайдбар";
+    in-out property <string> layout-zone-right: "Правый сайдбар";
+    in-out property <string> layout-zone-header: "Шапка";
+    in-out property <string> layout-zone-content-top: "Верх контента";
+    in-out property <string> layout-zone-content-bottom: "Низ контента";
+    in-out property <string> layout-zone-footer: "Подвал";
+    in-out property <string> layout-widths: "Ширина сайдбаров";
+    in-out property <string> layout-width-left: "Слева";
+    in-out property <string> layout-width-right: "Справа";
+    in-out property <string> layout-profiles: "Профили layout";
+    in-out property <string> layout-active: "Активный профиль";
+    in-out property <string> layout-name-placeholder: "Название профиля";
+    in-out property <string> layout-save-profile: "Сохранить профиль";
+    in-out property <string> layout-reset: "Сбросить layout";
+    in-out property <string> layout-server: "Выбор сервера";
+    in-out property <string> layout-user: "Карточка пользователя";
+    in-out property <string> layout-profiles-item: "Список профилей";
+    in-out property <string> layout-countdown: "Отсчёт «Недрочабрь»";
+    in-out property <string> layout-sidebar-actions: "Настройки / Выйти";
+    in-out property <string> layout-news: "Новости";
+    in-out property <string> layout-main-actions: "Играть / Обновить / Моды";
+    in-out property <string> layout-pinned: "закреплён";
+    in-out property <string> layout-hidden: "скрыт";
+    in-out property <string> layout-visible: "виден";
+    in-out property <string> layout-empty: "пусто";
+
+    in-out property <string> mods-title: "Моды";
+    in-out property <string> mods-count: "включено";
+    in-out property <string> mods-refresh: "Обновить";
+    in-out property <string> mods-desc: "Опциональные моды. Выключенные файлы хранятся с суффиксом .disabled.";
+    in-out property <string> mods-empty: "Для этого профиля нет опциональных модов.";
+}
+
+// Visibility helpers for the layout editor. Hidden flags are plain properties
+// so they can be read from pure bindings; Rust keeps the authoritative list in
+// state.json.
+export global LayoutState {
+    in-out property <bool> hidden-user: false;
+    in-out property <bool> hidden-profiles: false;
+    in-out property <bool> hidden-countdown: false;
+    in-out property <bool> hidden-sidebar-actions: false;
+    in-out property <bool> hidden-news: false;
+    in-out property <bool> hidden-main-actions: false;
+    in-out property <bool> hidden-server: false;
+
+    public pure function is-hidden(item: string) -> bool {
+        if item == "user" { return hidden-user; }
+        if item == "profiles" { return hidden-profiles; }
+        if item == "countdown" { return hidden-countdown; }
+        if item == "sidebar-actions" { return hidden-sidebar-actions; }
+        if item == "news" { return hidden-news; }
+        if item == "main-actions" { return hidden-main-actions; }
+        if item == "server" { return hidden-server; }
+        return false;
+    }
+
+    callback toggle-hidden(string, bool);
+}
+
+export global LayoutDrag {
+    in-out property <data-transfer> payload;
+    callback begin(string);
+    callback transfer-text(data-transfer) -> string;
 }
 
 // Optional theme icons. When a theme does not provide one, the launcher draws
@@ -106,6 +223,12 @@ export global ThemeIcons {
     in-out property <bool> has-error: false;
     in-out property <image> success;
     in-out property <bool> has-success: false;
+    in-out property <image> download;
+    in-out property <bool> has-download: false;
+    in-out property <image> folder;
+    in-out property <bool> has-folder: false;
+    in-out property <image> user;
+    in-out property <bool> has-user: false;
 }
 
 
@@ -132,13 +255,8 @@ export struct ModItem {
     name: string,
     description: string,
     enabled: bool,
-}
-
-export struct SelfTestItem {
-    name: string,
-    status: string,
-    message: string,
-    duration: string,
+    downloaded: bool,
+    downloading: bool,
 }
 
 export struct ThemeOption {
@@ -265,7 +383,6 @@ component ActionButton inherits Rectangle {
             : (primary
                 ? (Theme.mode == "liquid-glass" ? Theme.accent.with-alpha(0.86) : Theme.accent)
                 : (Theme.mode == "liquid-glass" ? Theme.glass-tint : Theme.surface));
-    animate background { duration: 130ms; easing: ease-out; }
 
     area := TouchArea {
         enabled: root.available;
@@ -357,7 +474,6 @@ component CaptionButton inherits Rectangle {
     background: area.has-hover
         ? (kind == "close" ? Theme.danger : Theme.surface-hover)
         : transparent;
-    animate background { duration: 120ms; easing: ease-out; }
 
     property <color> icon-color: area.has-hover
         ? (kind == "close" ? Theme.accent-text : Theme.text)
@@ -446,14 +562,17 @@ component CaptionButton inherits Rectangle {
 component ServerMenuItem inherits Rectangle {
     in property <string> label;
     in property <bool> active: false;
+    in property <bool> disabled: false;
+    in property <string> badge: "";
     callback clicked();
 
     height: 36px;
     border-radius: Theme.radius-sm;
-    background: active
-        ? Theme.accent.with-alpha(0.18)
-        : (area.has-hover ? Theme.surface-hover : transparent);
-    animate background { duration: 110ms; easing: ease-out; }
+    background: root.disabled
+        ? transparent
+        : active
+            ? Theme.accent.with-alpha(0.18)
+            : (area.has-hover ? Theme.surface-hover : transparent);
 
     Rectangle {
         width: 3px;
@@ -462,7 +581,7 @@ component ServerMenuItem inherits Rectangle {
         y: (parent.height - 18px) / 2;
         border-radius: Theme.radius-pill;
         background: Theme.accent;
-        visible: root.active;
+        visible: root.active && !root.disabled;
     }
 
     Text {
@@ -474,9 +593,24 @@ component ServerMenuItem inherits Rectangle {
         font-size: 14px;
         font-weight: root.active ? 700 : 500;
         vertical-alignment: center;
+        opacity: root.disabled ? 0.45 : 1;
+    }
+
+    if !root.badge.is-empty: Text {
+        x: parent.width - 58px;
+        width: 48px;
+        height: parent.height;
+        text: root.badge;
+        color: Theme.warning;
+        font-size: 11px;
+        font-weight: 700;
+        horizontal-alignment: end;
+        vertical-alignment: center;
+        opacity: root.disabled ? 0.7 : 1;
     }
 
     area := TouchArea {
+        enabled: !root.disabled;
         width: parent.width;
         height: parent.height;
         mouse-cursor: pointer;
@@ -510,21 +644,50 @@ component MiniButton inherits Rectangle {
 component LayoutRow inherits Rectangle {
     in property <string> item;
     in property <bool> pinned: false;
+    in property <bool> hidden: false;
     callback move(string, string);
+    callback drop(string, string);
 
     height: 34px;
+    property <bool> can-drag: true;
+
+    if !root.pinned: DragArea {
+        data: LayoutDrag.payload;
+        allow-move: true;
+
+        // DragArea has no drag-started callback; the press prepares the
+        // payload used by the next drag.
+        TouchArea {
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.down || event.kind == PointerEventKind.move {
+                    LayoutDrag.begin(root.item);
+                }
+            }
+        }
+    }
+
+    if !root.pinned: DropArea {
+        can-drop(event) => {
+            return LayoutDrag.transfer-text(event.data).is-empty ? DragAction.none : DragAction.move;
+        }
+        dropped(event) => {
+            root.drop(LayoutDrag.transfer-text(event.data), root.item);
+            return DragAction.move;
+        }
+    }
 
     Text {
         x: 8px;
-        width: parent.width - 130px;
+        width: parent.width - 204px;
         height: parent.height;
-        text: item == "server" ? "Выбор сервера"
-            : item == "user" ? "Карточка пользователя"
-            : item == "profiles" ? "Список профилей"
-            : item == "countdown" ? "Отсчёт «Недрочабрь»"
-            : item == "sidebar-actions" ? "Настройки / Выйти"
-            : item == "news" ? "Новости"
-            : item == "main-actions" ? "Играть / Обновить / Моды"
+        opacity: root.hidden ? 0.45 : 1;
+        text: item == "server" ? Texts.layout-server
+            : item == "user" ? Texts.layout-user
+            : item == "profiles" ? Texts.layout-profiles-item
+            : item == "countdown" ? Texts.layout-countdown
+            : item == "sidebar-actions" ? Texts.layout-sidebar-actions
+            : item == "news" ? Texts.layout-news
+            : item == "main-actions" ? Texts.layout-main-actions
             : item;
         color: Theme.text;
         font-size: 13px;
@@ -536,11 +699,35 @@ component LayoutRow inherits Rectangle {
         x: parent.width - 64px;
         width: 58px;
         height: parent.height;
-        text: root.pinned ? "закреплён" : "";
+        text: root.pinned ? Texts.layout-pinned : "";
         color: Theme.text-muted;
         font-size: 12px;
         horizontal-alignment: end;
         vertical-alignment: center;
+    }
+
+    if !root.pinned: Rectangle {
+        x: parent.width - 198px;
+        y: (parent.height - 24px) / 2;
+        width: 64px;
+        height: 24px;
+        border-radius: Theme.radius-sm;
+        background: visibility-area.has-hover ? Theme.surface-hover : transparent;
+
+        Text {
+            width: parent.width;
+            height: parent.height;
+            text: root.hidden ? Texts.layout-hidden : Texts.layout-visible;
+            color: root.hidden ? Theme.warning : Theme.text-muted;
+            font-size: 12px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        visibility-area := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { LayoutState.toggle-hidden(root.item, !root.hidden); }
+        }
     }
 
     if !root.pinned: HorizontalLayout {
@@ -556,10 +743,13 @@ component LayoutRow inherits Rectangle {
 
 component LayoutZone inherits Rectangle {
     in property <string> title;
+    in property <string> zone;
     in property <[string]> items;
     callback move(string, string);
+    callback drop(string, string, string);
 
     height: zone-layout.preferred-height + 20px;
+    property <bool> drop-hover: false;
     border-radius: Theme.radius-md;
     background: Theme.mode == "liquid-glass"
         ? @linear-gradient(160deg, Theme.glass-highlight 0%, Theme.glass-tint 30%, Theme.glass-tint 100%)
@@ -580,19 +770,33 @@ component LayoutZone inherits Rectangle {
         visible: Theme.mode == "liquid-glass";
     }
 
+    // Appends to the zone. Rows are drawn on top and handle insert-before drops.
+    DropArea {
+        enabled: true;
+        can-drop(event) => {
+            return LayoutDrag.transfer-text(event.data).is-empty ? DragAction.none : DragAction.move;
+        }
+        dropped(event) => {
+            root.drop(LayoutDrag.transfer-text(event.data), root.zone, "");
+            return DragAction.move;
+        }
+    }
+
     zone-layout := VerticalLayout {
         padding: 10px;
         spacing: 2px;
         Text { text: root.title; color: Theme.text; font-size: 14px; font-weight: 700; }
         if root.items.length == 0: Text {
-            text: "пусто";
+            text: Texts.layout-empty;
             color: Theme.text-muted;
             font-size: 13px;
         }
         for item in root.items: LayoutRow {
             item: item;
             pinned: item == "server";
+            hidden: LayoutState.is-hidden(item);
             move(i, direction) => { root.move(i, direction); }
+            drop(dragged, before) => { root.drop(dragged, root.zone, before); }
         }
     }
 }
@@ -672,7 +876,6 @@ component ProfileList inherits VerticalLayout {
                     : row-area.has-hover ? Theme.surface-hover : transparent;
                 border-width: 1px;
                 border-color: p.id == root.selected-index ? Theme.accent : transparent;
-                animate background { duration: 140ms; easing: ease-out; }
                 animate border-color { duration: 140ms; }
 
                 row-area := TouchArea {
@@ -983,7 +1186,6 @@ component Toggle inherits Rectangle {
         x: root.checked ? root.width - 23px : 3px;
         border-radius: Theme.radius-md;
         background: Theme.accent-text;
-        animate x { duration: 120ms; easing: ease-out; }
     }
 
     TouchArea {
@@ -1024,7 +1226,6 @@ export component AppWindow inherits Window {
     in-out property <bool> show-2fa: false;
     in-out property <string> twofa: "";
     in-out property <int> server-index: 0;
-    in-out property <bool> pl1-available: false;
     in-out property <string> server-label: "RU-2";
     in-out property <string> server-host-label: "";
     in-out property <string> background-effect: "none";
@@ -1032,14 +1233,29 @@ export component AppWindow inherits Window {
     in-out property <[ThemeOption]> themes: [];
     in-out property <string> set-theme: "dark";
     in-out property <string> set-theme-mode: "base";
+    in-out property <string> set-accent: "";
+    in-out property <string> set-language: "ru";
+    in-out property <float> set-glass-opacity: 0.55;
+    in-out property <float> set-glass-blur: 0.5;
+    in-out property <bool> follow-windows-theme: false;
+    in-out property <string> light-theme: "light";
+    in-out property <string> dark-theme: "dark";
     in-out property <[string]> layout-sidebar-left: [];
     in-out property <[string]> layout-sidebar-right: [];
     in-out property <[string]> layout-header: [];
     in-out property <[string]> layout-content-top: [];
     in-out property <[string]> layout-content-bottom: [];
     in-out property <[string]> layout-footer: [];
+    in-out property <[string]> layout-hidden: [];
+    in-out property <int> layout-sidebar-left-width: 316;
+    in-out property <int> layout-sidebar-right-width: 300;
+    in-out property <[string]> layout-profiles: [];
+    in-out property <string> layout-profile: "По умолчанию";
+    in-out property <string> layout-profile-name: "";
+    in-out property <bool> toast-visible: false;
+    in-out property <string> toast-title: "";
+    in-out property <string> toast-body: "";
     in-out property <bool> server-menu-open: false;
-    in-out property <bool> is-kydasay: false;
     in-out property <bool> startup-ready: false;
     in-out property <string> countdown-text: "";
     in-out property <string> main-status: "";
@@ -1088,14 +1304,6 @@ export component AppWindow inherits Window {
     in-out property <int> max-ram: 16384;
     in-out property <string> settings-status: "";
 
-    in-out property <string> mirror-key: "";
-    in-out property <string> mirror-mode: "";
-    in-out property <string> mirror-upstream: "";
-    in-out property <bool> mirror-can-control: false;
-    in-out property <bool> mirror-tor: false;
-    in-out property <bool> mirror-tor-available: false;
-    in-out property <[SelfTestItem]> selftest: [];
-    in-out property <string> selftest-summary: "";
 
     callback login-clicked();
     callback verify-clicked();
@@ -1109,24 +1317,34 @@ export component AppWindow inherits Window {
     callback mods-clicked();
     callback mods-refresh-clicked();
     callback mod-toggled(int, bool);
+    callback mod-download-clicked(int);
     callback server-clicked(int);
     callback profile-clicked(int);
     callback save-settings-clicked();
+    callback export-diagnostics-clicked();
     callback check-backend-clicked();
     callback adjust-xms(int);
     callback adjust-xmx(int);
-    callback mirror-save-key();
-    callback mirror-clear-key();
-    callback mirror-mode-clicked(string);
-    callback mirror-tor-toggled(bool);
-    callback selftest-clicked();
     callback theme-clicked(string);
     callback theme-mode-clicked(string);
     callback refresh-accent-clicked();
+    callback pick-accent-clicked();
+    callback accent-applied();
+    callback follow-windows-toggled(bool);
+    callback pair-theme-step(string, bool);
+    callback language-clicked(string);
+    callback glass-changed();
+    callback toast-close();
     callback themes-refresh-clicked();
     callback themes-open-folder-clicked();
     callback theme-reset-clicked();
     callback layout-move(string, string);
+    callback layout-drop(string, string, string);
+    callback layout-widths-changed(int, int);
+    callback layout-profile-save(string);
+    callback layout-profile-switch(string);
+    callback layout-profile-delete(string);
+    callback layout-profile-rename(string, string);
     callback layout-reset-clicked();
     callback maximize-clicked();
 
@@ -1138,7 +1356,6 @@ export component AppWindow inherits Window {
         y: 42px;
         height: root.height - 42px;
         opacity: root.screen-opacity;
-        animate opacity { duration: 180ms; easing: ease-out; }
         background: Theme.background;
 
         Image {
@@ -1223,12 +1440,12 @@ export component AppWindow inherits Window {
 
                         TextField {
                             text <=> root.login;
-                            placeholder: "Логин";
+                            placeholder: Texts.login-username;
                             accepted => { root.login-clicked(); }
                         }
                         TextField {
                             text <=> root.password;
-                            placeholder: "Пароль";
+                            placeholder: Texts.login-password;
                             password: true;
                             accepted => { root.login-clicked(); }
                         }
@@ -1241,7 +1458,7 @@ export component AppWindow inherits Window {
                                 toggled(v) => { root.set-send-hwid = v; root.hwid-toggled(v); }
                             }
                             Text {
-                                text: "Отправлять HWID";
+                                text: Texts.login-hwid;
                                 color: Theme.text-muted;
                                 font-size: 14px;
                                 vertical-alignment: center;
@@ -1253,11 +1470,11 @@ export component AppWindow inherits Window {
                             spacing: 8px;
                             TextField {
                                 text <=> root.twofa;
-                                placeholder: "Код двухфакторной аутентификации";
+                                placeholder: Texts.login-2fa;
                                 accepted => { root.verify-clicked(); }
                             }
                             ActionButton {
-                                label: root.busy ? "Проверка…" : "Подтвердить код";
+                                label: root.busy ? Texts.login-checking : Texts.login-2fa-submit;
                                 primary: true;
                                 available: !root.busy;
                                 clicked => { root.verify-clicked(); }
@@ -1275,7 +1492,7 @@ export component AppWindow inherits Window {
                         Rectangle { vertical-stretch: 1; }
 
                         ActionButton {
-                            label: root.busy ? "Подключение…" : Texts.login-submit;
+                            label: root.busy ? Texts.login-busy : Texts.login-submit;
                             primary: true;
                             available: !root.busy;
                             clicked => { root.login-clicked(); }
@@ -1306,7 +1523,6 @@ export component AppWindow inherits Window {
         y: 42px;
         height: root.height - 42px;
         opacity: root.screen-opacity;
-        animate opacity { duration: 180ms; easing: ease-out; }
         background: Theme.background;
 
         Image {
@@ -1338,7 +1554,7 @@ export component AppWindow inherits Window {
 
             // ---- sidebar ----
             Rectangle {
-                width: 316px;
+                width: root.layout-sidebar-left-width * 1px;
                 background: Theme.mode == "liquid-glass" ? Theme.glass-tint : (Theme.mode == "material3" ? Theme.surface-low : Theme.background-alt.with-alpha(0.95));
                 border-width: 0px;
 
@@ -1373,6 +1589,7 @@ export component AppWindow inherits Window {
                         spacing: 14px;
                         for item in root.layout-sidebar-left: ZoneItem {
                             item: item;
+                            visible: !LayoutState.is-hidden(item);
                             vertical-stretch: item == "profiles" ? 1 : 0;
                             profiles: root.profiles;
                             selected-index: root.selected-index;
@@ -1403,6 +1620,7 @@ export component AppWindow inherits Window {
 
                 for item in root.layout-header: ZoneItem {
                     item: item;
+                    visible: !LayoutState.is-hidden(item);
                     profiles: root.profiles;
                     selected-index: root.selected-index;
                     user-name: root.user-name;
@@ -1466,9 +1684,7 @@ export component AppWindow inherits Window {
                         border-radius: root.backend-mode-expanded ? Theme.radius-md : Theme.radius-sm;
                         background: root.backend-mode-color;
                         visible: root.backend-mode-visible;
-                        animate width { duration: 220ms; easing: ease-out; }
                         animate height { duration: 220ms; easing: ease-out; }
-                        animate border-radius { duration: 220ms; }
                         animate background { duration: 220ms; }
 
                         mode-text := Text {
@@ -1480,7 +1696,6 @@ export component AppWindow inherits Window {
                             vertical-alignment: center;
                             visible: root.backend-mode-expanded;
                             opacity: root.backend-mode-expanded ? 1 : 0;
-                            animate opacity { duration: 160ms; }
                         }
                     }
                 }
@@ -1508,6 +1723,7 @@ export component AppWindow inherits Window {
                     spacing: 12px;
                     for item in root.layout-content-top: ZoneItem {
                         item: item;
+                        visible: !LayoutState.is-hidden(item);
                         vertical-stretch: item == "news" ? 1 : 0;
                         profiles: root.profiles;
                         selected-index: root.selected-index;
@@ -1556,7 +1772,6 @@ export component AppWindow inherits Window {
                             height: 100%;
                             border-radius: Theme.radius-xs;
                             background: @linear-gradient(90deg, Theme.gradient-start 0%, Theme.accent-hover 100%);
-                            animate width { duration: 160ms; easing: ease-out; }
                         }
                     }
                     Text {
@@ -1585,6 +1800,7 @@ export component AppWindow inherits Window {
 
                 for item in root.layout-content-bottom: ZoneItem {
                     item: item;
+                    visible: !LayoutState.is-hidden(item);
                         profiles: root.profiles;
                         selected-index: root.selected-index;
                         user-name: root.user-name;
@@ -1604,6 +1820,7 @@ export component AppWindow inherits Window {
                 }
                 for item in root.layout-footer: ZoneItem {
                     item: item;
+                    visible: !LayoutState.is-hidden(item);
                         profiles: root.profiles;
                         selected-index: root.selected-index;
                         user-name: root.user-name;
@@ -1624,7 +1841,7 @@ export component AppWindow inherits Window {
             }
 
             if root.layout-sidebar-right.length > 0: Rectangle {
-                width: 300px;
+                width: root.layout-sidebar-right-width * 1px;
                 background: Theme.mode == "liquid-glass" ? Theme.glass-tint : (Theme.mode == "material3" ? Theme.surface-low : Theme.background-alt.with-alpha(0.95));
                 border-width: 0px;
 
@@ -1633,6 +1850,7 @@ export component AppWindow inherits Window {
                     spacing: 14px;
                     for item in root.layout-sidebar-right: ZoneItem {
                         item: item;
+                        visible: !LayoutState.is-hidden(item);
                         vertical-stretch: item == "profiles" ? 1 : 0;
                         profiles: root.profiles;
                         selected-index: root.selected-index;
@@ -1665,7 +1883,6 @@ export component AppWindow inherits Window {
         y: 42px;
         height: root.height - 42px;
         opacity: root.screen-opacity;
-        animate opacity { duration: 180ms; easing: ease-out; }
         background: Theme.background;
 
         if Theme.mode == "liquid-glass": GlassBackdrop {
@@ -1708,7 +1925,7 @@ export component AppWindow inherits Window {
 
                     // ---- column 1 ----
                     VerticalLayout {
-                        width: 50%;
+                        horizontal-stretch: 1;
                         spacing: 16px;
 
                         Rectangle {
@@ -1736,9 +1953,9 @@ export component AppWindow inherits Window {
                             ram-layout := VerticalLayout {
                                 padding: 20px;
                                 spacing: 10px;
-                                Text { text: "Память"; color: Theme.text; font-size: 17px; font-weight: 700; }
+                                Text { text: Texts.memory-title; color: Theme.text; font-size: 17px; font-weight: 700; }
                                 Text {
-                                    text: "Сколько оперативной памяти выделять игре. Всего в системе: " + root.max-ram + " МБ.";
+                                    text: Texts.memory-desc + root.max-ram + " MB";
                                     color: Theme.text-muted;
                                     font-size: 14px;
                                     wrap: word-wrap;
@@ -1746,7 +1963,7 @@ export component AppWindow inherits Window {
 
                                 HorizontalLayout {
                                     spacing: 10px;
-                                    Text { text: "Минимум (Xms)"; color: Theme.text-muted; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Text { text: Texts.memory-xms; color: Theme.text-muted; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
                                     ActionButton { label: "−"; width: 40px; clicked => { root.adjust-xms(-512); } }
                                     Text {
                                         text: root.set-xms + " МБ";
@@ -1762,7 +1979,7 @@ export component AppWindow inherits Window {
 
                                 HorizontalLayout {
                                     spacing: 10px;
-                                    Text { text: "Максимум (Xmx)"; color: Theme.text-muted; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Text { text: Texts.memory-xmx; color: Theme.text-muted; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
                                     ActionButton { label: "−"; width: 40px; clicked => { root.adjust-xmx(-1024); } }
                                     Text {
                                         text: root.set-xmx + " МБ";
@@ -1803,9 +2020,9 @@ export component AppWindow inherits Window {
                             jvm-layout := VerticalLayout {
                                 padding: 20px;
                                 spacing: 10px;
-                                Text { text: "Дополнительные аргументы JVM"; color: Theme.text; font-size: 17px; font-weight: 700; }
+                                Text { text: Texts.jvm-title; color: Theme.text; font-size: 17px; font-weight: 700; }
                                 Text {
-                                    text: "Флаги добавляются перед classpath. Флаги -Xms/-Xmx здесь игнорируются.";
+                                    text: Texts.jvm-desc;
                                     color: Theme.text-muted;
                                     font-size: 14px;
                                     wrap: word-wrap;
@@ -1820,7 +2037,7 @@ export component AppWindow inherits Window {
 
                     // ---- column 2 ----
                     VerticalLayout {
-                        width: 50%;
+                        horizontal-stretch: 1;
                         spacing: 16px;
 
                         Rectangle {
@@ -1848,11 +2065,11 @@ export component AppWindow inherits Window {
                             window-layout := VerticalLayout {
                                 padding: 20px;
                                 spacing: 10px;
-                                Text { text: "Окно игры"; color: Theme.text; font-size: 17px; font-weight: 700; }
+                                Text { text: Texts.game-title; color: Theme.text; font-size: 17px; font-weight: 700; }
 
                                 HorizontalLayout {
                                     spacing: 10px;
-                                    Text { text: "Полноэкранный режим"; color: Theme.text-muted; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Text { text: Texts.game-fullscreen; color: Theme.text-muted; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
                                     Toggle {
                                         checked: root.set-fullscreen;
                                         toggled(v) => { root.set-fullscreen = v; }
@@ -1869,7 +2086,7 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     spacing: 10px;
                                     Text {
-                                        text: "Скрывать лаунчер при запуске игры";
+                                        text: Texts.interface-hide;
                                         color: Theme.text-muted;
                                         font-size: 14px;
                                         vertical-alignment: center;
@@ -1916,7 +2133,7 @@ export component AppWindow inherits Window {
                                     placeholder: "%APPDATA%\\Vestalis";
                                 }
 
-                                Text { text: "Фон лаунчера"; color: Theme.text-muted; font-size: 14px; }
+                                Text { text: Texts.interface-background; color: Theme.text-muted; font-size: 14px; }
                                 HorizontalLayout {
                                     spacing: 8px;
                                     ActionButton {
@@ -1951,7 +2168,7 @@ export component AppWindow inherits Window {
 
                                 HorizontalLayout {
                                     spacing: 10px;
-                                    Text { text: "Отправлять реальный HWID"; color: Theme.text-muted; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Text { text: Texts.interface-hwid; color: Theme.text-muted; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
                                     Toggle {
                                         checked: root.set-send-hwid;
                                         toggled(v) => { root.set-send-hwid = v; }
@@ -1959,7 +2176,7 @@ export component AppWindow inherits Window {
                                 }
                                 HorizontalLayout {
                                     spacing: 10px;
-                                    Text { text: "Звуки интерфейса"; color: Theme.text-muted; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Text { text: Texts.interface-sounds; color: Theme.text-muted; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
                                     Toggle {
                                         checked: root.set-sounds;
                                         toggled(v) => { root.set-sounds = v; }
@@ -1993,15 +2210,15 @@ export component AppWindow inherits Window {
                             theme-layout := VerticalLayout {
                                 padding: 20px;
                                 spacing: 10px;
-                                Text { text: "Оформление"; color: Theme.text; font-size: 17px; font-weight: 700; }
+                                Text { text: Texts.appearance-title; color: Theme.text; font-size: 17px; font-weight: 700; }
                                 Text {
-                                    text: "Тема применяется сразу. Пользовательские темы берутся из папки themes рядом с state.json.";
+                                    text: Texts.appearance-desc;
                                     color: Theme.text-muted;
                                     font-size: 14px;
                                     wrap: word-wrap;
                                 }
 
-                                Text { text: "Режим оформления"; color: Theme.text-muted; font-size: 14px; }
+                                Text { text: Texts.appearance-mode; color: Theme.text-muted; font-size: 14px; }
                                 HorizontalLayout {
                                     spacing: 8px;
                                     ActionButton {
@@ -2030,7 +2247,7 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     spacing: 8px;
                                     Text {
-                                        text: "Material 3 использует цвет Windows; при недоступности — accent темы.";
+                                        text: Texts.appearance-accent-hint;
                                         color: Theme.text-muted;
                                         font-size: 13px;
                                         vertical-alignment: center;
@@ -2038,10 +2255,70 @@ export component AppWindow inherits Window {
                                         wrap: word-wrap;
                                     }
                                     ActionButton {
-                                        label: "Тема Windows";
+                                        label: Texts.appearance-windows;
                                         width: 190px;
                                         height: 36px;
                                         clicked => { root.refresh-accent-clicked(); }
+                                    }
+                                }
+
+                                Text { text: Texts.appearance-manual; color: Theme.text-muted; font-size: 14px; }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    TextField {
+                                        text <=> root.set-accent;
+                                        placeholder: "#RRGGBB";
+                                        width: 180px;
+                                        height: 40px;
+                                        accepted => { root.accent-applied(); }
+                                    }
+                                    ActionButton {
+                                        label: Texts.apply;
+                                        width: 120px;
+                                        height: 40px;
+                                        clicked => { root.accent-applied(); }
+                                    }
+                                    ActionButton {
+                                        label: Texts.pick;
+                                        width: 120px;
+                                        height: 40px;
+                                        clicked => { root.pick-accent-clicked(); }
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Toggle {
+                                        checked: root.follow-windows-theme;
+                                        toggled(v) => {
+                                            root.follow-windows-theme = v;
+                                            root.follow-windows-toggled(v);
+                                        }
+                                    }
+                                    Text {
+                                        text: Texts.appearance-follow;
+                                        color: Theme.text;
+                                        font-size: 14px;
+                                        vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                    }
+                                }
+
+                                if root.follow-windows-theme: VerticalLayout {
+                                    spacing: 6px;
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Text { text: Texts.appearance-light; color: Theme.text-muted; font-size: 14px; width: 110px; vertical-alignment: center; }
+                                        ActionButton { label: "‹"; width: 40px; height: 34px; clicked => { root.pair-theme-step("light", false); } }
+                                        Text { text: root.light-theme; color: Theme.text; font-size: 14px; width: 140px; vertical-alignment: center; horizontal-alignment: center; }
+                                        ActionButton { label: "›"; width: 40px; height: 34px; clicked => { root.pair-theme-step("light", true); } }
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Text { text: Texts.appearance-dark; color: Theme.text-muted; font-size: 14px; width: 110px; vertical-alignment: center; }
+                                        ActionButton { label: "‹"; width: 40px; height: 34px; clicked => { root.pair-theme-step("dark", false); } }
+                                        Text { text: root.dark-theme; color: Theme.text; font-size: 14px; width: 140px; vertical-alignment: center; horizontal-alignment: center; }
+                                        ActionButton { label: "›"; width: 40px; height: 34px; clicked => { root.pair-theme-step("dark", true); } }
                                     }
                                 }
 
@@ -2094,7 +2371,7 @@ export component AppWindow inherits Window {
                                             horizontal-stretch: 1;
                                         }
                                         Text {
-                                            text: t.builtin ? "встроенная" : "своя";
+                                            text: t.builtin ? Texts.appearance-builtin : Texts.appearance-custom;
                                             color: Theme.text-muted;
                                             font-size: 13px;
                                             vertical-alignment: center;
@@ -2109,22 +2386,83 @@ export component AppWindow inherits Window {
                                     }
                                 }
 
+                                Text { text: "Liquid Glass: прозрачность и имитация размытия"; color: Theme.text; font-size: 14px; font-weight: 600; }
+                                Text {
+                                    text: "В Slint 1.18 нет настоящего backdrop-blur: глубина имитируется слоями и градиентными бликами.";
+                                    color: Theme.text-muted;
+                                    font-size: 13px;
+                                    wrap: word-wrap;
+                                }
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Text { text: "Прозрачность"; color: Theme.text-muted; font-size: 14px; width: 120px; vertical-alignment: center; }
+                                    Slider {
+                                        minimum: 0.25;
+                                        maximum: 0.9;
+                                        value <=> root.set-glass-opacity;
+                                        changed(v) => { root.set-glass-opacity = v; root.glass-changed(); }
+                                        horizontal-stretch: 1;
+                                    }
+                                    Text { text: "\{Math.round(root.set-glass-opacity * 100)}%"; color: Theme.text; font-size: 14px; width: 60px; horizontal-alignment: end; vertical-alignment: center; }
+                                }
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Text { text: "Сила имитации"; color: Theme.text-muted; font-size: 14px; width: 120px; vertical-alignment: center; }
+                                    Slider {
+                                        minimum: 0.0;
+                                        maximum: 1.0;
+                                        value <=> root.set-glass-blur;
+                                        changed(v) => { root.set-glass-blur = v; root.glass-changed(); }
+                                        horizontal-stretch: 1;
+                                    }
+                                    Text { text: "\{Math.round(root.set-glass-blur * 100)}%"; color: Theme.text; font-size: 14px; width: 60px; horizontal-alignment: end; vertical-alignment: center; }
+                                }
+
+                                Text { text: Texts.language-title; color: Theme.text; font-size: 14px; font-weight: 600; }
+                                Text { text: Texts.language-hint; color: Theme.text-muted; font-size: 13px; wrap: word-wrap; }
                                 HorizontalLayout {
                                     spacing: 8px;
                                     ActionButton {
-                                        label: "Обновить темы";
+                                        label: "Русский";
+                                        primary: root.set-language == "ru";
+                                        width: 120px;
+                                        height: 34px;
+                                        clicked => { root.set-language = "ru"; root.language-clicked("ru"); }
+                                    }
+                                    ActionButton {
+                                        label: "English";
+                                        primary: root.set-language == "en";
+                                        width: 120px;
+                                        height: 34px;
+                                        clicked => { root.set-language = "en"; root.language-clicked("en"); }
+                                    }
+                                    ActionButton {
+                                        label: "Українська";
+                                        primary: root.set-language == "ua";
+                                        width: 130px;
+                                        height: 34px;
+                                        clicked => { root.set-language = "ua"; root.language-clicked("ua"); }
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    ActionButton {
+                                        label: Texts.appearance-refresh;
                                         width: 150px;
                                         height: 38px;
                                         clicked => { root.themes-refresh-clicked(); }
                                     }
                                     ActionButton {
-                                        label: "Открыть папку тем";
+                                        label: Texts.appearance-open;
                                         width: 175px;
                                         height: 38px;
+                                        icon: ThemeIcons.folder;
+                                        has-icon: ThemeIcons.has-folder;
                                         clicked => { root.themes-open-folder-clicked(); }
                                     }
                                     ActionButton {
-                                        label: "Сбросить тему";
+                                        label: Texts.appearance-reset;
                                         width: 150px;
                                         height: 38px;
                                         clicked => {
@@ -2161,45 +2499,122 @@ export component AppWindow inherits Window {
                             layout-card := VerticalLayout {
                                 padding: 20px;
                                 spacing: 8px;
-                                Text { text: "Layout"; color: Theme.text; font-size: 17px; font-weight: 700; }
+                                Text { text: Texts.layout-title; color: Theme.text; font-size: 17px; font-weight: 700; }
                                 Text {
-                                    text: "Зоны главного экрана. Стрелки перемещают блок внутри зоны и между зонами; выбор сервера закреплён в шапке.";
+                                    text: Texts.layout-desc;
                                     color: Theme.text-muted;
                                     font-size: 14px;
                                     wrap: word-wrap;
                                 }
                                 LayoutZone {
-                                    title: "Левый сайдбар";
+                                    title: Texts.layout-zone-left;
+                                    zone: "sidebar-left";
                                     items: root.layout-sidebar-left;
                                     move(i, direction) => { root.layout-move(i, direction); }
+                                    drop(item, zone, before) => { root.layout-drop(item, zone, before); }
                                 }
                                 LayoutZone {
-                                    title: "Правый сайдбар";
+                                    title: Texts.layout-zone-right;
+                                    zone: "sidebar-right";
                                     items: root.layout-sidebar-right;
                                     move(i, direction) => { root.layout-move(i, direction); }
+                                    drop(item, zone, before) => { root.layout-drop(item, zone, before); }
                                 }
                                 LayoutZone {
-                                    title: "Шапка";
+                                    title: Texts.layout-zone-header;
+                                    zone: "header";
                                     items: root.layout-header;
                                     move(i, direction) => { root.layout-move(i, direction); }
+                                    drop(item, zone, before) => { root.layout-drop(item, zone, before); }
                                 }
                                 LayoutZone {
-                                    title: "Верх контента";
+                                    title: Texts.layout-zone-content-top;
+                                    zone: "content-top";
                                     items: root.layout-content-top;
                                     move(i, direction) => { root.layout-move(i, direction); }
+                                    drop(item, zone, before) => { root.layout-drop(item, zone, before); }
                                 }
                                 LayoutZone {
-                                    title: "Низ контента";
+                                    title: Texts.layout-zone-content-bottom;
+                                    zone: "content-bottom";
                                     items: root.layout-content-bottom;
                                     move(i, direction) => { root.layout-move(i, direction); }
+                                    drop(item, zone, before) => { root.layout-drop(item, zone, before); }
                                 }
                                 LayoutZone {
-                                    title: "Подвал";
+                                    title: Texts.layout-zone-footer;
+                                    zone: "footer";
                                     items: root.layout-footer;
                                     move(i, direction) => { root.layout-move(i, direction); }
+                                    drop(item, zone, before) => { root.layout-drop(item, zone, before); }
                                 }
+
+                                Text { text: Texts.layout-widths; color: Theme.text; font-size: 14px; font-weight: 600; }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    Text { text: Texts.layout-width-left + ": \{root.layout-sidebar-left-width} px"; color: Theme.text-muted; font-size: 14px; width: 130px; vertical-alignment: center; }
+                                    MiniButton { label: "−"; clicked => { root.layout-widths-changed(root.layout-sidebar-left-width - 20, root.layout-sidebar-right-width); } }
+                                    MiniButton { label: "+"; clicked => { root.layout-widths-changed(root.layout-sidebar-left-width + 20, root.layout-sidebar-right-width); } }
+                                    Text { text: Texts.layout-width-right + ": \{root.layout-sidebar-right-width} px"; color: Theme.text-muted; font-size: 14px; width: 140px; vertical-alignment: center; }
+                                    MiniButton { label: "−"; clicked => { root.layout-widths-changed(root.layout-sidebar-left-width, root.layout-sidebar-right-width - 20); } }
+                                    MiniButton { label: "+"; clicked => { root.layout-widths-changed(root.layout-sidebar-left-width, root.layout-sidebar-right-width + 20); } }
+                                }
+
+                                Text { text: Texts.layout-profiles; color: Theme.text; font-size: 14px; font-weight: 600; }
+                                Text {
+                                    text: Texts.layout-active + ": \{root.layout-profile}";
+                                    color: Theme.text-muted;
+                                    font-size: 13px;
+                                }
+                                for profile in root.layout-profiles: HorizontalLayout {
+                                    spacing: 8px;
+                                    Text {
+                                        text: profile;
+                                        color: profile == root.layout-profile ? Theme.text : Theme.text-muted;
+                                        font-weight: profile == root.layout-profile ? 700 : 500;
+                                        font-size: 14px;
+                                        width: 160px;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+                                    ActionButton {
+                                        label: Texts.load;
+                                        width: 110px;
+                                        height: 32px;
+                                        available: profile != root.layout-profile;
+                                        clicked => { root.layout-profile-switch(profile); }
+                                    }
+                                    ActionButton {
+                                        label: Texts.delete;
+                                        width: 100px;
+                                        height: 32px;
+                                        clicked => { root.layout-profile-delete(profile); }
+                                    }
+                                }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    TextField {
+                                        text <=> root.layout-profile-name;
+                                        placeholder: Texts.layout-name-placeholder;
+                                        width: 230px;
+                                        height: 38px;
+                                    }
+                                    ActionButton {
+                                        label: Texts.layout-save-profile;
+                                        width: 180px;
+                                        height: 38px;
+                                        clicked => { root.layout-profile-save(root.layout-profile-name); }
+                                    }
+                                    ActionButton {
+                                        label: Texts.rename;
+                                        width: 160px;
+                                        height: 38px;
+                                        clicked => { root.layout-profile-rename(root.layout-profile, root.layout-profile-name); }
+                                    }
+                                }
+
                                 ActionButton {
-                                    label: "Сбросить layout";
+                                    label: Texts.layout-reset;
                                     width: 190px;
                                     height: 38px;
                                     clicked => { root.layout-reset-clicked(); }
@@ -2207,168 +2622,6 @@ export component AppWindow inherits Window {
                             }
                         }
 
-                        Rectangle {
-                            visible: root.server-index == 3 && root.is-kydasay;
-                            border-radius: Theme.radius-lg;
-                            background: Theme.mode == "liquid-glass"
-                                ? @linear-gradient(160deg, Theme.glass-highlight 0%, Theme.glass-tint 30%, Theme.glass-tint 100%)
-                                : (Theme.mode == "material3" ? Theme.surface : Theme.surface.with-alpha(Theme.card-opacity));
-                            border-width: 1px;
-                            border-color: Theme.mode == "liquid-glass" ? Theme.glass-border : (Theme.mode == "material3" ? Theme.outline : Theme.border);
-                            drop-shadow-blur: Theme.mode == "material3" ? 16px : (Theme.mode == "liquid-glass" ? 28px : 0px);
-                            drop-shadow-offset-y: Theme.mode == "material3" ? 4px : (Theme.mode == "liquid-glass" ? 10px : 0px);
-                            drop-shadow-color: Theme.shadow;
-                            
-                            Rectangle {
-                                x: 12px;
-                                y: 0;
-                                width: parent.width - 24px;
-                                height: 1px;
-                                border-radius: Theme.radius-pill;
-                                background: Theme.glass-highlight;
-                                visible: Theme.mode == "liquid-glass";
-                            }
-                            height: mirror-layout.preferred-height + 40px;
-
-                            mirror-layout := VerticalLayout {
-                                padding: 20px;
-                                spacing: 10px;
-                                Text { text: "Сервисный доступ · PL-1"; color: Theme.text; font-size: 17px; font-weight: 700; }
-                                Text {
-                                    text: "Ключ хранится локально и не входит в сборку. С ним доступны переключение режима, Tor и самодиагностика.";
-                                    color: Theme.text-muted;
-                                    font-size: 14px;
-                                    wrap: word-wrap;
-                                }
-
-                                TextField {
-                                    text <=> root.mirror-key;
-                                    placeholder: "X-Mirror-Control-Key";
-                                    password: true;
-                                }
-                                HorizontalLayout {
-                                    spacing: 8px;
-                                    ActionButton {
-                                        label: "Сохранить ключ";
-                                        width: 150px;
-                                        clicked => { root.mirror-save-key(); }
-                                    }
-                                    ActionButton {
-                                        label: "Удалить";
-                                        width: 100px;
-                                        clicked => { root.mirror-clear-key(); }
-                                    }
-                                }
-
-                                Text {
-                                    text: "Режим: " + (root.mirror-mode.is-empty ? "неизвестен" : root.mirror-mode)
-                                        + (root.mirror-upstream.is-empty ? "" : " · upstream: " + root.mirror-upstream);
-                                    color: Theme.text-muted;
-                                    font-size: 14px;
-                                    wrap: word-wrap;
-                                }
-
-                                if root.mirror-can-control: VerticalLayout {
-                                    spacing: 8px;
-                                    HorizontalLayout {
-                                        spacing: 8px;
-                                        ActionButton {
-                                            label: "Зеркало";
-                                            width: 110px;
-                                            primary: root.mirror-mode == "local";
-                                            clicked => { root.mirror-mode-clicked("local"); }
-                                        }
-                                        ActionButton {
-                                            label: "Прокси";
-                                            width: 110px;
-                                            primary: root.mirror-mode == "proxy";
-                                            clicked => { root.mirror-mode-clicked("proxy"); }
-                                        }
-                                    }
-                                    HorizontalLayout {
-                                        spacing: 10px;
-                                        Text {
-                                            text: "Запросы к основному бэкенду через Tor";
-                                            color: Theme.text-muted;
-                                            font-size: 14px;
-                                            vertical-alignment: center;
-                                            horizontal-stretch: 1;
-                                            visible: root.mirror-tor-available;
-                                        }
-                                        Toggle {
-                                            checked: root.mirror-tor;
-                                            visible: root.mirror-tor-available;
-                                            toggled(v) => { root.mirror-tor-toggled(v); }
-                                        }
-                                    }
-                                    ActionButton {
-                                        label: "Самодиагностика";
-                                        width: 170px;
-                                        clicked => { root.selftest-clicked(); }
-                                    }
-                                }
-
-                                if !root.selftest-summary.is-empty: Text {
-                                    text: root.selftest-summary;
-                                    color: Theme.accent-hover;
-                                    font-size: 14px;
-                                    wrap: word-wrap;
-                                }
-
-                                for row in root.selftest: Rectangle {
-                                    height: row-layout.preferred-height + 16px;
-                                    border-radius: Theme.radius-sm;
-                                    background: Theme.background-alt;
-                                    border-width: 1px;
-                                    border-color: row.status == "ok" ? Theme.success.with-alpha(0.25)
-                                        : row.status == "warn" ? Theme.warning.with-alpha(0.25) : Theme.danger.with-alpha(0.25);
-                                    row-layout := HorizontalLayout {
-                                        padding: 8px;
-                                        spacing: 8px;
-                                        Image {
-                                            width: 14px;
-                                            height: 14px;
-                                            source: row.status == "ok"
-                                                ? ThemeIcons.success
-                                                : row.status == "warn" ? ThemeIcons.warning : ThemeIcons.error;
-                                            visible: row.status == "ok"
-                                                ? ThemeIcons.has-success
-                                                : row.status == "warn" ? ThemeIcons.has-warning : ThemeIcons.has-error;
-                                            image-fit: contain;
-                                        }
-                                        Text {
-                                            text: row.status == "ok" ? "ОК" : row.status == "warn" ? "ВНИМАНИЕ" : "ОШИБКА";
-                                            color: row.status == "ok" ? Theme.success : row.status == "warn" ? Theme.warning : Theme.danger;
-                                            font-size: 14px;
-                                            font-weight: 700;
-                                            width: 70px;
-                                            vertical-alignment: center;
-                                        }
-                                        Text {
-                                            text: row.name;
-                                            color: Theme.text;
-                                            font-size: 14px;
-                                            font-weight: 600;
-                                            width: 140px;
-                                            vertical-alignment: center;
-                                        }
-                                        Text {
-                                            text: row.message;
-                                            color: Theme.text-muted;
-                                            font-size: 14px;
-                                            horizontal-stretch: 1;
-                                            wrap: word-wrap;
-                                        }
-                                        Text {
-                                            text: row.duration;
-                                            color: Theme.text-muted;
-                                            font-size: 14px;
-                                            vertical-alignment: center;
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -2381,6 +2634,12 @@ export component AppWindow inherits Window {
                     width: 240px;
                     height: 48px;
                     clicked => { root.save-settings-clicked(); }
+                }
+                ActionButton {
+                    label: "Экспорт диагностики";
+                    width: 220px;
+                    height: 48px;
+                    clicked => { root.export-diagnostics-clicked(); }
                 }
                 Rectangle { horizontal-stretch: 1; }
                 Text {
@@ -2401,7 +2660,6 @@ export component AppWindow inherits Window {
         y: 42px;
         height: root.height - 42px;
         opacity: root.screen-opacity;
-        animate opacity { duration: 180ms; easing: ease-out; }
         background: Theme.background;
 
         VerticalLayout {
@@ -2416,35 +2674,35 @@ export component AppWindow inherits Window {
                     clicked => { root.back-clicked(); }
                 }
                 Text {
-                    text: "Моды";
+                    text: Texts.mods-title;
                     color: Theme.text;
                     font-size: 26px;
                     font-weight: 700;
                     vertical-alignment: center;
                 }
                 Text {
-                    text: root.mods-enabled + " из " + root.mods-total + " включено";
+                    text: root.mods-enabled + " / " + root.mods-total + " " + Texts.mods-count;
                     color: Theme.text-muted;
                     font-size: 14px;
                     vertical-alignment: center;
                 }
                 Rectangle { horizontal-stretch: 1; }
                 ActionButton {
-                    label: "Обновить";
+                    label: Texts.mods-refresh;
                     width: 130px;
                     clicked => { root.mods-refresh-clicked(); }
                 }
             }
 
             Text {
-                text: "Опциональные моды. Выключенные файлы хранятся с суффиксом .disabled.";
+                text: Texts.mods-desc;
                 color: Theme.text-muted;
                 font-size: 14px;
                 wrap: word-wrap;
             }
 
             if root.mods-total == 0: Text {
-                text: "Для этого профиля нет опциональных модов.";
+                text: Texts.mods-empty;
                 color: Theme.text-muted;
                 font-size: 14px;
             }
@@ -2483,13 +2741,81 @@ export component AppWindow inherits Window {
                                 }
                             }
 
-                            Toggle {
+                            if m.downloaded: Toggle {
                                 checked: m.enabled;
                                 toggled(v) => { root.mod-toggled(m.id, v); }
+                            }
+
+                            if !m.downloaded: ActionButton {
+                                label: m.downloading ? Texts.downloading : Texts.download;
+                                width: 130px;
+                                height: 36px;
+                                primary: true;
+                                icon: ThemeIcons.download;
+                                has-icon: ThemeIcons.has-download;
+                                available: !m.downloading;
+                                clicked => { root.mod-download-clicked(m.id); }
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // In-app toast for news and profile updates. No external notification
+    // service and no network round-trip.
+    if root.toast-visible: Rectangle {
+        x: parent.width - 380px;
+        y: 64px;
+        width: 360px;
+        height: toast-layout.preferred-height + 28px;
+        border-radius: Theme.radius-lg;
+        background: Theme.mode == "liquid-glass" ? Theme.glass-tint : Theme.surface;
+        border-width: 1px;
+        border-color: Theme.accent.with-alpha(0.45);
+        drop-shadow-blur: 24px;
+        drop-shadow-offset-y: 8px;
+        drop-shadow-color: Theme.shadow;
+        animate y { duration: 180ms; easing: ease-out; }
+
+        toast-layout := VerticalLayout {
+            padding: 14px;
+            spacing: 6px;
+            HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: root.toast-title;
+                    color: Theme.text;
+                    font-size: 15px;
+                    font-weight: 700;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
+                }
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: Theme.radius-sm;
+                    background: toast-close-area.has-hover ? Theme.surface-hover : transparent;
+                    Text {
+                        text: "×";
+                        color: Theme.text-muted;
+                        font-size: 16px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    toast-close-area := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.toast-visible = false; root.toast-close(); }
+                    }
+                }
+            }
+            Text {
+                text: root.toast-body;
+                color: Theme.text-muted;
+                font-size: 13px;
+                wrap: word-wrap;
+                visible: !root.toast-body.is-empty;
             }
         }
     }
@@ -2600,7 +2926,6 @@ export component AppWindow inherits Window {
                     : Theme.surface.with-alpha(0.85);
                 border-width: 1px;
                 border-color: root.server-menu-open ? Theme.accent : Theme.border;
-                animate background { duration: 130ms; }
                 animate border-color { duration: 130ms; }
 
                 if ThemeIcons.has-server: Image {
@@ -2677,7 +3002,6 @@ export component AppWindow inherits Window {
                     stroke-width: 1.5px;
                     fill: transparent;
                     transform-rotation: root.server-menu-open ? 180deg : 0deg;
-                    animate transform-rotation { duration: 150ms; easing: ease-out; }
                 }
 
                 TouchArea {
@@ -2722,7 +3046,7 @@ export component AppWindow inherits Window {
         x: root.width - 276px;
         y: 46px;
         width: 172px;
-        height: root.pl1-available ? 160px : 124px;
+        height: 160px;
         border-radius: Theme.radius-lg;
         background: Theme.mode == "liquid-glass" ? Theme.glass-tint : Theme.surface.with-alpha(0.97);
         border-width: 1px;
@@ -2759,10 +3083,10 @@ export component AppWindow inherits Window {
                 active: root.server-index == 2;
                 clicked => { root.server-menu-open = false; root.server-clicked(2); }
             }
-            if root.pl1-available: ServerMenuItem {
+            ServerMenuItem {
                 label: "PL-1";
-                active: root.server-index == 3;
-                clicked => { root.server-menu-open = false; root.server-clicked(3); }
+                disabled: true;
+                badge: "W.I.P";
             }
         }
     }
