@@ -1350,6 +1350,9 @@ fn apply_event(ui: &AppWindow, event: Event) {
         Event::Error(message) => {
             if !message.is_empty() {
                 error!(%message, "worker error");
+                // Errors raised while Settings is open (maintenance actions,
+                // file checks) must be visible there too.
+                ui.set_settings_status(message.clone().into());
             }
             ui.set_error_text(message.into());
         }
