@@ -16,6 +16,54 @@ pub fn cache_path() -> PathBuf {
     local_app_dir().join("validation-cache-rust.json")
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct WindowGeometry {
+    pub width: u32,
+    pub height: u32,
+    pub x: i32,
+    pub y: i32,
+}
+
+impl Default for WindowGeometry {
+    fn default() -> Self {
+        Self {
+            width: 1180,
+            height: 640,
+            x: -1,
+            y: -1,
+        }
+    }
+}
+
+pub fn window_geometry_path() -> PathBuf {
+    crate::model::app_dir()
+        .join("rust-launcher")
+        .join("window.json")
+}
+
+pub fn load_window_geometry() -> WindowGeometry {
+    fs::read_to_string(window_geometry_path())
+        .ok()
+        .and_then(|text| serde_json::from_str(text.trim_start_matches('\u{feff}')).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_window_geometry(geometry: WindowGeometry) {
+    let path = window_geometry_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    if let Ok(json) = serde_json::to_string_pretty(&geometry) {
+        let temporary = path.with_extension("json.tmp");
+        if fs::write(&temporary, json).is_ok() {
+            let _ = fs::remove_file(&path);
+            let _ = fs::rename(temporary, path);
+        }
+    }
+}
+
 pub fn load_state() -> Persisted {
     let path = state_path();
     let backup = path.with_extension("json.bak");

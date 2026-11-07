@@ -83,6 +83,8 @@ pub struct Settings {
     pub glass_opacity: f32,
     /// Strength of the layered glass imitation (specular/shadow depth).
     pub glass_blur: f32,
+    /// Discord Rich Presence enabled.
+    pub discord_rpc: bool,
     /// Follow the Windows light/dark app mode instead of a fixed theme.
     pub follow_windows_theme: bool,
     /// Theme applied when Windows is in light mode.
@@ -117,6 +119,7 @@ impl Default for Settings {
             accent: String::new(),
             glass_opacity: 0.55,
             glass_blur: 0.5,
+            discord_rpc: true,
             follow_windows_theme: false,
             light_theme: "light".to_string(),
             dark_theme: "dark".to_string(),

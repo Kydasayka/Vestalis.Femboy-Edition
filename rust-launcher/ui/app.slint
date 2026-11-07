@@ -1355,6 +1355,7 @@ export component AppWindow inherits Window {
     in-out property <bool> set-send-hwid: true;
     in-out property <bool> set-sounds: true;
     in-out property <bool> set-hide-on-launch: true;
+    in-out property <bool> set-discord-rpc: true;
     in-out property <int> max-ram: 16384;
     in-out property <string> settings-status: "";
 
@@ -1388,9 +1389,15 @@ export component AppWindow inherits Window {
     callback pair-theme-step(string, bool);
     callback language-clicked(string);
     callback glass-changed();
+    callback save-window-geometry();
     callback toast-close();
     callback themes-refresh-clicked();
     callback themes-open-folder-clicked();
+    callback open-install-clicked();
+    callback open-logs-clicked();
+    callback clear-cache-clicked();
+    callback check-files-clicked();
+    callback reset-window-clicked();
     callback theme-reset-clicked();
     callback layout-move(string, string);
     callback layout-drop(string, string, string);
@@ -2218,6 +2225,44 @@ export component AppWindow inherits Window {
                                     text <=> root.set-install-dir;
                                     placeholder: "%APPDATA%\\Vestalis";
                                 }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    ActionButton {
+                                        label: "Открыть папку установки";
+                                        width: 210px;
+                                        height: 34px;
+                                        icon: ThemeIcons.folder;
+                                        has-icon: ThemeIcons.has-folder;
+                                        clicked => { root.open-install-clicked(); }
+                                    }
+                                    ActionButton {
+                                        label: "Логи";
+                                        width: 100px;
+                                        height: 34px;
+                                        clicked => { root.open-logs-clicked(); }
+                                    }
+                                    ActionButton {
+                                        label: "Сбросить окно";
+                                        width: 160px;
+                                        height: 34px;
+                                        clicked => { root.reset-window-clicked(); }
+                                    }
+                                }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    ActionButton {
+                                        label: "Проверить файлы";
+                                        width: 160px;
+                                        height: 34px;
+                                        clicked => { root.check-files-clicked(); }
+                                    }
+                                    ActionButton {
+                                        label: "Очистить кэш";
+                                        width: 150px;
+                                        height: 34px;
+                                        clicked => { root.clear-cache-clicked(); }
+                                    }
+                                }
 
                                 Text { text: Texts.interface-background; color: Theme.text-muted; font-size: 14px; }
                                 HorizontalLayout {
@@ -2266,6 +2311,14 @@ export component AppWindow inherits Window {
                                     Toggle {
                                         checked: root.set-sounds;
                                         toggled(v) => { root.set-sounds = v; }
+                                    }
+                                }
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Text { text: "Discord Rich Presence"; color: Theme.text-muted; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Toggle {
+                                        checked: root.set-discord-rpc;
+                                        toggled(v) => { root.set-discord-rpc = v; }
                                     }
                                 }
                             }
@@ -3112,7 +3165,7 @@ export component AppWindow inherits Window {
                 kind: "close";
                 icon: ThemeIcons.close;
                 has-icon: ThemeIcons.has-close;
-                clicked => { root.close(); }
+                clicked => { root.save-window-geometry(); root.close(); }
             }
         }
     }

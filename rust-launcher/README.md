@@ -37,8 +37,15 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   authlib endpoint rewrite for the active server, and removal of the authlib
   agent in offline mode.
 - Settings: install folder, RAM, window size/fullscreen, JVM args, HWID
-  sending, interface sounds, language (RU/EN/UA), background effect, Liquid
-  Glass opacity/blur imitation and manual accent for Material 3.
+  sending, interface sounds, Discord Rich Presence toggle, language (RU/EN/UA),
+  background effect, Liquid Glass opacity/blur imitation and manual accent for
+  Material 3.
+- Window size/position is remembered in `window.json` (written periodically and
+  on close, clamped to the work area and the 1080×620 minimum); «Сбросить окно»
+  centers it again.
+- Maintenance actions: open the install folder, open the logs folder, validate
+  the selected profile's files without launching, clear the SHA-1 validation
+  cache and export a diagnostics ZIP.
 - Mods page: optional mods from `/api/v1/profiles/{name}/mods/optionals`,
   enable/disable by renaming `.jar` ↔ `.jar.disabled`. Mods that were never
   downloaded get a «Скачать» button: the file hash is resolved from the profile
@@ -164,6 +171,7 @@ No blocking I/O happens in a Slint callback.
 | What | Where |
 | --- | --- |
 | Settings/session | `%APPDATA%\Vestalis\rust-launcher\state.json` (+ `.bak`) |
+| Window size/position | `%APPDATA%\Vestalis\rust-launcher\window.json` |
 | Game files | `%APPDATA%\Vestalis` (same as the C# launcher) |
 | SHA-1 cache | `%LOCALAPPDATA%\Vestalis\validation-cache-rust.json` |
 | Player head avatars | `%LOCALAPPDATA%\Vestalis\avatars\<uuid>.png` |

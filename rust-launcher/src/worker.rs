@@ -40,6 +40,10 @@ pub enum Command {
     SaveSettings(Box<Settings>),
     RefreshThemes,
     OpenThemesFolder,
+    OpenInstallFolder,
+    OpenLogsFolder,
+    ClearValidationCache,
+    CheckFiles,
     SaveTheme(String),
     MoveLayoutItem {
         item: String,
@@ -298,6 +302,10 @@ impl Worker {
                         Some(Command::SaveSettings(settings)) => self.save_settings(*settings),
                         Some(Command::RefreshThemes) => self.refresh_themes(),
                         Some(Command::OpenThemesFolder) => self.open_themes_folder(),
+                        Some(Command::OpenInstallFolder) => self.open_install_folder(),
+                        Some(Command::OpenLogsFolder) => self.open_logs_folder(),
+                        Some(Command::ClearValidationCache) => self.clear_validation_cache(),
+                        Some(Command::CheckFiles) => self.check_files().await,
                         Some(Command::SaveTheme(name)) => self.save_theme(name),
                         Some(Command::MoveLayoutItem { item, direction }) => {
                             self.move_layout_item(&item, &direction)
@@ -825,6 +833,10 @@ impl Worker {
     }
 
     async fn ensure_discord(&mut self) {
+        if !self.state.settings.discord_rpc {
+            self.discord = None;
+            return;
+        }
         if self.discord.is_some() || self.offline {
             return;
         }
@@ -1456,6 +1468,9 @@ impl Worker {
         settings.layout.normalize();
 
         self.state.settings = settings;
+        if !self.state.settings.discord_rpc {
+            self.discord = None;
+        }
         self.ensure_layout_profiles();
         save_state(&self.state);
         let settings = self.state.settings.clone();
@@ -1494,6 +1509,91 @@ impl Worker {
             items,
             active: item.name,
         });
+    }
+
+    fn open_install_folder(&mut self) {
+        let dir = self.state.settings.install_path();
+        let _ = std::fs::create_dir_all(&dir);
+        info!(path = %dir.display(), "opening install folder");
+        if let Err(error) = std::process::Command::new("explorer").arg(&dir).spawn() {
+            self.emit(Event::Error(format!(
+                "Не удалось открыть папку установки: {error}"
+            )));
+        }
+    }
+
+    fn open_logs_folder(&mut self) {
+        let dir = local_app_dir().join("logs");
+        let _ = std::fs::create_dir_all(&dir);
+        info!(path = %dir.display(), "opening logs folder");
+        if let Err(error) = std::process::Command::new("explorer").arg(&dir).spawn() {
+            self.emit(Event::Error(format!(
+                "Не удалось открыть папку логов: {error}"
+            )));
+        }
+    }
+
+    /// Validates (and repairs) the selected profile without launching the game.
+    /// Runs through the normal file pipeline, so progress, retries and the
+    /// validation cache behave exactly like a launch.
+    async fn check_files(&mut self) {
+        if self.busy {
+            return;
+        }
+        if self.offline {
+            self.emit(Event::SettingsStatus(
+                "Проверка файлов недоступна в оффлайн-режиме".into(),
+            ));
+            return;
+        }
+        let Some(profile) = self.profiles.get(self.selected).cloned() else {
+            self.emit(Event::Error("Профиль не выбран".into()));
+            return;
+        };
+
+        self.busy = true;
+        self.emit(Event::SettingsStatus("Проверка файлов…".into()));
+        let result = async {
+            let info = self.fetch_profile_info(&profile).await?;
+            let root = self.state.settings.install_path();
+            crate::files::sync_profile(
+                &self.backend,
+                &info,
+                &root,
+                progress_callback(self.tx.clone()),
+            )
+            .await
+        }
+        .await;
+        self.busy = false;
+
+        self.emit(Event::Progress {
+            visible: false,
+            value: 0.0,
+            title: String::new(),
+            text: String::new(),
+            speed: String::new(),
+        });
+
+        match result {
+            Ok(()) => self.emit(Event::SettingsStatus(
+                "Файлы профиля проверены и актуальны".into(),
+            )),
+            Err(error) => self.emit(Event::Error(format!("Не удалось проверить файлы: {error}"))),
+        }
+    }
+
+    fn clear_validation_cache(&mut self) {
+        let path = crate::storage::cache_path();
+        match std::fs::remove_file(&path) {
+            Ok(()) => self.emit(Event::SettingsStatus("Кэш проверки файлов очищен".into())),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                self.emit(Event::SettingsStatus("Кэш проверки уже пуст".into()))
+            }
+            Err(error) => self.emit(Event::Error(format!(
+                "Не удалось очистить кэш проверки: {error}"
+            ))),
+        }
     }
 
     fn open_themes_folder(&mut self) {

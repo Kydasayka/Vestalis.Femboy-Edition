@@ -45,6 +45,8 @@ thread_local! {
     static TOAST_TIMER: slint::Timer = slint::Timer::default();
     static LAYOUT_PROFILES: RefCell<Vec<crate::layout::LayoutProfile>> = const { RefCell::new(Vec::new()) };
     static DRAG_ITEM: RefCell<String> = const { RefCell::new(String::new()) };
+    static WINDOW_GEOMETRY: std::cell::Cell<(u32, u32, i32, i32)> =
+        const { std::cell::Cell::new((1180, 640, -1, -1)) };
 }
 
 struct ThemeTransition {
@@ -81,6 +83,15 @@ fn main() -> anyhow::Result<()> {
     );
 
     let mut state = load_state();
+    let saved_geometry = storage::load_window_geometry();
+    WINDOW_GEOMETRY.with(|geometry| {
+        geometry.set((
+            saved_geometry.width,
+            saved_geometry.height,
+            saved_geometry.x,
+            saved_geometry.y,
+        ))
+    });
     // PL-1 is disabled: migrate a saved selection to RU-2 and let the normal
     // auto-login issue a fresh session on the working backend.
     if !model::PL1_AVAILABLE && model::server_index(&state.server_host) == 3 {
@@ -183,10 +194,11 @@ fn main() -> anyhow::Result<()> {
         },
     );
 
-    slint::Timer::single_shot(Duration::from_millis(350), || {
+    slint::Timer::single_shot(Duration::from_millis(350), move || {
         if let Some(handle) = window::find_launcher_window() {
             window::apply_icon(handle);
             window::apply_rounded_corners(handle);
+            restore_window_geometry(handle, saved_geometry);
         }
     });
 
@@ -258,6 +270,38 @@ fn main() -> anyhow::Result<()> {
         },
     );
 
+    // Persist the window rectangle periodically as well, so a crash or a
+    // native Alt+F4 cannot lose the user's preferred size/position.
+    let geometry_timer = slint::Timer::default();
+    let last_geometry = std::cell::Cell::new((
+        saved_geometry.width,
+        saved_geometry.height,
+        saved_geometry.x,
+        saved_geometry.y,
+    ));
+    geometry_timer.start(
+        slint::TimerMode::Repeated,
+        Duration::from_secs(2),
+        move || {
+            let Some(handle) = window::find_launcher_window() else {
+                return;
+            };
+            let Some(rect) = window::window_rect(handle) else {
+                return;
+            };
+            let geometry = storage::WindowGeometry {
+                width: (rect.right - rect.left).max(0) as u32,
+                height: (rect.bottom - rect.top).max(0) as u32,
+                x: rect.left,
+                y: rect.top,
+            };
+            let current = (geometry.width, geometry.height, geometry.x, geometry.y);
+            if last_geometry.replace(current) != current {
+                storage::save_window_geometry(geometry);
+            }
+        },
+    );
+
     let timer = slint::Timer::default();
     let ui_weak = ui.as_weak();
     timer.start(
@@ -276,6 +320,47 @@ fn main() -> anyhow::Result<()> {
     let _ = command_tx.send(Command::Shutdown);
     info!("launcher closed");
     Ok(())
+}
+
+/// Restores the last window size/position, clamped to the work area and the
+/// 1080×620 minimum. A missing/negative position keeps the current placement.
+fn restore_window_geometry(handle: isize, geometry: storage::WindowGeometry) {
+    let Some(current) = window::window_rect(handle) else {
+        return;
+    };
+
+    let width = geometry.width.clamp(1080, 3840) as i32;
+    let height = geometry.height.clamp(620, 2160) as i32;
+    let mut left = if geometry.x < 0 {
+        current.left
+    } else {
+        geometry.x
+    };
+    let mut top = if geometry.y < 0 {
+        current.top
+    } else {
+        geometry.y
+    };
+
+    if let Some(area) = window::work_area() {
+        let max_left = (area.right - width).max(area.left);
+        let max_top = (area.bottom - height).max(area.top);
+        left = left.clamp(area.left, max_left);
+        top = top.clamp(area.top, max_top);
+    }
+
+    WINDOW_GEOMETRY.with(|geometry| {
+        geometry.set((width as u32, height as u32, left, top));
+    });
+    window::set_rect(
+        handle,
+        window::Rect {
+            left,
+            top,
+            right: left + width,
+            bottom: top + height,
+        },
+    );
 }
 
 fn initialize_ui(ui: &AppWindow, state: &Persisted) {
@@ -565,6 +650,7 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
                 send_hwid: ui.get_set_send_hwid(),
                 sounds: ui.get_set_sounds(),
                 hide_on_launch: ui.get_set_hide_on_launch(),
+                discord_rpc: ui.get_set_discord_rpc(),
                 background_effect: ui.get_set_background_effect().to_string(),
                 theme: ui.get_set_theme().to_string(),
                 theme_mode: ui.get_set_theme_mode().to_string(),
@@ -692,6 +778,92 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         }
     });
 
+    ui.on_open_install_clicked({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
+            let _ = tx.send(Command::OpenInstallFolder);
+        }
+    });
+
+    ui.on_reset_window_clicked({
+        let ui = ui.as_weak();
+        move || {
+            let Some(ui) = ui.upgrade() else { return };
+            play_sound(&ui, Sound::Click);
+
+            let Some(handle) = window::find_launcher_window() else {
+                return;
+            };
+            let width = 1180;
+            let height = 640;
+            let (left, top) = window::work_area()
+                .map(|area| {
+                    (
+                        area.left + ((area.right - area.left - width) / 2).max(0),
+                        area.top + ((area.bottom - area.top - height) / 2).max(0),
+                    )
+                })
+                .unwrap_or((120, 120));
+
+            let geometry = storage::WindowGeometry {
+                width: width as u32,
+                height: height as u32,
+                x: left,
+                y: top,
+            };
+            WINDOW_GEOMETRY.with(|value| value.set((geometry.width, geometry.height, left, top)));
+            storage::save_window_geometry(geometry);
+            window::set_rect(
+                handle,
+                window::Rect {
+                    left,
+                    top,
+                    right: left + width,
+                    bottom: top + height,
+                },
+            );
+        }
+    });
+
+    ui.on_open_logs_clicked({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
+            let _ = tx.send(Command::OpenLogsFolder);
+        }
+    });
+
+    ui.on_check_files_clicked({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+                ui.set_settings_status("Проверка файлов…".into());
+            }
+            let _ = tx.send(Command::CheckFiles);
+        }
+    });
+
+    ui.on_clear_cache_clicked({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+                ui.set_settings_status("Очистка кэша…".into());
+            }
+            let _ = tx.send(Command::ClearValidationCache);
+        }
+    });
+
     ui.on_export_diagnostics_clicked({
         let tx = tx.clone();
         let ui = ui.as_weak();
@@ -711,6 +883,27 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
                 ui.set_toast_visible(false);
             }
             TOAST_TIMER.with(|timer| timer.stop());
+        }
+    });
+
+    ui.on_save_window_geometry({
+        move || {
+            let Some(handle) = window::find_launcher_window() else {
+                return;
+            };
+            let Some(rect) = window::window_rect(handle) else {
+                return;
+            };
+
+            let geometry = storage::WindowGeometry {
+                width: (rect.right - rect.left).max(0) as u32,
+                height: (rect.bottom - rect.top).max(0) as u32,
+                x: rect.left,
+                y: rect.top,
+            };
+            WINDOW_GEOMETRY
+                .with(|value| value.set((geometry.width, geometry.height, geometry.x, geometry.y)));
+            storage::save_window_geometry(geometry);
         }
     });
 
@@ -1737,6 +1930,7 @@ fn apply_settings(ui: &AppWindow, settings: &Settings, max_ram: u64) {
     ui.set_set_send_hwid(settings.send_hwid);
     ui.set_set_sounds(settings.sounds);
     ui.set_set_hide_on_launch(settings.hide_on_launch);
+    ui.set_set_discord_rpc(settings.discord_rpc);
     ui.set_set_theme(settings.theme.clone().into());
     ui.set_set_accent(settings.accent.clone().into());
     ui.set_follow_windows_theme(settings.follow_windows_theme);
