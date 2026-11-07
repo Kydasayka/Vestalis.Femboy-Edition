@@ -1437,6 +1437,7 @@ export component AppWindow inherits Window {
     callback open-logs-clicked();
     callback clear-cache-clicked();
     callback check-files-clicked();
+    callback pick-java-clicked();
     callback reset-window-clicked();
     callback theme-reset-clicked();
     callback layout-move(string, string);
@@ -2227,9 +2228,19 @@ export component AppWindow inherits Window {
                                 }
 
                                 Text { text: Texts.game-java; color: Theme.text-muted; font-size: 13px; wrap: word-wrap; }
-                                TextField {
-                                    text <=> root.set-custom-java;
-                                    placeholder: "C:\\Program Files\\Java\\bin\\javaw.exe";
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    TextField {
+                                        text <=> root.set-custom-java;
+                                        placeholder: "C:\\Program Files\\Java\\bin\\javaw.exe";
+                                        horizontal-stretch: 1;
+                                    }
+                                    ActionButton {
+                                        label: "Обзор…";
+                                        width: 110px;
+                                        height: 38px;
+                                        clicked => { root.pick-java-clicked(); }
+                                    }
                                 }
 
                                 HorizontalLayout {

@@ -873,6 +873,20 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         }
     });
 
+    ui.on_pick_java_clicked({
+        let ui = ui.as_weak();
+        move || {
+            let Some(ui) = ui.upgrade() else { return };
+            play_sound(&ui, Sound::Click);
+            if let Some(path) = window::pick_file(
+                "Выберите javaw.exe",
+                "Java (*.exe)\0*.exe\0Все файлы (*.*)\0*.*\0",
+            ) {
+                ui.set_set_custom_java(path.to_string_lossy().into_owned().into());
+            }
+        }
+    });
+
     ui.on_check_files_clicked({
         let tx = tx.clone();
         let ui = ui.as_weak();

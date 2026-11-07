@@ -425,7 +425,9 @@ cargo clippy --all-targets -- -D warnings
   (тот же `sync_profile`, без запуска игры), очистка SHA-1 кэша, диагностика.
   Discord RPC отключается настройкой `discordRpc`.
 - `settings.customJava` (пусто = путь из манифеста) переопределяет `java_path`;
-  проверяется `is_file()`. `settings.autoLogin` выключает автовход, но
+  проверяется `is_file()`; путь выбирается кнопкой «Обзор…» через
+  `window::pick_file` (Win32 `GetOpenFileNameW` из крейта `windows`, не
+  самописная структура). `settings.autoLogin` выключает автовход, но
   сохранённые креды не удаляет. Страница модов фильтруется в воркере
   (`SetModsFilter`) и умеет открывать папку модов.
 - Отмена запуска: `Worker.launch_cancel: Arc<AtomicBool>`, `Command::CancelLaunch`;

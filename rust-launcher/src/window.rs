@@ -69,6 +69,62 @@ extern "system" {
     fn ChooseColorW(value: *mut ChooseColor) -> i32;
 }
 
+/// Opens the standard "open file" dialog. Returns a normal absolute path.
+pub fn pick_file(title: &str, filter: &str) -> Option<std::path::PathBuf> {
+    use windows::core::{PCWSTR, PWSTR};
+    use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM};
+    use windows::Win32::UI::Controls::Dialogs::{
+        GetOpenFileNameW, OFN_EXPLORER, OFN_FILEMUSTEXIST, OFN_NOCHANGEDIR, OFN_PATHMUSTEXIST,
+        OPENFILENAMEW, OPEN_FILENAME_FLAGS,
+    };
+
+    let mut buffer = [0u16; 1024];
+    let mut title: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
+    let mut filter: Vec<u16> = filter.encode_utf16().chain([0, 0]).collect();
+    let flags = OPEN_FILENAME_FLAGS(
+        OFN_FILEMUSTEXIST.0 | OFN_PATHMUSTEXIST.0 | OFN_EXPLORER.0 | OFN_NOCHANGEDIR.0,
+    );
+
+    let mut dialog = OPENFILENAMEW {
+        lStructSize: std::mem::size_of::<OPENFILENAMEW>() as u32,
+        hwndOwner: HWND(find_launcher_window().unwrap_or(0) as *mut c_void),
+        hInstance: HINSTANCE(std::ptr::null_mut()),
+        lpstrFilter: PCWSTR(filter.as_mut_ptr()),
+        lpstrCustomFilter: PWSTR::null(),
+        nMaxCustFilter: 0,
+        nFilterIndex: 1,
+        lpstrFile: PWSTR(buffer.as_mut_ptr()),
+        nMaxFile: buffer.len() as u32,
+        lpstrFileTitle: PWSTR::null(),
+        nMaxFileTitle: 0,
+        lpstrInitialDir: PCWSTR::null(),
+        lpstrTitle: PCWSTR(title.as_mut_ptr()),
+        Flags: flags,
+        nFileOffset: 0,
+        nFileExtension: 0,
+        lpstrDefExt: PCWSTR::null(),
+        lCustData: LPARAM(0),
+        lpfnHook: None,
+        lpTemplateName: PCWSTR::null(),
+        pvReserved: std::ptr::null_mut(),
+        dwReserved: 0,
+        FlagsEx: Default::default(),
+    };
+
+    if unsafe { GetOpenFileNameW(&mut dialog) }.as_bool() {
+        let end = buffer
+            .iter()
+            .position(|value| *value == 0)
+            .unwrap_or(buffer.len());
+        let path = String::from_utf16_lossy(&buffer[..end]);
+        if !path.trim().is_empty() {
+            return Some(std::path::PathBuf::from(path));
+        }
+    }
+
+    None
+}
+
 /// Opens the standard Windows colour picker. Returns an sRGB triplet.
 pub const CC_RGBINIT: u32 = 0x0000_0001;
 pub const CC_FULLOPEN: u32 = 0x0000_0002;
