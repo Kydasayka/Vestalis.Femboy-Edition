@@ -41,7 +41,7 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   sending, interface sounds, Discord Rich Presence toggle, language (RU/EN/UA),
   background effect, Liquid Glass opacity/blur imitation, manual accent for
   Material 3, an optional explicit Java executable (with the standard Windows
-  file picker) and an auto-login toggle.
+  file picker), an auto-login toggle and a «Скопировать HWID» action.
 - Window size/position is remembered in `window.json` (written periodically and
   on close, clamped to the work area and the 1080×620 minimum); «Сбросить окно»
   centers it again.

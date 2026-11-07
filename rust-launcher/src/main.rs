@@ -897,6 +897,22 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         }
     });
 
+    ui.on_copy_hwid_clicked({
+        let ui = ui.as_weak();
+        move || {
+            let Some(ui) = ui.upgrade() else { return };
+            play_sound(&ui, Sound::Click);
+
+            // Always copy the real hardware ID: the toggle only controls what
+            // is sent to the backend, not what support staff need.
+            let mut settings = storage::load_state().settings;
+            settings.send_hwid = true;
+            let hwid = hwid::hwid_for(&settings);
+            window::copy_text(&hwid);
+            ui.set_settings_status("HWID скопирован в буфер обмена".into());
+        }
+    });
+
     ui.on_test_sound_clicked({
         let ui = ui.as_weak();
         move || {
@@ -1760,6 +1776,7 @@ fn apply_texts(ui: &AppWindow, item: &ThemeItem) {
     set!("profiles.not_found", set_profiles_not_found);
     set!("profiles.empty", set_profiles_empty);
     set!("settings.interface.test_sound", set_interface_test_sound);
+    set!("settings.interface.copy_hwid", set_interface_copy_hwid);
     set!("sections.news", set_news);
     set!("settings.title", set_settings_title);
     set!("settings.back", set_back);

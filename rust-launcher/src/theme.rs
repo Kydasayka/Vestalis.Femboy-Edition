@@ -44,6 +44,7 @@ pub const TEXT_KEYS: &[&str] = &[
     "profiles.not_found",
     "profiles.empty",
     "settings.interface.test_sound",
+    "settings.interface.copy_hwid",
     "sections.news",
     "settings.title",
     "settings.back",

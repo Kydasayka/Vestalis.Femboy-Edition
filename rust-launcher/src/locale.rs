@@ -84,6 +84,12 @@ pub fn get(lang: &str, key: &str) -> &'static str {
             "Test sound",
             "Перевірити звук",
         ),
+        "settings.interface.copy_hwid" => pick(
+            lang,
+            "Скопировать HWID",
+            "Copy HWID",
+            "Скопіювати HWID",
+        ),
         "sections.news" => pick(lang, "НОВОСТИ", "NEWS", "НОВИНИ"),
 
         "settings.title" => pick(lang, "Настройки", "Settings", "Налаштування"),
