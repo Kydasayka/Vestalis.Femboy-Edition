@@ -420,7 +420,9 @@ cargo clippy --all-targets -- -D warnings
 - Геометрия окна — отдельный `%APPDATA%\Vestalis\rust-launcher\window.json`
   (не `state.json`: воркер перезаписывает state при выходе). Пишется раз в 2 с
   при изменении и по кнопке закрытия; при старте клампится к work area и
-  1080×620. «Сбросить окно» центрирует.
+  1080×620. «Сбросить окно» центрирует. `maximized` + `NORMAL_GEOMETRY`
+  позволяют восстановить развёрнутое окно и вернуться к прежнему normal-размеру;
+  не сохранять work-area rect как normal.
 - Буфер обмена — `window::copy_text` (Win32 `OpenClipboard` + `SetClipboardData`
   CF_UNICODETEXT). Кнопка «Скопировать HWID» всегда копирует реальный HWID,
   независимо от тумблера отправки.

@@ -47,6 +47,8 @@ thread_local! {
     static DRAG_ITEM: RefCell<String> = const { RefCell::new(String::new()) };
     static WINDOW_GEOMETRY: std::cell::Cell<(u32, u32, i32, i32)> =
         const { std::cell::Cell::new((1180, 640, -1, -1)) };
+    static NORMAL_GEOMETRY: std::cell::Cell<(u32, u32, i32, i32)> =
+        const { std::cell::Cell::new((1180, 640, -1, -1)) };
 }
 
 struct ThemeTransition {
@@ -89,6 +91,14 @@ fn main() -> anyhow::Result<()> {
     let mut state = load_state();
     let saved_geometry = storage::load_window_geometry();
     WINDOW_GEOMETRY.with(|geometry| {
+        geometry.set((
+            saved_geometry.width,
+            saved_geometry.height,
+            saved_geometry.x,
+            saved_geometry.y,
+        ))
+    });
+    NORMAL_GEOMETRY.with(|geometry| {
         geometry.set((
             saved_geometry.width,
             saved_geometry.height,
@@ -198,11 +208,21 @@ fn main() -> anyhow::Result<()> {
         },
     );
 
+    let geometry_ui = ui.as_weak();
     slint::Timer::single_shot(Duration::from_millis(350), move || {
         if let Some(handle) = window::find_launcher_window() {
             window::apply_icon(handle);
             window::apply_rounded_corners(handle);
             restore_window_geometry(handle, saved_geometry);
+
+            if saved_geometry.maximized {
+                if let Some(area) = window::work_area() {
+                    window::set_rect(handle, area);
+                }
+                if let Some(ui) = geometry_ui.upgrade() {
+                    ui.set_window_maximized(true);
+                }
+            }
         }
     });
 
@@ -282,24 +302,22 @@ fn main() -> anyhow::Result<()> {
         saved_geometry.height,
         saved_geometry.x,
         saved_geometry.y,
+        saved_geometry.maximized,
     ));
     geometry_timer.start(
         slint::TimerMode::Repeated,
         Duration::from_secs(2),
         move || {
-            let Some(handle) = window::find_launcher_window() else {
+            let Some(geometry) = window_geometry_snapshot() else {
                 return;
             };
-            let Some(rect) = window::window_rect(handle) else {
-                return;
-            };
-            let geometry = storage::WindowGeometry {
-                width: (rect.right - rect.left).max(0) as u32,
-                height: (rect.bottom - rect.top).max(0) as u32,
-                x: rect.left,
-                y: rect.top,
-            };
-            let current = (geometry.width, geometry.height, geometry.x, geometry.y);
+            let current = (
+                geometry.width,
+                geometry.height,
+                geometry.x,
+                geometry.y,
+                geometry.maximized,
+            );
             if last_geometry.replace(current) != current {
                 storage::save_window_geometry(geometry);
             }
@@ -325,6 +343,40 @@ fn main() -> anyhow::Result<()> {
     let _ = command_tx.send(Command::Shutdown);
     info!("launcher closed");
     Ok(())
+}
+
+/// Captures the current window rectangle. When maximized, the stored size and
+/// position are the last normal rectangle, so restoring the window later does
+/// not turn the work area into the new "normal" size.
+fn window_geometry_snapshot() -> Option<storage::WindowGeometry> {
+    let handle = window::find_launcher_window()?;
+    let rect = window::window_rect(handle)?;
+    let maximized = window::work_area()
+        .map(|area| area == rect)
+        .unwrap_or(false);
+
+    let normal = if maximized {
+        NORMAL_GEOMETRY.with(|value| value.get())
+    } else {
+        let normal = (
+            (rect.right - rect.left).max(0) as u32,
+            (rect.bottom - rect.top).max(0) as u32,
+            rect.left,
+            rect.top,
+        );
+        NORMAL_GEOMETRY.with(|value| value.set(normal));
+        normal
+    };
+
+    WINDOW_GEOMETRY.with(|value| value.set(normal));
+
+    Some(storage::WindowGeometry {
+        width: normal.0,
+        height: normal.1,
+        x: normal.2,
+        y: normal.3,
+        maximized,
+    })
 }
 
 /// Restores the last window size/position, clamped to the work area and the
@@ -355,6 +407,9 @@ fn restore_window_geometry(handle: isize, geometry: storage::WindowGeometry) {
     }
 
     WINDOW_GEOMETRY.with(|geometry| {
+        geometry.set((width as u32, height as u32, left, top));
+    });
+    NORMAL_GEOMETRY.with(|geometry| {
         geometry.set((width as u32, height as u32, left, top));
     });
     window::set_rect(
@@ -874,8 +929,11 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
                 height: height as u32,
                 x: left,
                 y: top,
+                maximized: false,
             };
             WINDOW_GEOMETRY.with(|value| value.set((geometry.width, geometry.height, left, top)));
+            NORMAL_GEOMETRY.with(|value| value.set((geometry.width, geometry.height, left, top)));
+            ui.set_window_maximized(false);
             storage::save_window_geometry(geometry);
             window::set_rect(
                 handle,
@@ -987,22 +1045,9 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
 
     ui.on_save_window_geometry({
         move || {
-            let Some(handle) = window::find_launcher_window() else {
-                return;
-            };
-            let Some(rect) = window::window_rect(handle) else {
-                return;
-            };
-
-            let geometry = storage::WindowGeometry {
-                width: (rect.right - rect.left).max(0) as u32,
-                height: (rect.bottom - rect.top).max(0) as u32,
-                x: rect.left,
-                y: rect.top,
-            };
-            WINDOW_GEOMETRY
-                .with(|value| value.set((geometry.width, geometry.height, geometry.x, geometry.y)));
-            storage::save_window_geometry(geometry);
+            if let Some(geometry) = window_geometry_snapshot() {
+                storage::save_window_geometry(geometry);
+            }
         }
     });
 
@@ -1265,17 +1310,31 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
                 return;
             };
 
-            let previous = restore_rect.borrow_mut().take();
-
-            if let Some(rect) = previous {
+            if ui.get_window_maximized() {
+                let stored = NORMAL_GEOMETRY.with(|value| value.get());
+                let fallback = window::Rect {
+                    left: stored.2,
+                    top: stored.3,
+                    right: stored.2 + stored.0 as i32,
+                    bottom: stored.3 + stored.1 as i32,
+                };
+                let target = restore_rect.borrow_mut().take().unwrap_or(fallback);
                 if let Some(current) = window::window_rect(handle) {
-                    window::animate_to(handle, current, rect);
+                    window::animate_to(handle, current, target);
                 }
                 ui.set_window_maximized(false);
             } else {
                 let current = window::window_rect(handle);
                 if let Some(current) = current {
                     *restore_rect.borrow_mut() = Some(current);
+                    NORMAL_GEOMETRY.with(|value| {
+                        value.set((
+                            (current.right - current.left).max(0) as u32,
+                            (current.bottom - current.top).max(0) as u32,
+                            current.left,
+                            current.top,
+                        ))
+                    });
                 }
                 if let (Some(area), Some(current)) = (window::work_area(), current) {
                     window::animate_to(handle, current, area);

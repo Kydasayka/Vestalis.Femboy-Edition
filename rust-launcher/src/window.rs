@@ -5,7 +5,7 @@
 use std::ffi::c_void;
 
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub struct Rect {
     pub left: i32,
     pub top: i32,

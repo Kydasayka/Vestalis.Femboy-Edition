@@ -23,6 +23,8 @@ pub struct WindowGeometry {
     pub height: u32,
     pub x: i32,
     pub y: i32,
+    /// The window was maximized; width/height/position keep the normal rect.
+    pub maximized: bool,
 }
 
 impl Default for WindowGeometry {
@@ -32,6 +34,7 @@ impl Default for WindowGeometry {
             height: 640,
             x: -1,
             y: -1,
+            maximized: false,
         }
     }
 }

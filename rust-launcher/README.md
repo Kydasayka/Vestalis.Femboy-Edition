@@ -42,8 +42,10 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   background effect, Liquid Glass opacity/blur imitation, manual accent for
   Material 3, an optional explicit Java executable (with the standard Windows
   file picker), an auto-login toggle and a «Скопировать HWID» action.
-- Window size/position is remembered in `window.json` (written periodically and
-  on close, clamped to the work area and the 1080×620 minimum); «Сбросить окно»
+- Window size/position and the maximized state are remembered in `window.json`
+  (written periodically and on close, clamped to the work area and the
+  1080×620 minimum); the normal rectangle is kept separately, so restoring a
+  maximized window at startup returns to the previous size. «Сбросить окно»
   centers it again. A named single-instance mutex prevents two launchers from
   overwriting the same state files.
 - Maintenance actions: open the install folder, open the logs folder, validate
