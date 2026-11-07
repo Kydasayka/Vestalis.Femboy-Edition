@@ -404,8 +404,19 @@ cargo clippy --all-targets -- -D warnings
   `LayoutDrag.transfer-text(event.data)`. Стрелки в редакторе — обязательный
   fallback.
 - Layout: `settings.layout` (активный) + `settings.layouts` (профили) +
-  `layoutProfile`; ширины 240–420 px, `hidden` хранит скрытые блоки в зоне.
-  DnD→`move_to_zone`, скрытие→`set_hidden`; всё нормализуется и сохраняется сразу.
+  `layoutProfile`; ширины 240–420 px, `hidden` хранит скрытые блоки в зоне,
+  `blockHeights` — высоты блоков (мин/макс в `layout::BLOCK_HEIGHTS`).
+  DnD→`move_to_zone`, скрытие→`set_hidden`, высота→`set_block_height`; всё
+  нормализуется и сохраняется сразу.
+- **Скрытые блоки не должны занимать место.** В Slint `visible: false` у
+  `ZoneItem` всё равно оставляет высоту и spacing. Поэтому Rust отдаёт для
+  главного экрана отдельные списки `layout-*-visible` без скрытых элементов, а
+  редактор получает полные списки. Не возвращать `visible: !is-hidden(...)`.
+- `sidebar-actions` прижат к низу сайдбара: остальные блоки лежат в `ScrollView`,
+  кнопки — отдельным слотом под ним. Если все блоки правого сайдбара скрыты,
+  панель исчезает (`sidebar-right-has-visible`).
+- `--offline` запускает лаунчер на кэшированных профилях без бэкенда — удобно
+  для проверки layout/темы без автологина.
 - `state.json`: атомарная запись tmp→rename + `.bak`; при частично битом JSON
   `recover_state`/`merge_settings` сохраняют валидные поля. Не сбрасывать весь
   файл на одной ошибке типа.

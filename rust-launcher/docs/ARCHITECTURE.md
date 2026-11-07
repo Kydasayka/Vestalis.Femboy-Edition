@@ -40,8 +40,12 @@
 - `signalr.rs` owns the WebSocket hub task. It reconnects with backoff and only
   emits `RefreshProfiles`; the worker aborts the task on logout/server switch.
 - `theme.rs` owns palettes, modes, icon/text overrides and colour mixing;
-  `locale.rs` owns RU/EN/UA labels; `layout.rs` owns zones, profiles and
-  normalisation. None of them touch the network.
+  `locale.rs` owns RU/EN/UA labels; `layout.rs` owns zones, profiles, block
+  heights and normalisation. None of them touch the network.
+- Hidden layout blocks are filtered out in `apply_layout` into
+  `layout-*-visible` models; the main screen never instantiates them, so they
+  cannot reserve layout space. The editor keeps the full models for visibility
+  toggles and drag-and-drop.
 - `diagnostics.rs` builds the support ZIP from logs and sanitized state.
 - `storage.rs` is also the single place for atomic state/cache writes, `.bak`
   recovery and cache TTL cleanup.

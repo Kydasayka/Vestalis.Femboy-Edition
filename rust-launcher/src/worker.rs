@@ -58,6 +58,10 @@ pub enum Command {
         left: u32,
         right: u32,
     },
+    LayoutHeight {
+        item: String,
+        height: u32,
+    },
     LayoutProfileSave(String),
     LayoutProfileSwitch(String),
     LayoutProfileDelete(String),
@@ -306,6 +310,9 @@ impl Worker {
                         }
                         Some(Command::LayoutWidths { left, right }) => {
                             self.set_layout_widths(left, right)
+                        }
+                        Some(Command::LayoutHeight { item, height }) => {
+                            self.set_layout_height(&item, height)
                         }
                         Some(Command::LayoutProfileSave(name)) => self.save_layout_profile(&name),
                         Some(Command::LayoutProfileSwitch(name)) => {
@@ -1545,6 +1552,15 @@ impl Worker {
     fn toggle_layout_item(&mut self, item: &str, hidden: bool) {
         let mut layout = self.state.settings.layout.clone();
         layout.set_hidden(item, hidden);
+        layout.normalize();
+        self.state.settings.layout = layout;
+        save_state(&self.state);
+        self.emit(Event::Layout(self.state.settings.layout.clone()));
+    }
+
+    fn set_layout_height(&mut self, item: &str, height: u32) {
+        let mut layout = self.state.settings.layout.clone();
+        layout.set_block_height(item, height);
         layout.normalize();
         self.state.settings.layout = layout;
         save_state(&self.state);

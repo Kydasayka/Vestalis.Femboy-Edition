@@ -151,6 +151,12 @@ fn main() -> anyhow::Result<()> {
 
     runtime.spawn(Worker::new(state, event_tx).run(command_rx));
 
+    // `--offline` lets the user (and UI tests) open the cached profiles
+    // without touching the backend.
+    if std::env::args().any(|argument| argument == "--offline") {
+        let _ = command_tx.send(Command::Offline);
+    }
+
     // Animate the splash progress bar to the end, then keep it on screen for a
     // short beat instead of cutting away mid-animation.
     let splash_ui = ui.as_weak();
@@ -903,6 +909,16 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
     });
 
     // LayoutState / LayoutDrag globals: visibility checks and the drag payload.
+    ui.global::<LayoutState>().on_resize_block({
+        let tx = tx.clone();
+        move |item, height| {
+            let _ = tx.send(Command::LayoutHeight {
+                item: item.to_string(),
+                height: height.max(0) as u32,
+            });
+        }
+    });
+
     ui.global::<LayoutState>().on_toggle_hidden({
         let tx = tx.clone();
         move |item, hidden| {
@@ -1617,6 +1633,28 @@ fn apply_layout(ui: &AppWindow, layout: &crate::layout::LayoutConfig) {
     ui.set_layout_content_top(string_model(&normalized.content_top));
     ui.set_layout_content_bottom(string_model(&normalized.content_bottom));
     ui.set_layout_footer(string_model(&normalized.footer));
+    let visible = |items: &[String]| -> Vec<String> {
+        items
+            .iter()
+            .filter(|item| !normalized.is_hidden(item))
+            .cloned()
+            .collect()
+    };
+    let sidebar_body = |items: &[String]| -> Vec<String> {
+        items
+            .iter()
+            .filter(|item| item.as_str() != "sidebar-actions" && !normalized.is_hidden(item))
+            .cloned()
+            .collect()
+    };
+
+    ui.set_layout_sidebar_left_visible(string_model(&sidebar_body(&normalized.sidebar_left)));
+    ui.set_layout_sidebar_right_visible(string_model(&sidebar_body(&normalized.sidebar_right)));
+    ui.set_layout_header_visible(string_model(&visible(&normalized.header)));
+    ui.set_layout_content_top_visible(string_model(&visible(&normalized.content_top)));
+    ui.set_layout_content_bottom_visible(string_model(&visible(&normalized.content_bottom)));
+    ui.set_layout_footer_visible(string_model(&visible(&normalized.footer)));
+
     ui.set_layout_hidden(string_model(&normalized.hidden));
     ui.set_layout_sidebar_left_width(normalized.sidebar_left_width as i32);
     ui.set_layout_sidebar_right_width(normalized.sidebar_right_width as i32);
@@ -1629,11 +1667,49 @@ fn apply_layout(ui: &AppWindow, layout: &crate::layout::LayoutConfig) {
     hidden.set_hidden_news(normalized.is_hidden("news"));
     hidden.set_hidden_main_actions(normalized.is_hidden("main-actions"));
     hidden.set_hidden_server(normalized.is_hidden("server"));
+    hidden.set_height_user(normalized.block_height("user") as i32);
+    hidden.set_height_profiles(normalized.block_height("profiles") as i32);
+    hidden.set_height_countdown(normalized.block_height("countdown") as i32);
+    hidden.set_height_sidebar_actions(normalized.block_height("sidebar-actions") as i32);
+    hidden.set_height_news(normalized.block_height("news") as i32);
+    hidden.set_height_main_actions(normalized.block_height("main-actions") as i32);
+
+    ui.set_sidebar_actions_left(
+        normalized
+            .sidebar_left
+            .iter()
+            .any(|item| item == "sidebar-actions"),
+    );
+    ui.set_sidebar_actions_right(
+        normalized
+            .sidebar_right
+            .iter()
+            .any(|item| item == "sidebar-actions"),
+    );
+    ui.set_sidebar_right_has_visible(
+        normalized
+            .sidebar_right
+            .iter()
+            .any(|item| !normalized.is_hidden(item)),
+    );
 }
 
 fn ui_layout(ui: &AppWindow) -> crate::layout::LayoutConfig {
     fn collect(model: &ModelRc<slint::SharedString>) -> Vec<String> {
         model.iter().map(|item| item.to_string()).collect()
+    }
+
+    let state = ui.global::<LayoutState>();
+    let mut block_heights = std::collections::BTreeMap::new();
+    for (item, height) in [
+        ("user", state.get_height_user()),
+        ("profiles", state.get_height_profiles()),
+        ("countdown", state.get_height_countdown()),
+        ("sidebar-actions", state.get_height_sidebar_actions()),
+        ("news", state.get_height_news()),
+        ("main-actions", state.get_height_main_actions()),
+    ] {
+        block_heights.insert(item.to_string(), height.max(0) as u32);
     }
 
     crate::layout::LayoutConfig {
@@ -1646,6 +1722,7 @@ fn ui_layout(ui: &AppWindow) -> crate::layout::LayoutConfig {
         hidden: collect(&ui.get_layout_hidden()),
         sidebar_left_width: ui.get_layout_sidebar_left_width().max(0) as u32,
         sidebar_right_width: ui.get_layout_sidebar_right_width().max(0) as u32,
+        block_heights,
     }
 }
 

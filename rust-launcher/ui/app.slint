@@ -174,6 +174,27 @@ export global LayoutState {
     in-out property <bool> hidden-main-actions: false;
     in-out property <bool> hidden-server: false;
 
+    // Per-block heights. The same values are shown by the Layout editor and
+    // used by every zone, so hiding and showing a block preserves its size.
+    in-out property <int> height-user: 64;
+    in-out property <int> height-profiles: 200;
+    in-out property <int> height-countdown: 124;
+    in-out property <int> height-sidebar-actions: 44;
+    in-out property <int> height-news: 220;
+    in-out property <int> height-main-actions: 52;
+
+    public pure function block-height(item: string) -> int {
+        if item == "user" { return height-user; }
+        if item == "profiles" { return height-profiles; }
+        if item == "countdown" { return height-countdown; }
+        if item == "sidebar-actions" { return height-sidebar-actions; }
+        if item == "news" { return height-news; }
+        if item == "main-actions" { return height-main-actions; }
+        return 0;
+    }
+
+    callback resize-block(string, int);
+
     public pure function is-hidden(item: string) -> bool {
         if item == "user" { return hidden-user; }
         if item == "profiles" { return hidden-profiles; }
@@ -678,7 +699,7 @@ component LayoutRow inherits Rectangle {
 
     Text {
         x: 8px;
-        width: parent.width - 204px;
+        width: parent.width - 312px;
         height: parent.height;
         opacity: root.hidden ? 0.45 : 1;
         text: item == "server" ? Texts.layout-server
@@ -704,6 +725,34 @@ component LayoutRow inherits Rectangle {
         font-size: 12px;
         horizontal-alignment: end;
         vertical-alignment: center;
+    }
+
+    if !root.pinned: HorizontalLayout {
+        x: parent.width - 304px;
+        y: (parent.height - 24px) / 2;
+        spacing: 2px;
+
+        MiniButton {
+            label: "−";
+            clicked => {
+                LayoutState.resize-block(root.item, LayoutState.block-height(root.item) - 12);
+            }
+        }
+        Text {
+            width: 44px;
+            height: 24px;
+            text: "\{LayoutState.block-height(root.item)}";
+            color: Theme.text-muted;
+            font-size: 12px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        MiniButton {
+            label: "+";
+            clicked => {
+                LayoutState.resize-block(root.item, LayoutState.block-height(root.item) + 12);
+            }
+        }
     }
 
     if !root.pinned: Rectangle {
@@ -1120,13 +1169,7 @@ component ZoneItem inherits Rectangle {
     callback refresh-clicked();
     callback mods-clicked();
 
-    height: item == "user" ? 64px
-        : item == "profiles" ? 200px
-        : item == "countdown" ? 124px
-        : item == "sidebar-actions" ? 44px
-        : item == "news" ? 220px
-        : item == "main-actions" ? 52px
-        : 0px;
+    height: LayoutState.block-height(item) * 1px;
 
     if item == "user": UserCard {
         width: 100%;
@@ -1242,6 +1285,14 @@ export component AppWindow inherits Window {
     in-out property <string> dark-theme: "dark";
     in-out property <[string]> layout-sidebar-left: [];
     in-out property <[string]> layout-sidebar-right: [];
+    // Main-screen lists exclude hidden blocks entirely, so they do not reserve
+    // layout space or spacing. The editor keeps the full lists above.
+    in-out property <[string]> layout-sidebar-left-visible: [];
+    in-out property <[string]> layout-sidebar-right-visible: [];
+    in-out property <[string]> layout-header-visible: [];
+    in-out property <[string]> layout-content-top-visible: [];
+    in-out property <[string]> layout-content-bottom-visible: [];
+    in-out property <[string]> layout-footer-visible: [];
     in-out property <[string]> layout-header: [];
     in-out property <[string]> layout-content-top: [];
     in-out property <[string]> layout-content-bottom: [];
@@ -1249,6 +1300,9 @@ export component AppWindow inherits Window {
     in-out property <[string]> layout-hidden: [];
     in-out property <int> layout-sidebar-left-width: 316;
     in-out property <int> layout-sidebar-right-width: 300;
+    in-out property <bool> sidebar-actions-left: true;
+    in-out property <bool> sidebar-actions-right: false;
+    in-out property <bool> sidebar-right-has-visible: false;
     in-out property <[string]> layout-profiles: [];
     in-out property <string> layout-profile: "По умолчанию";
     in-out property <string> layout-profile-name: "";
@@ -1584,30 +1638,47 @@ export component AppWindow inherits Window {
                         }
                     }
 
-                    VerticalLayout {
+                    // Scrolls independently; sidebar-actions stays pinned below.
+                    ScrollView {
                         vertical-stretch: 1;
-                        spacing: 14px;
-                        for item in root.layout-sidebar-left: ZoneItem {
-                            item: item;
-                            visible: !LayoutState.is-hidden(item);
-                            vertical-stretch: item == "profiles" ? 1 : 0;
-                            profiles: root.profiles;
-                            selected-index: root.selected-index;
-                            user-name: root.user-name;
-                            user-host: root.server-host-label;
-                            user-initial: root.user-initial;
-                            user-avatar: root.user-avatar;
-                            has-avatar: root.has-avatar;
-                            countdown-text: root.countdown-text;
-                            news: root.news;
-                            can-play: root.can-play;
-                            profile-clicked(id) => { root.profile-clicked(id); }
-                            settings-clicked => { root.settings-clicked(); }
-                            logout-clicked => { root.logout-clicked(); }
-                            play-clicked => { root.play-clicked(); }
-                            refresh-clicked => { root.refresh-clicked(); }
-                            mods-clicked => { root.mods-clicked(); }
+                        VerticalLayout {
+                            spacing: 14px;
+                            for item in root.layout-sidebar-left-visible: ZoneItem {
+                                item: item;
+                                profiles: root.profiles;
+                                selected-index: root.selected-index;
+                                user-name: root.user-name;
+                                user-host: root.server-host-label;
+                                user-initial: root.user-initial;
+                                user-avatar: root.user-avatar;
+                                has-avatar: root.has-avatar;
+                                countdown-text: root.countdown-text;
+                                news: root.news;
+                                can-play: root.can-play;
+                                profile-clicked(id) => { root.profile-clicked(id); }
+                                settings-clicked => { root.settings-clicked(); }
+                                logout-clicked => { root.logout-clicked(); }
+                                play-clicked => { root.play-clicked(); }
+                                refresh-clicked => { root.refresh-clicked(); }
+                                mods-clicked => { root.mods-clicked(); }
+                            }
                         }
+                    }
+
+                    if root.sidebar-actions-left && !LayoutState.is-hidden("sidebar-actions"): ZoneItem {
+                        item: "sidebar-actions";
+                        profiles: root.profiles;
+                        selected-index: root.selected-index;
+                        user-name: root.user-name;
+                        user-host: root.server-host-label;
+                        user-initial: root.user-initial;
+                        user-avatar: root.user-avatar;
+                        has-avatar: root.has-avatar;
+                        countdown-text: root.countdown-text;
+                        news: root.news;
+                        can-play: root.can-play;
+                        settings-clicked => { root.settings-clicked(); }
+                        logout-clicked => { root.logout-clicked(); }
                     }
                 }
             }
@@ -1618,9 +1689,8 @@ export component AppWindow inherits Window {
                 padding: 28px;
                 spacing: 12px;
 
-                for item in root.layout-header: ZoneItem {
+                for item in root.layout-header-visible: ZoneItem {
                     item: item;
-                    visible: !LayoutState.is-hidden(item);
                     profiles: root.profiles;
                     selected-index: root.selected-index;
                     user-name: root.user-name;
@@ -1721,10 +1791,8 @@ export component AppWindow inherits Window {
                 VerticalLayout {
                     vertical-stretch: 1;
                     spacing: 12px;
-                    for item in root.layout-content-top: ZoneItem {
+                    for item in root.layout-content-top-visible: ZoneItem {
                         item: item;
-                        visible: !LayoutState.is-hidden(item);
-                        vertical-stretch: item == "news" ? 1 : 0;
                         profiles: root.profiles;
                         selected-index: root.selected-index;
                         user-name: root.user-name;
@@ -1798,9 +1866,8 @@ export component AppWindow inherits Window {
 
                 Rectangle { height: 2px; }
 
-                for item in root.layout-content-bottom: ZoneItem {
+                for item in root.layout-content-bottom-visible: ZoneItem {
                     item: item;
-                    visible: !LayoutState.is-hidden(item);
                         profiles: root.profiles;
                         selected-index: root.selected-index;
                         user-name: root.user-name;
@@ -1818,9 +1885,8 @@ export component AppWindow inherits Window {
                         refresh-clicked => { root.refresh-clicked(); }
                         mods-clicked => { root.mods-clicked(); }
                 }
-                for item in root.layout-footer: ZoneItem {
+                for item in root.layout-footer-visible: ZoneItem {
                     item: item;
-                    visible: !LayoutState.is-hidden(item);
                         profiles: root.profiles;
                         selected-index: root.selected-index;
                         user-name: root.user-name;
@@ -1840,7 +1906,7 @@ export component AppWindow inherits Window {
                 }
             }
 
-            if root.layout-sidebar-right.length > 0: Rectangle {
+            if root.sidebar-right-has-visible: Rectangle {
                 width: root.layout-sidebar-right-width * 1px;
                 background: Theme.mode == "liquid-glass" ? Theme.glass-tint : (Theme.mode == "material3" ? Theme.surface-low : Theme.background-alt.with-alpha(0.95));
                 border-width: 0px;
@@ -1848,10 +1914,34 @@ export component AppWindow inherits Window {
                 VerticalLayout {
                     padding: 20px;
                     spacing: 14px;
-                    for item in root.layout-sidebar-right: ZoneItem {
-                        item: item;
-                        visible: !LayoutState.is-hidden(item);
-                        vertical-stretch: item == "profiles" ? 1 : 0;
+                    ScrollView {
+                        vertical-stretch: 1;
+                        VerticalLayout {
+                            spacing: 14px;
+                            for item in root.layout-sidebar-right-visible: ZoneItem {
+                                item: item;
+                                profiles: root.profiles;
+                                selected-index: root.selected-index;
+                                user-name: root.user-name;
+                                user-host: root.server-host-label;
+                                user-initial: root.user-initial;
+                                user-avatar: root.user-avatar;
+                                has-avatar: root.has-avatar;
+                                countdown-text: root.countdown-text;
+                                news: root.news;
+                                can-play: root.can-play;
+                                profile-clicked(id) => { root.profile-clicked(id); }
+                                settings-clicked => { root.settings-clicked(); }
+                                logout-clicked => { root.logout-clicked(); }
+                                play-clicked => { root.play-clicked(); }
+                                refresh-clicked => { root.refresh-clicked(); }
+                                mods-clicked => { root.mods-clicked(); }
+                            }
+                        }
+                    }
+
+                    if root.sidebar-actions-right && !LayoutState.is-hidden("sidebar-actions"): ZoneItem {
+                        item: "sidebar-actions";
                         profiles: root.profiles;
                         selected-index: root.selected-index;
                         user-name: root.user-name;
@@ -1862,12 +1952,8 @@ export component AppWindow inherits Window {
                         countdown-text: root.countdown-text;
                         news: root.news;
                         can-play: root.can-play;
-                        profile-clicked(id) => { root.profile-clicked(id); }
                         settings-clicked => { root.settings-clicked(); }
                         logout-clicked => { root.logout-clicked(); }
-                        play-clicked => { root.play-clicked(); }
-                        refresh-clicked => { root.refresh-clicked(); }
-                        mods-clicked => { root.mods-clicked(); }
                     }
                 }
             }

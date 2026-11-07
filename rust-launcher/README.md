@@ -122,6 +122,7 @@ rustup component add rustfmt clippy
 ```powershell
 cd rust-launcher
 cargo run                 # debug
+cargo run -- --offline    # cached profiles, no backend
 cargo build --release
 cargo test
 cargo clippy --all-targets -- -D warnings
@@ -284,13 +285,20 @@ six zones: `sidebarLeft`, `sidebarRight`, `header`, `contentTop`,
 the header because the title bar owns its dropdown. Settings → «Layout» shows
 each zone and supports drag-and-drop between zones and onto a specific row
 (`DragArea`/`DropArea`, payload prepared from the hovered row), with ←/↑/↓/→
-buttons as a fallback. Blocks can be hidden without losing their position.
-Sidebar widths are clamped to 240–420 px. Named profiles are stored in
-`settings.layouts`, the active one in `settings.layout` /
-`settings.layoutProfile`. Every change is normalised (unknown/duplicate items
-removed, missing blocks returned to their defaults), saved immediately and
-applied without a restart. There is no free canvas, which keeps the 1080×620
-minimum size and the existing scrolling/clicks intact.
+buttons as a fallback. Hidden blocks are removed from the main-screen layout
+(not just made invisible), so they do not reserve height or spacing; their
+configured height is kept and restored when the block is shown again. Block
+heights are editable with −/+ in the editor, clamped to per-block min/max
+values (for example 96–240 px for the countdown and 120–520 px for profiles).
+Sidebar widths are clamped to 240–420 px. `sidebar-actions` is pinned to the
+bottom of its sidebar: the other blocks live in a ScrollView above it, so the
+buttons stay reachable when heights grow or blocks are hidden. An empty right
+sidebar disappears completely. Named profiles are stored in `settings.layouts`,
+the active one in `settings.layout` / `settings.layoutProfile`. Every change is
+normalised (unknown/duplicate items removed, out-of-range heights clamped,
+missing blocks returned to their defaults), saved immediately and applied
+without a restart. There is no free canvas, which keeps the 1080×620 minimum
+size and the existing scrolling/clicks intact.
 
 ## Backend notes
 

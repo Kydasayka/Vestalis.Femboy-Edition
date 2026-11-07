@@ -5,6 +5,8 @@
 //! panels. The server selector lives in the title bar and is pinned to the
 //! header zone.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 pub const ITEMS: [&str; 7] = [
@@ -31,6 +33,16 @@ pub const WIDTH_MAX: u32 = 420;
 pub const WIDTH_DEFAULT_LEFT: u32 = 316;
 pub const WIDTH_DEFAULT_RIGHT: u32 = 300;
 
+/// Default block height, minimum and maximum in logical pixels.
+pub const BLOCK_HEIGHTS: [(&str, u32, u32, u32); 6] = [
+    ("user", 64, 56, 96),
+    ("profiles", 200, 120, 520),
+    ("countdown", 124, 96, 240),
+    ("sidebar-actions", 44, 40, 72),
+    ("news", 220, 120, 600),
+    ("main-actions", 52, 44, 80),
+];
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct LayoutConfig {
@@ -45,6 +57,8 @@ pub struct LayoutConfig {
     pub hidden: Vec<String>,
     pub sidebar_left_width: u32,
     pub sidebar_right_width: u32,
+    /// Per-block height overrides. Missing entries use the defaults below.
+    pub block_heights: BTreeMap<String, u32>,
 }
 
 impl Default for LayoutConfig {
@@ -64,6 +78,7 @@ impl Default for LayoutConfig {
             hidden: Vec::new(),
             sidebar_left_width: WIDTH_DEFAULT_LEFT,
             sidebar_right_width: WIDTH_DEFAULT_RIGHT,
+            block_heights: BTreeMap::new(),
         }
     }
 }
@@ -148,6 +163,41 @@ impl LayoutConfig {
 
         self.sidebar_left_width = self.sidebar_left_width.clamp(WIDTH_MIN, WIDTH_MAX);
         self.sidebar_right_width = self.sidebar_right_width.clamp(WIDTH_MIN, WIDTH_MAX);
+
+        self.block_heights
+            .retain(|item, _| ITEMS.contains(&item.as_str()) && item != "server");
+        for (item, default, min, max) in BLOCK_HEIGHTS {
+            let height = self
+                .block_heights
+                .get(item)
+                .copied()
+                .unwrap_or(default)
+                .clamp(min, max);
+            self.block_heights.insert(item.to_string(), height);
+        }
+    }
+
+    pub fn block_height(&self, item: &str) -> u32 {
+        BLOCK_HEIGHTS
+            .iter()
+            .find(|(name, _, _, _)| *name == item)
+            .map(|(_, default, min, max)| {
+                self.block_heights
+                    .get(item)
+                    .copied()
+                    .unwrap_or(*default)
+                    .clamp(*min, *max)
+            })
+            .unwrap_or(0)
+    }
+
+    pub fn set_block_height(&mut self, item: &str, height: u32) {
+        let Some((_, _, min, max)) = BLOCK_HEIGHTS.iter().find(|(name, _, _, _)| *name == item)
+        else {
+            return;
+        };
+        self.block_heights
+            .insert(item.to_string(), height.clamp(*min, *max));
     }
 
     /// Moves an item into `zone`, optionally before another item. Used by
@@ -329,6 +379,42 @@ mod tests {
 
         layout.set_hidden("countdown", false);
         assert!(!layout.is_hidden("countdown"));
+    }
+
+    #[test]
+    fn block_heights_are_clamped_and_defaulted() {
+        let mut layout = LayoutConfig::default();
+        layout.normalize();
+        assert_eq!(layout.block_height("countdown"), 124);
+        assert_eq!(layout.block_height("profiles"), 200);
+        assert_eq!(layout.block_height("server"), 0);
+
+        layout.set_block_height("countdown", 10);
+        layout.set_block_height("profiles", 10_000);
+        layout.set_block_height("news", 300);
+        layout.normalize();
+
+        assert_eq!(layout.block_height("countdown"), 96);
+        assert_eq!(layout.block_height("profiles"), 520);
+        assert_eq!(layout.block_height("news"), 300);
+
+        layout.block_heights.insert("bogus".into(), 500);
+        layout.normalize();
+        assert!(!layout.block_heights.contains_key("bogus"));
+    }
+
+    #[test]
+    fn hidden_block_keeps_its_size_for_restore() {
+        let mut layout = LayoutConfig::default();
+        layout.set_block_height("countdown", 210);
+        layout.set_hidden("countdown", true);
+        layout.normalize();
+
+        assert!(layout.is_hidden("countdown"));
+        assert_eq!(layout.block_height("countdown"), 210);
+
+        layout.set_hidden("countdown", false);
+        assert_eq!(layout.block_height("countdown"), 210);
     }
 
     #[test]
