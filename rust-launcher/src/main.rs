@@ -1420,6 +1420,9 @@ fn apply_event(
         }
         Event::GameExited { pid } => {
             ui.set_main_status(format!("Игра закрыта (PID {pid})").into());
+            if ui.get_set_hide_on_launch() {
+                window::restore_launcher();
+            }
             let _ = command_tx.send(Command::GameExited(pid));
         }
         Event::Error(message) => {

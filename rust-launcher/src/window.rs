@@ -317,6 +317,15 @@ pub fn minimize_launcher() {
     }
 }
 
+/// Restores a minimized launcher after the game exits.
+pub fn restore_launcher() {
+    if let Some(handle) = find_launcher_window() {
+        unsafe {
+            ShowWindow(handle, 9); // SW_RESTORE
+        }
+    }
+}
+
 pub fn set_rect(window: isize, rect: Rect) {
     unsafe {
         SetWindowPos(

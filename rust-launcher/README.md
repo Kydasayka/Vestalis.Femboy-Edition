@@ -92,7 +92,9 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   C# launcher (`ApiProcedures.UpdateDiscordRpcState`): states «Сидит в
   лаунчере» / «Играет в "profile"», details «Продам гараж…», logo2/logo. The
   game process is awaited in a background thread; when it exits, the status
-  returns to «Игра закрыта» and Discord presence switches back to the launcher.
+  returns to «Игра закрыта», Discord presence switches back to the launcher and
+  a minimized launcher is restored when «Скрывать лаунчер при запуске игры» is
+  enabled.
 - Native taskbar/Explorer icon embedded into the executable, plus `WM_SETICON`
   and the same AppUserModelID as the C# launcher. The icon is generated from a
   hand-written vector cat face on a rounded gradient tile (no inner frame, no

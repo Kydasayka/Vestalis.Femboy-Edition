@@ -434,7 +434,9 @@ cargo clippy --all-targets -- -D warnings
   все скачанные (`SetAllMods` через `set_mod_enabled`).
 - Завершение игры: `launch::spawn` возвращает `Child`; воркер держит поток с
   `child.wait()` и шлёт `Event::GameExited`, main пересылает
-  `Command::GameExited(pid)` для сброса Discord presence и статуса.
+  `Command::GameExited(pid)` для сброса Discord presence и статуса и
+  восстанавливает свёрнутое окно (`window::restore_launcher`), если включено
+  «Скрывать лаунчер при запуске игры».
 - Отмена запуска: `Worker.launch_cancel: Arc<AtomicBool>`, `Command::CancelLaunch`;
   `files::sync_profile` проверяет флаг между файлами и внутри потока загрузки,
   удаляет `.tmp`, а `play_inner` не спавнит игру после отмены. Не забывать
