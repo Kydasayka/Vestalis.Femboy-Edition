@@ -558,6 +558,26 @@ mod tests {
         root
     }
 
+    #[tokio::test]
+    async fn cancelled_sync_stops_before_downloads() {
+        let info = ProfileInfo {
+            java_path: String::new(),
+            relative_path: String::new(),
+            arguments: String::new(),
+            files: Vec::new(),
+            white_list_files: Vec::new(),
+        };
+        let backend = Backend::new("https://example.invalid/");
+        let cancel = Arc::new(AtomicBool::new(true));
+        let progress: ProgressFn = Arc::new(|_| {});
+
+        let error = sync_profile(&backend, &info, &temp_root("cancel"), progress, cancel)
+            .await
+            .expect_err("cancelled sync must fail");
+
+        assert!(error.to_string().contains("Отменено"));
+    }
+
     #[test]
     fn changed_manifest_size_forces_download_without_hashing() {
         let root = temp_root("size");
