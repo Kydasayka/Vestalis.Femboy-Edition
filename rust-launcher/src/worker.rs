@@ -561,6 +561,8 @@ impl Worker {
 
     fn logout(&mut self) {
         self.stop_hub();
+        self.profile_filter.clear();
+        self.mods_filter.clear();
         self.state.user = None;
         self.state.saved_login = None;
         self.state.last_profile = None;
@@ -589,6 +591,8 @@ impl Worker {
         // Auth is bound to a backend, so switching drops the current session.
         // The saved credentials are kept so the launcher can sign in again.
         self.stop_hub();
+        self.profile_filter.clear();
+        self.mods_filter.clear();
         let saved_login = self.state.saved_login.clone();
         self.state.server_host = (*host).to_string();
         self.state.user = None;

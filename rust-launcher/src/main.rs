@@ -1385,6 +1385,8 @@ fn apply_event(ui: &AppWindow, event: Event) {
         }
         Event::LoggedOut => {
             ui.set_screen(0);
+            ui.global::<ProfileFilter>().set_text("".into());
+            ui.set_mods_filter("".into());
             ui.set_user_name("".into());
             ui.set_user_initial("?".into());
             ui.set_has_avatar(false);
