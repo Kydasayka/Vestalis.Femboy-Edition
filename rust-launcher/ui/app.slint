@@ -79,6 +79,7 @@ export global Texts {
 
     in-out property <string> login-username: "Логин";
     in-out property <string> login-password: "Пароль";
+    in-out property <string> login-show-password: "Показать пароль";
     in-out property <string> login-hwid: "Отправлять HWID";
     in-out property <string> login-2fa: "Код двухфакторной аутентификации";
     in-out property <string> login-2fa-submit: "Подтвердить код";
@@ -1397,11 +1398,13 @@ export component AppWindow inherits Window {
     in-out property <bool> set-auto-login: true;
 
     in-out property <bool> set-send-hwid: true;
+    in-out property <bool> show-password: false;
     in-out property <bool> set-sounds: true;
     in-out property <bool> set-hide-on-launch: true;
     in-out property <bool> set-discord-rpc: true;
     in-out property <int> max-ram: 16384;
     in-out property <string> settings-status: "";
+    in-out property <bool> settings-status-error: false;
 
 
     callback login-clicked();
@@ -1559,8 +1562,23 @@ export component AppWindow inherits Window {
                         TextField {
                             text <=> root.password;
                             placeholder: Texts.login-password;
-                            password: true;
+                            password: !root.show-password;
                             accepted => { root.login-clicked(); }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 10px;
+                            alignment: start;
+                            Toggle {
+                                checked: root.show-password;
+                                toggled(v) => { root.show-password = v; }
+                            }
+                            Text {
+                                text: Texts.login-show-password;
+                                color: Theme.text-muted;
+                                font-size: 14px;
+                                vertical-alignment: center;
+                            }
                         }
 
                         HorizontalLayout {
@@ -2066,7 +2084,7 @@ export component AppWindow inherits Window {
                 Rectangle { horizontal-stretch: 1; }
                 Text {
                     text: root.settings-status;
-                    color: Theme.success;
+                    color: root.settings-status-error ? Theme.danger : Theme.success;
                     font-size: 14px;
                     vertical-alignment: center;
                 }

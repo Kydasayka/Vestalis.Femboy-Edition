@@ -50,6 +50,7 @@ pub const TEXT_KEYS: &[&str] = &[
     "settings.back",
     "login.username",
     "login.password",
+    "login.show_password",
     "login.hwid",
     "login.2fa",
     "login.2fa_submit",

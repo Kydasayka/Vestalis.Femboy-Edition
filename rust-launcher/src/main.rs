@@ -1435,7 +1435,10 @@ fn apply_event(
             apply_settings(ui, &settings, max_ram);
             apply_theme_by_name(ui, &settings.theme);
         }
-        Event::SettingsStatus(status) => ui.set_settings_status(status.into()),
+        Event::SettingsStatus(status) => {
+            ui.set_settings_status(status.into());
+            ui.set_settings_status_error(false);
+        }
         Event::MainStatus(status) => ui.set_main_status(status.into()),
         Event::GameStarted { pid, hide } => {
             ui.set_main_status(format!("Игра запущена (PID {pid})").into());
@@ -1456,6 +1459,7 @@ fn apply_event(
                 // Errors raised while Settings is open (maintenance actions,
                 // file checks) must be visible there too.
                 ui.set_settings_status(message.clone().into());
+                ui.set_settings_status_error(true);
             }
             ui.set_error_text(message.into());
         }
@@ -1783,6 +1787,7 @@ fn apply_texts(ui: &AppWindow, item: &ThemeItem) {
 
     set!("login.username", set_login_username);
     set!("login.password", set_login_password);
+    set!("login.show_password", set_login_show_password);
     set!("login.hwid", set_login_hwid);
     set!("login.2fa", set_login_2fa);
     set!("login.2fa_submit", set_login_2fa_submit);

@@ -38,6 +38,12 @@ pub fn get(lang: &str, key: &str) -> &'static str {
         "login.offline" => pick(lang, "Оффлайн-режим", "Offline mode", "Офлайн-режим"),
         "login.username" => pick(lang, "Логин", "Username", "Логін"),
         "login.password" => pick(lang, "Пароль", "Password", "Пароль"),
+        "login.show_password" => pick(
+            lang,
+            "Показать пароль",
+            "Show password",
+            "Показати пароль",
+        ),
         "login.hwid" => pick(lang, "Отправлять HWID", "Send HWID", "Надсилати HWID"),
         "login.2fa" => pick(
             lang,
