@@ -1,6 +1,6 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -130,7 +130,7 @@ pub async fn download_optional(
     let mut last_error = None;
 
     for attempt in 1..=3 {
-        match download_once(backend, hash, target, &state, &progress, name).await {
+        match download_once(backend, hash, target, &state, &progress, name, None).await {
             Ok(()) => {
                 state.done.store(1, Ordering::Relaxed);
                 state.emit(&progress, name, true);
@@ -156,6 +156,7 @@ pub async fn sync_profile(
     info: &ProfileInfo,
     root: &Path,
     progress: ProgressFn,
+    cancel: Arc<AtomicBool>,
 ) -> Result<()> {
     let total = info.files.len();
     let state = Arc::new(ProgressState::new(total, "Этап 1/3 · Проверка файлов"));
@@ -171,8 +172,13 @@ pub async fn sync_profile(
             let progress = progress.clone();
             let scanned = scanned.clone();
             let white_list = candidate_whitelist.clone();
+            let cancel = cancel.clone();
 
             async move {
+                if cancel.load(Ordering::Relaxed) {
+                    return None;
+                }
+
                 let task = tokio::task::spawn_blocking(move || {
                     validate_one(&root, &file, &cache, &white_list)
                 })
@@ -207,6 +213,10 @@ pub async fn sync_profile(
 
     info!(total, to_update = tasks.len(), "profile files validated");
 
+    if cancel.load(Ordering::Relaxed) {
+        return Err(anyhow!("Отменено"));
+    }
+
     if tasks.is_empty() {
         state.done.store(total, Ordering::Relaxed);
         state.emit(&progress, "Этап 2/3 · Файлы актуальны", true);
@@ -230,10 +240,15 @@ pub async fn sync_profile(
             let state = download_state.clone();
             let progress = progress.clone();
             let cache = cache.clone();
+            let cancel = cancel.clone();
 
             async move {
+                if cancel.load(Ordering::Relaxed) {
+                    return Err(anyhow!("Отменено"));
+                }
                 let name = task.file.name.clone();
-                let result = download_one(&backend, &task, &state, &progress, &cache).await;
+                let result =
+                    download_one(&backend, &task, &state, &progress, &cache, Some(&cancel)).await;
                 if result.is_ok() {
                     state.done.fetch_add(1, Ordering::Relaxed);
                     state.emit(&progress, &name, true);
@@ -386,6 +401,7 @@ async fn download_one(
     state: &Arc<ProgressState>,
     progress: &ProgressFn,
     cache: &Arc<Mutex<ValidationCache>>,
+    cancel: Option<&AtomicBool>,
 ) -> Result<()> {
     let hash = task
         .file
@@ -401,6 +417,12 @@ async fn download_one(
     let mut last_error = None;
 
     for attempt in 1..=3 {
+        if cancel
+            .map(|flag| flag.load(Ordering::Relaxed))
+            .unwrap_or(false)
+        {
+            return Err(anyhow!("Отменено"));
+        }
         match download_once(
             backend,
             hash,
@@ -408,6 +430,7 @@ async fn download_one(
             state,
             progress,
             &task.file.name,
+            cancel,
         )
         .await
         {
@@ -459,6 +482,7 @@ async fn download_once(
     state: &Arc<ProgressState>,
     progress: &ProgressFn,
     current: &str,
+    cancel: Option<&AtomicBool>,
 ) -> Result<()> {
     let url = backend.file_url(hash);
     let request = backend.client().get(&url).timeout(Duration::from_secs(600));
@@ -485,6 +509,13 @@ async fn download_once(
     let mut stream = response.bytes_stream();
 
     while let Some(chunk) = stream.next().await {
+        if cancel
+            .map(|flag| flag.load(Ordering::Relaxed))
+            .unwrap_or(false)
+        {
+            let _ = tokio::fs::remove_file(&temporary).await;
+            return Err(anyhow!("Отменено"));
+        }
         let chunk = chunk?;
         file.write_all(&chunk).await?;
         state.bytes.fetch_add(chunk.len() as u64, Ordering::Relaxed);

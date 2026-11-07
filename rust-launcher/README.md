@@ -29,7 +29,8 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
 - Offline mode using the snapshots in `%APPDATA%\Vestalis\offline-mode`
   (`profiles.json` + `<profile>/profileInfo.json`).
 - File validation (SHA-1, size, mtime cache) and parallel downloads with
-  progress, speed, retries and atomic replace. The manifest `size` is checked
+  progress, speed, ETA, retries, atomic replace and a «Отмена» button that
+  interrupts validation/downloads before the game is spawned. The manifest `size` is checked
   before the hash, so a server-side replacement is picked up even if the hash
   is missing; the SHA-1 cache is only trusted while both the local file and
   the expected manifest hash are unchanged.

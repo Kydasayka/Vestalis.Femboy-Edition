@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -44,6 +45,7 @@ pub enum Command {
     OpenLogsFolder,
     ClearValidationCache,
     CheckFiles,
+    CancelLaunch,
     SaveTheme(String),
     MoveLayoutItem {
         item: String,
@@ -189,6 +191,7 @@ pub struct Worker {
     pending_login: (String, String),
     discord: Option<DiscordRpc>,
     profiles_signature: String,
+    launch_cancel: Arc<AtomicBool>,
     hub: Option<tokio::task::JoinHandle<()>>,
     hub_tx: Option<UnboundedSender<HubEvent>>,
 }
@@ -210,6 +213,7 @@ impl Worker {
             pending_login: (String::new(), String::new()),
             discord: None,
             profiles_signature: String::new(),
+            launch_cancel: Arc::new(AtomicBool::new(false)),
             hub: None,
             hub_tx: None,
         }
@@ -306,6 +310,10 @@ impl Worker {
                         Some(Command::OpenLogsFolder) => self.open_logs_folder(),
                         Some(Command::ClearValidationCache) => self.clear_validation_cache(),
                         Some(Command::CheckFiles) => self.check_files().await,
+                        Some(Command::CancelLaunch) => {
+                            self.launch_cancel.store(true, Ordering::Relaxed);
+                            self.emit(Event::SettingsStatus("Отмена запуска…".into()));
+                        }
                         Some(Command::SaveTheme(name)) => self.save_theme(name),
                         Some(Command::MoveLayoutItem { item, direction }) => {
                             self.move_layout_item(&item, &direction)
@@ -909,6 +917,7 @@ impl Worker {
         }
 
         self.busy = true;
+        self.launch_cancel.store(false, Ordering::Relaxed);
         self.emit(Event::CanPlay(false));
 
         let result = std::panic::AssertUnwindSafe(self.play_inner())
@@ -1029,7 +1038,15 @@ impl Worker {
         let install_dir = settings.install_path();
         let progress = progress_callback(self.tx.clone());
 
-        if let Err(error) = sync_profile(&self.backend, &info, &install_dir, progress).await {
+        if let Err(error) = sync_profile(
+            &self.backend,
+            &info,
+            &install_dir,
+            progress,
+            self.launch_cancel.clone(),
+        )
+        .await
+        {
             self.emit(Event::Progress {
                 visible: false,
                 value: 0.0,
@@ -1037,9 +1054,25 @@ impl Worker {
                 text: String::new(),
                 speed: String::new(),
             });
-            self.emit(Event::Error(format!(
-                "Ошибка синхронизации файлов: {error}"
-            )));
+            if self.launch_cancel.load(Ordering::Relaxed) {
+                self.emit(Event::MainStatus("Запуск отменён".into()));
+            } else {
+                self.emit(Event::Error(format!(
+                    "Ошибка синхронизации файлов: {error}"
+                )));
+            }
+            return;
+        }
+
+        if self.launch_cancel.load(Ordering::Relaxed) {
+            self.emit(Event::Progress {
+                visible: false,
+                value: 0.0,
+                title: String::new(),
+                text: String::new(),
+                speed: String::new(),
+            });
+            self.emit(Event::MainStatus("Запуск отменён".into()));
             return;
         }
 
@@ -1561,6 +1594,7 @@ impl Worker {
                 &info,
                 &root,
                 progress_callback(self.tx.clone()),
+                Arc::new(AtomicBool::new(false)),
             )
             .await
         }

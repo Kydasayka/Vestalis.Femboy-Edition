@@ -523,6 +523,18 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         }
     });
 
+    ui.on_cancel_launch_clicked({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+                ui.set_main_status("Отмена запуска…".into());
+            }
+            let _ = tx.send(Command::CancelLaunch);
+        }
+    });
+
     ui.on_mods_clicked({
         let tx = tx.clone();
         let ui = ui.as_weak();

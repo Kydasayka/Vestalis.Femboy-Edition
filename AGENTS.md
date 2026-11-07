@@ -424,6 +424,10 @@ cargo clippy --all-targets -- -D warnings
 - Обслуживание в настройках: открыть папку установки/логов, «Проверить файлы»
   (тот же `sync_profile`, без запуска игры), очистка SHA-1 кэша, диагностика.
   Discord RPC отключается настройкой `discordRpc`.
+- Отмена запуска: `Worker.launch_cancel: Arc<AtomicBool>`, `Command::CancelLaunch`;
+  `files::sync_profile` проверяет флаг между файлами и внутри потока загрузки,
+  удаляет `.tmp`, а `play_inner` не спавнит игру после отмены. Не забывать
+  сбрасывать флаг в начале `play`.
 - `state.json`: атомарная запись tmp→rename + `.bak`; при частично битом JSON
   `recover_state`/`merge_settings` сохраняют валидные поля. Не сбрасывать весь
   файл на одной ошибке типа.
