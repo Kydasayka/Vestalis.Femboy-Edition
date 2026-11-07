@@ -572,6 +572,24 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         }
     });
 
+    ui.on_mods_filter_changed({
+        let tx = tx.clone();
+        move |filter| {
+            let _ = tx.send(Command::SetModsFilter(filter.to_string()));
+        }
+    });
+
+    ui.on_mods_open_folder_clicked({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+            }
+            let _ = tx.send(Command::OpenModsFolder);
+        }
+    });
+
     ui.on_mod_download_clicked({
         let tx = tx.clone();
         let ui = ui.as_weak();
@@ -660,6 +678,8 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
                 xms: ui.get_set_xms() as u32,
                 xmx: ui.get_set_xmx() as u32,
                 custom_jvm: ui.get_set_custom_jvm().to_string(),
+                custom_java: ui.get_set_custom_java().to_string(),
+                auto_login: ui.get_set_auto_login(),
                 send_hwid: ui.get_set_send_hwid(),
                 sounds: ui.get_set_sounds(),
                 hide_on_launch: ui.get_set_hide_on_launch(),
@@ -1704,6 +1724,8 @@ fn apply_texts(ui: &AppWindow, item: &ThemeItem) {
     set!("settings.game.title", set_game_title);
     set!("settings.game.fullscreen", set_game_fullscreen);
     set!("settings.game.resolution", set_game_resolution);
+    set!("settings.game.java", set_game_java);
+    set!("settings.interface.auto_login", set_interface_auto_login);
     set!("settings.interface.title", set_interface_title);
     set!("settings.interface.sounds", set_interface_sounds);
     set!("settings.interface.hwid", set_interface_hwid);
@@ -1763,6 +1785,8 @@ fn apply_texts(ui: &AppWindow, item: &ThemeItem) {
     set!("mods.refresh", set_mods_refresh);
     set!("mods.desc", set_mods_desc);
     set!("mods.empty", set_mods_empty);
+    set!("mods.search", set_mods_search);
+    set!("mods.folder", set_mods_folder);
 }
 
 fn apply_theme(ui: &AppWindow, theme: &crate::theme::Theme) {
@@ -1950,6 +1974,8 @@ fn apply_settings(ui: &AppWindow, settings: &Settings, max_ram: u64) {
     ui.set_set_height_text(settings.game_height.to_string().into());
     ui.set_set_fullscreen(settings.fullscreen);
     ui.set_set_custom_jvm(settings.custom_jvm.clone().into());
+    ui.set_set_custom_java(settings.custom_java.clone().into());
+    ui.set_set_auto_login(settings.auto_login);
     ui.set_set_send_hwid(settings.send_hwid);
     ui.set_set_sounds(settings.sounds);
     ui.set_set_hide_on_launch(settings.hide_on_launch);

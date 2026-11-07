@@ -23,8 +23,13 @@ pub fn build_spec(
 ) -> Result<LaunchSpec> {
     let root = install_dir.to_string_lossy().to_string();
 
-    let java = info.java_path.replace("{localPath}", &root);
-    let java = PathBuf::from(java.replace('/', "\\"));
+    let manifest_java = info.java_path.replace("{localPath}", &root);
+    let custom_java = settings.custom_java.trim();
+    let java = if custom_java.is_empty() {
+        PathBuf::from(manifest_java.replace('/', "\\"))
+    } else {
+        PathBuf::from(custom_java)
+    };
 
     if !java.is_file() {
         return Err(anyhow!(
@@ -208,6 +213,31 @@ mod tests {
         let result = configure_heap("-Xmx 4G -jar client.jar", "", 2048, 8192);
         assert!(result.contains("-Xms2048M -Xmx8192M -jar client.jar"));
         assert!(!result.contains(" 4G"));
+    }
+
+    #[test]
+    fn custom_java_overrides_manifest_path() {
+        let root = std::env::temp_dir().join(format!("vestalis-java-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let java = root.join("javaw.exe");
+        std::fs::write(&java, b"stub").unwrap();
+
+        let info = ProfileInfo {
+            java_path: "{localPath}/missing/javaw.exe".into(),
+            relative_path: String::new(),
+            arguments: "-jar client.jar".into(),
+            files: Vec::new(),
+            white_list_files: Vec::new(),
+        };
+        let settings = Settings {
+            custom_java: java.to_string_lossy().into_owned(),
+            ..Settings::default()
+        };
+
+        let spec = build_spec(&info, &root, &settings, false, "", 1024, 2048).unwrap();
+        assert_eq!(spec.java, java);
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

@@ -75,6 +75,8 @@ pub const TEXT_KEYS: &[&str] = &[
     "settings.game.title",
     "settings.game.fullscreen",
     "settings.game.resolution",
+    "settings.game.java",
+    "settings.interface.auto_login",
     "settings.interface.title",
     "settings.interface.sounds",
     "settings.interface.hwid",
@@ -130,6 +132,8 @@ pub const TEXT_KEYS: &[&str] = &[
     "mods.refresh",
     "mods.desc",
     "mods.empty",
+    "mods.search",
+    "mods.folder",
 ];
 
 /// sRGB triplet, 0..=255 per channel.

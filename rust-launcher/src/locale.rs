@@ -98,6 +98,18 @@ pub fn get(lang: &str, key: &str) -> &'static str {
             "Повноекранний режим",
         ),
         "settings.game.resolution" => pick(lang, "Разрешение игры", "Game resolution", "Роздільність гри"),
+        "settings.game.java" => pick(
+            lang,
+            "Java (пусто — из манифеста профиля)",
+            "Java (empty — from the profile manifest)",
+            "Java (порожньо — з маніфесту профілю)",
+        ),
+        "settings.interface.auto_login" => pick(
+            lang,
+            "Автовход с сохранёнными данными",
+            "Sign in automatically with saved credentials",
+            "Автовхід із збереженими даними",
+        ),
         "settings.interface.title" => pick(lang, "Интерфейс", "Interface", "Інтерфейс"),
         "settings.interface.sounds" => pick(
             lang,
@@ -254,6 +266,8 @@ pub fn get(lang: &str, key: &str) -> &'static str {
             "This profile has no optional mods.",
             "Для цього профілю немає опціональних модів.",
         ),
+        "mods.search" => pick(lang, "Поиск модов", "Search mods", "Пошук модів"),
+        "mods.folder" => pick(lang, "Папка модов", "Mods folder", "Папка модів"),
         "buttons.cancel" => pick(lang, "Отмена", "Cancel", "Скасувати"),
         "settings.interface.discord" => pick(
             lang,

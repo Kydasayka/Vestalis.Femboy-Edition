@@ -65,6 +65,10 @@ pub struct Settings {
     pub xms: u32,
     pub xmx: u32,
     pub custom_jvm: String,
+    /// Optional explicit Java executable. Empty means "use the manifest path".
+    pub custom_java: String,
+    /// Sign in automatically with the saved credentials on startup.
+    pub auto_login: bool,
     pub send_hwid: bool,
     pub sounds: bool,
     /// Minimize the launcher as soon as the game process starts.
@@ -109,6 +113,8 @@ impl Default for Settings {
             xms: 2048,
             xmx: 8192,
             custom_jvm: String::new(),
+            custom_java: String::new(),
+            auto_login: true,
             send_hwid: true,
             sounds: true,
             hide_on_launch: true,

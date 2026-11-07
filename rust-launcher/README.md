@@ -39,8 +39,8 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   agent in offline mode.
 - Settings: install folder, RAM, window size/fullscreen, JVM args, HWID
   sending, interface sounds, Discord Rich Presence toggle, language (RU/EN/UA),
-  background effect, Liquid Glass opacity/blur imitation and manual accent for
-  Material 3.
+  background effect, Liquid Glass opacity/blur imitation, manual accent for
+  Material 3, an optional explicit Java executable and an auto-login toggle.
 - Window size/position is remembered in `window.json` (written periodically and
   on close, clamped to the work area and the 1080×620 minimum); «Сбросить окно»
   centers it again.
@@ -48,7 +48,8 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   the selected profile's files without launching, clear the SHA-1 validation
   cache and export a diagnostics ZIP.
 - Mods page: optional mods from `/api/v1/profiles/{name}/mods/optionals`,
-  enable/disable by renaming `.jar` ↔ `.jar.disabled`. Mods that were never
+  search by name/description, open the mods folder, and enable/disable by
+  renaming `.jar` ↔ `.jar.disabled`. Mods that were never
   downloaded get a «Скачать» button: the file hash is resolved from the profile
   manifest, the existing downloader shows byte progress, retries and stores the
   new file as `.jar.disabled`. The list updates without a game launch or a

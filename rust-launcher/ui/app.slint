@@ -111,6 +111,8 @@ export global Texts {
     in-out property <string> game-title: "Игра";
     in-out property <string> game-fullscreen: "Полноэкранный режим";
     in-out property <string> game-resolution: "Разрешение игры";
+    in-out property <string> game-java: "Java (пусто — из манифеста профиля)";
+    in-out property <string> interface-auto-login: "Автовход с сохранёнными данными";
     in-out property <string> interface-title: "Интерфейс";
     in-out property <string> interface-sounds: "Звуки интерфейса";
     in-out property <string> interface-hwid: "Отправлять реальный HWID";
@@ -167,6 +169,8 @@ export global Texts {
     in-out property <string> mods-refresh: "Обновить";
     in-out property <string> mods-desc: "Опциональные моды. Выключенные файлы хранятся с суффиксом .disabled.";
     in-out property <string> mods-empty: "Для этого профиля нет опциональных модов.";
+    in-out property <string> mods-search: "Поиск модов";
+    in-out property <string> mods-folder: "Папка модов";
 }
 
 // Visibility helpers for the layout editor. Hidden flags are plain properties
@@ -446,6 +450,7 @@ component TextField inherits Rectangle {
     in property <bool> password: false;
     in property <bool> numeric: false;
     callback accepted();
+    callback edited(string);
 
     height: 46px;
     border-radius: Theme.radius-md;
@@ -466,6 +471,7 @@ component TextField inherits Rectangle {
         input-type: root.password ? InputType.password : (root.numeric ? InputType.number : InputType.text);
         selection-background-color: Theme.accent;
         accepted => { root.accepted(); }
+        edited => { root.edited(input.text); }
 
         // Slint's built-in shortcut lookup can miss Ctrl+V on a non-English
         // layout; accept both the Latin and Cyrillic V keys.
@@ -1337,6 +1343,7 @@ export component AppWindow inherits Window {
     in-out property <[ModItem]> mods: [];
     in-out property <int> mods-enabled: 0;
     in-out property <int> mods-total: 0;
+    in-out property <string> mods-filter: "";
     in-out property <bool> can-play: false;
 
     in-out property <bool> progress-visible: false;
@@ -1358,6 +1365,8 @@ export component AppWindow inherits Window {
     in-out property <string> set-height-text: "600";
     in-out property <bool> set-fullscreen: false;
     in-out property <string> set-custom-jvm: "";
+    in-out property <string> set-custom-java: "";
+    in-out property <bool> set-auto-login: true;
 
     in-out property <bool> set-send-hwid: true;
     in-out property <bool> set-sounds: true;
@@ -1381,6 +1390,8 @@ export component AppWindow inherits Window {
     callback mods-refresh-clicked();
     callback mod-toggled(int, bool);
     callback mod-download-clicked(int);
+    callback mods-filter-changed(string);
+    callback mods-open-folder-clicked();
     callback server-clicked(int);
     callback profile-clicked(int);
     callback save-settings-clicked();
@@ -2194,6 +2205,12 @@ export component AppWindow inherits Window {
                                     TextField { text <=> root.set-height-text; numeric: true; horizontal-stretch: 1; }
                                 }
 
+                                Text { text: Texts.game-java; color: Theme.text-muted; font-size: 13px; wrap: word-wrap; }
+                                TextField {
+                                    text <=> root.set-custom-java;
+                                    placeholder: "C:\\Program Files\\Java\\bin\\javaw.exe";
+                                }
+
                                 HorizontalLayout {
                                     spacing: 10px;
                                     Text {
@@ -2337,6 +2354,14 @@ export component AppWindow inherits Window {
                                     Toggle {
                                         checked: root.set-discord-rpc;
                                         toggled(v) => { root.set-discord-rpc = v; }
+                                    }
+                                }
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Text { text: Texts.interface-auto-login; color: Theme.text-muted; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Toggle {
+                                        checked: root.set-auto-login;
+                                        toggled(v) => { root.set-auto-login = v; }
                                     }
                                 }
                             }
@@ -2844,9 +2869,25 @@ export component AppWindow inherits Window {
                     vertical-alignment: center;
                 }
                 Rectangle { horizontal-stretch: 1; }
+                TextField {
+                    text <=> root.mods-filter;
+                    placeholder: Texts.mods-search;
+                    width: 220px;
+                    height: 38px;
+                    edited(value) => { root.mods-filter-changed(value); }
+                }
+                ActionButton {
+                    label: Texts.mods-folder;
+                    width: 150px;
+                    height: 38px;
+                    icon: ThemeIcons.folder;
+                    has-icon: ThemeIcons.has-folder;
+                    clicked => { root.mods-open-folder-clicked(); }
+                }
                 ActionButton {
                     label: Texts.mods-refresh;
                     width: 130px;
+                    height: 38px;
                     clicked => { root.mods-refresh-clicked(); }
                 }
             }

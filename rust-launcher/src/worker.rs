@@ -82,6 +82,8 @@ pub enum Command {
         enabled: bool,
     },
     DownloadMod(usize),
+    SetModsFilter(String),
+    OpenModsFolder,
     ExportDiagnostics,
     Shutdown,
 }
@@ -185,6 +187,7 @@ pub struct Worker {
     profiles: Vec<Profile>,
     views: Vec<ProfileView>,
     mods: Vec<ModView>,
+    mods_filter: String,
     selected: usize,
     offline: bool,
     busy: bool,
@@ -207,6 +210,7 @@ impl Worker {
             profiles: Vec::new(),
             views: Vec::new(),
             mods: Vec::new(),
+            mods_filter: String::new(),
             selected: 0,
             offline: false,
             busy: false,
@@ -344,6 +348,11 @@ impl Worker {
                         Some(Command::OpenMods) => self.open_mods().await,
                         Some(Command::ToggleMod { id, enabled }) => self.toggle_mod(id, enabled),
                         Some(Command::DownloadMod(id)) => self.download_mod(id).await,
+                        Some(Command::SetModsFilter(filter)) => {
+                            self.mods_filter = filter;
+                            self.emit_mods();
+                        }
+                        Some(Command::OpenModsFolder) => self.open_mods_folder(),
                         Some(Command::ExportDiagnostics) => self.export_diagnostics(),
                         Some(Command::Shutdown) | None => break,
                     }
@@ -457,8 +466,10 @@ impl Worker {
             }
         }
 
-        if let Some(saved) = self.state.saved_login.clone() {
-            self.login(saved.login, saved.password, String::new()).await;
+        if self.state.settings.auto_login {
+            if let Some(saved) = self.state.saved_login.clone() {
+                self.login(saved.login, saved.password, String::new()).await;
+            }
         }
 
         self.emit(Event::Ready);
@@ -1464,11 +1475,40 @@ impl Worker {
 
     fn emit_mods(&self) {
         let enabled = self.mods.iter().filter(|item| item.enabled).count();
+        let needle = self.mods_filter.trim().to_lowercase();
+        let views = if needle.is_empty() {
+            self.mods.clone()
+        } else {
+            self.mods
+                .iter()
+                .filter(|item| {
+                    item.name.to_lowercase().contains(&needle)
+                        || item.description.to_lowercase().contains(&needle)
+                })
+                .cloned()
+                .collect()
+        };
+
         self.emit(Event::Mods {
-            views: self.mods.clone(),
+            views,
             enabled,
             total: self.mods.len(),
         });
+    }
+
+    fn open_mods_folder(&mut self) {
+        let Some(profile) = self.profiles.get(self.selected) else {
+            self.emit(Event::Error("Профиль не выбран".into()));
+            return;
+        };
+        let dir = self.mods_dir(&profile.name);
+        let _ = std::fs::create_dir_all(&dir);
+        info!(path = %dir.display(), "opening mods folder");
+        if let Err(error) = std::process::Command::new("explorer").arg(&dir).spawn() {
+            self.emit(Event::Error(format!(
+                "Не удалось открыть папку модов: {error}"
+            )));
+        }
     }
 
     fn save_settings(&mut self, mut settings: Settings) {
@@ -1480,6 +1520,7 @@ impl Worker {
         settings.game_width = settings.game_width.clamp(640, 7680);
         settings.game_height = settings.game_height.clamp(480, 4320);
         settings.install_dir = settings.install_dir.trim().to_string();
+        settings.custom_java = settings.custom_java.trim().to_string();
 
         if settings.install_dir.is_empty() {
             settings.install_dir = app_dir().to_string_lossy().into_owned();
