@@ -69,6 +69,58 @@ extern "system" {
     fn ChooseColorW(value: *mut ChooseColor) -> i32;
 }
 
+/// Ensures only one launcher instance owns the state files. Returns false when
+/// another process already holds the named mutex; the caller should exit.
+pub fn ensure_single_instance() -> bool {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS};
+    use windows::Win32::System::Threading::CreateMutexW;
+
+    let name: Vec<u16> = "Local\\Vestalis.FemboyEdition.Launcher"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+
+    let Ok(handle) = (unsafe { CreateMutexW(None, false, PCWSTR(name.as_ptr())) }) else {
+        // If the mutex cannot be created, do not block the launcher.
+        return true;
+    };
+
+    if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+        let _ = unsafe { CloseHandle(handle) };
+        show_already_running();
+        return false;
+    }
+
+    // HANDLE has no destructor; leaving it open keeps the mutex owned for the
+    // process lifetime.
+    let _ = handle;
+    true
+}
+
+fn show_already_running() {
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
+
+    let text: Vec<u16> = "Лаунчер уже запущен. Закройте второй экземпляр."
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let title: Vec<u16> = "Vestalis Launcher"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+
+    unsafe {
+        MessageBoxW(
+            None,
+            PCWSTR(text.as_ptr()),
+            PCWSTR(title.as_ptr()),
+            MB_OK | MB_ICONINFORMATION,
+        );
+    }
+}
+
 /// Copies UTF-8 text to the Windows clipboard as CF_UNICODETEXT.
 pub fn copy_text(text: &str) {
     use windows::Win32::Foundation::HANDLE;

@@ -57,6 +57,9 @@ struct ThemeTransition {
 
 fn main() -> anyhow::Result<()> {
     window::set_app_user_model_id();
+    if !window::ensure_single_instance() {
+        return Ok(());
+    }
 
     let log_dir = model::local_app_dir().join("logs");
     let _ = std::fs::create_dir_all(&log_dir);

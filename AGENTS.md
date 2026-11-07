@@ -424,6 +424,9 @@ cargo clippy --all-targets -- -D warnings
 - Буфер обмена — `window::copy_text` (Win32 `OpenClipboard` + `SetClipboardData`
   CF_UNICODETEXT). Кнопка «Скопировать HWID» всегда копирует реальный HWID,
   независимо от тумблера отправки.
+- Один экземпляр: `window::ensure_single_instance` держит named mutex
+  `Local\\Vestalis.FemboyEdition.Launcher`; второй процесс показывает
+  MessageBox и выходит, чтобы не перезаписывать state.
 - Обслуживание в настройках: открыть папку установки/логов, «Проверить файлы»
   (тот же `sync_profile`, без запуска игры), очистка SHA-1 кэша, диагностика.
   Discord RPC отключается настройкой `discordRpc`.

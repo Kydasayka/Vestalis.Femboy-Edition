@@ -44,7 +44,8 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   file picker), an auto-login toggle and a «Скопировать HWID» action.
 - Window size/position is remembered in `window.json` (written periodically and
   on close, clamped to the work area and the 1080×620 minimum); «Сбросить окно»
-  centers it again.
+  centers it again. A named single-instance mutex prevents two launchers from
+  overwriting the same state files.
 - Maintenance actions: open the install folder, open the logs folder, validate
   the selected profile's files without launching, clear the SHA-1 validation
   cache and export a diagnostics ZIP.
