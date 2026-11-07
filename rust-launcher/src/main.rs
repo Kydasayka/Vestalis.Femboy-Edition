@@ -305,13 +305,14 @@ fn main() -> anyhow::Result<()> {
 
     let timer = slint::Timer::default();
     let ui_weak = ui.as_weak();
+    let event_command_tx = command_tx.clone();
     timer.start(
         slint::TimerMode::Repeated,
         Duration::from_millis(40),
         move || {
             while let Ok(event) = event_rx.try_recv() {
                 if let Some(ui) = ui_weak.upgrade() {
-                    apply_event(&ui, event);
+                    apply_event(&ui, event, &event_command_tx);
                 }
             }
         },
@@ -588,6 +589,17 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
                 ui.set_main_status("Скачивание модов…".into());
             }
             let _ = tx.send(Command::DownloadMissingMods);
+        }
+    });
+
+    ui.on_mods_set_all_toggled({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move |enabled| {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Toggle);
+            }
+            let _ = tx.send(Command::SetAllMods(enabled));
         }
     });
 
@@ -1246,7 +1258,11 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
     });
 }
 
-fn apply_event(ui: &AppWindow, event: Event) {
+fn apply_event(
+    ui: &AppWindow,
+    event: Event,
+    command_tx: &tokio::sync::mpsc::UnboundedSender<Command>,
+) {
     match event {
         Event::Screen(screen) => switch_screen(ui, screen),
         Event::Busy(busy) => ui.set_busy(busy),
@@ -1401,6 +1417,10 @@ fn apply_event(ui: &AppWindow, event: Event) {
             if hide {
                 window::minimize_launcher();
             }
+        }
+        Event::GameExited { pid } => {
+            ui.set_main_status(format!("Игра закрыта (PID {pid})").into());
+            let _ = command_tx.send(Command::GameExited(pid));
         }
         Event::Error(message) => {
             if !message.is_empty() {
@@ -1828,6 +1848,8 @@ fn apply_texts(ui: &AppWindow, item: &ThemeItem) {
     set!("mods.folder", set_mods_folder);
     set!("mods.not_found", set_mods_not_found);
     set!("mods.download_missing", set_mods_download_missing);
+    set!("mods.enable_all", set_mods_enable_all);
+    set!("mods.disable_all", set_mods_disable_all);
 }
 
 fn apply_theme(ui: &AppWindow, theme: &crate::theme::Theme) {

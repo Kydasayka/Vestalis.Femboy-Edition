@@ -54,7 +54,8 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   downloaded get a «Скачать» button and a batch «Скачать отсутствующие»
   action: the file hash is resolved from the profile manifest, the existing
   downloader shows byte progress, retries and stores the new file as
-  `.jar.disabled`. The list updates without a game launch or a launcher
+  `.jar.disabled`. «Включить все» / «Выключить все» toggles every downloaded
+  mod in one pass. The list updates without a game launch or a launcher
   restart.
 - In-app toast notifications for new news (de-duplicated by title/date through
   `seenNews` in `state.json`) and for server-side profile list changes. No
@@ -89,7 +90,9 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   usable. Screen changes, buttons, profile rows and the download bar animate.
 - Discord Rich Presence with the same application ID, assets and texts as the
   C# launcher (`ApiProcedures.UpdateDiscordRpcState`): states «Сидит в
-  лаунчере» / «Играет в "profile"», details «Продам гараж…», logo2/logo.
+  лаунчере» / «Играет в "profile"», details «Продам гараж…», logo2/logo. The
+  game process is awaited in a background thread; when it exits, the status
+  returns to «Игра закрыта» and Discord presence switches back to the launcher.
 - Native taskbar/Explorer icon embedded into the executable, plus `WM_SETICON`
   and the same AppUserModelID as the C# launcher. The icon is generated from a
   hand-written vector cat face on a rounded gradient tile (no inner frame, no

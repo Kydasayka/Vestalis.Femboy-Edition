@@ -429,8 +429,12 @@ cargo clippy --all-targets -- -D warnings
   `window::pick_file` (Win32 `GetOpenFileNameW` из крейта `windows`, не
   самописная структура). `settings.autoLogin` выключает автовход, но
   сохранённые креды не удаляет. Страница модов фильтруется в воркере
-  (`SetModsFilter`), умеет открывать папку модов и качать все отсутствующие
-  (`DownloadMissingMods`, последовательно через `download_mod`).
+  (`SetModsFilter`), умеет открывать папку модов, качать все отсутствующие
+  (`DownloadMissingMods`, последовательно через `download_mod`) и переключать
+  все скачанные (`SetAllMods` через `set_mod_enabled`).
+- Завершение игры: `launch::spawn` возвращает `Child`; воркер держит поток с
+  `child.wait()` и шлёт `Event::GameExited`, main пересылает
+  `Command::GameExited(pid)` для сброса Discord presence и статуса.
 - Отмена запуска: `Worker.launch_cancel: Arc<AtomicBool>`, `Command::CancelLaunch`;
   `files::sync_profile` проверяет флаг между файлами и внутри потока загрузки,
   удаляет `.tmp`, а `play_inner` не спавнит игру после отмены. Не забывать

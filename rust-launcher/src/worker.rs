@@ -46,6 +46,7 @@ pub enum Command {
     ClearValidationCache,
     CheckFiles,
     CancelLaunch,
+    GameExited(u32),
     SaveTheme(String),
     MoveLayoutItem {
         item: String,
@@ -84,6 +85,7 @@ pub enum Command {
     DownloadMod(usize),
     DownloadMissingMods,
     SetModsFilter(String),
+    SetAllMods(bool),
     SetProfileFilter(String),
     OpenModsFolder,
     ExportDiagnostics,
@@ -174,6 +176,9 @@ pub enum Event {
     GameStarted {
         pid: u32,
         hide: bool,
+    },
+    GameExited {
+        pid: u32,
     },
     Error(String),
     Notification {
@@ -323,6 +328,12 @@ impl Worker {
                             self.launch_cancel.store(true, Ordering::Relaxed);
                             self.emit(Event::SettingsStatus("Отмена запуска…".into()));
                         }
+                        Some(Command::GameExited(pid)) => {
+                            if let Some(rpc) = &self.discord {
+                                rpc.set_state("В лаунчере");
+                            }
+                            self.emit(Event::MainStatus(format!("Игра закрыта (PID {pid})")));
+                        }
                         Some(Command::SaveTheme(name)) => self.save_theme(name),
                         Some(Command::MoveLayoutItem { item, direction }) => {
                             self.move_layout_item(&item, &direction)
@@ -358,6 +369,7 @@ impl Worker {
                             self.mods_filter = filter;
                             self.emit_mods();
                         }
+                        Some(Command::SetAllMods(enabled)) => self.set_all_mods(enabled),
                         Some(Command::SetProfileFilter(filter)) => {
                             self.profile_filter = filter;
                             self.emit_profiles();
@@ -1140,7 +1152,13 @@ impl Worker {
         info!(files = info.files.len(), java = %info.java_path, "manifest ready");
 
         match spec.and_then(|spec| launch::spawn(&spec)) {
-            Ok(pid) => {
+            Ok(mut child) => {
+                let pid = child.id();
+                let tx = self.tx.clone();
+                std::thread::spawn(move || {
+                    let _ = child.wait();
+                    let _ = tx.send(Event::GameExited { pid });
+                });
                 info!(pid, "game spawned");
                 self.emit(Event::Progress {
                     visible: false,
@@ -1308,20 +1326,16 @@ impl Worker {
         }
     }
 
-    fn toggle_mod(&mut self, id: usize, enabled: bool) {
-        let Some(profile) = self.profiles.get(self.selected).cloned() else {
-            return;
-        };
-        let Some(view) = self.mods.get(id).cloned() else {
-            return;
-        };
-
-        let Some(source) = self.mod_paths(&profile.name, &view.name).into_iter().next() else {
-            self.emit(Event::Error(format!(
-                "Файл мода «{}» ещё не скачан. Нажмите «Скачать».",
-                view.name
-            )));
-            return;
+    /// Renames the mod file to `.jar` or `.jar.disabled`. Returns false when
+    /// the file was never downloaded.
+    fn set_mod_enabled(
+        &self,
+        profile: &str,
+        view: &ModView,
+        enabled: bool,
+    ) -> Result<bool, String> {
+        let Some(source) = self.mod_paths(profile, &view.name).into_iter().next() else {
+            return Ok(false);
         };
 
         let source_text = source.to_string_lossy().to_string();
@@ -1337,19 +1351,69 @@ impl Worker {
             if target.exists() {
                 let _ = std::fs::remove_file(&target);
             }
-            if let Err(error) = std::fs::rename(&source, &target) {
-                self.emit(Event::Error(format!(
-                    "Не удалось переключить мод «{}»: {error}",
-                    view.name
-                )));
-                return;
+            std::fs::rename(&source, &target)
+                .map_err(|error| format!("Не удалось переключить мод «{}»: {error}", view.name))?;
+        }
+
+        Ok(true)
+    }
+
+    fn toggle_mod(&mut self, id: usize, enabled: bool) {
+        let Some(profile) = self.profiles.get(self.selected).cloned() else {
+            return;
+        };
+        let Some(view) = self.mods.get(id).cloned() else {
+            return;
+        };
+
+        match self.set_mod_enabled(&profile.name, &view, enabled) {
+            Ok(true) => {
+                if let Some(item) = self.mods.get_mut(id) {
+                    item.enabled = enabled;
+                }
+                self.emit_mods();
+            }
+            Ok(false) => self.emit(Event::Error(format!(
+                "Файл мода «{}» ещё не скачан. Нажмите «Скачать».",
+                view.name
+            ))),
+            Err(error) => self.emit(Event::Error(error)),
+        }
+    }
+
+    fn set_all_mods(&mut self, enabled: bool) {
+        let Some(profile) = self.profiles.get(self.selected).cloned() else {
+            return;
+        };
+        let views = self.mods.clone();
+        let mut changed = 0usize;
+        let mut failed = 0usize;
+
+        for view in views.iter().filter(|view| view.downloaded) {
+            if view.enabled == enabled {
+                continue;
+            }
+            match self.set_mod_enabled(&profile.name, view, enabled) {
+                Ok(true) => changed += 1,
+                Ok(false) => {}
+                Err(error) => {
+                    failed += 1;
+                    error!(%error, mod_name = %view.name, "failed to toggle mod");
+                }
             }
         }
 
-        if let Some(item) = self.mods.get_mut(id) {
-            item.enabled = enabled;
+        for item in &mut self.mods {
+            if item.downloaded {
+                item.enabled = enabled;
+            }
         }
         self.emit_mods();
+        self.emit(Event::SettingsStatus(if failed == 0 {
+            format!("Моды переключены: {changed}")
+        } else {
+            format!("Переключено: {changed}, ошибок: {failed}")
+        }));
     }
 
     async fn download_mod(&mut self, id: usize) {

@@ -175,6 +175,8 @@ export global Texts {
     in-out property <string> mods-folder: "Папка модов";
     in-out property <string> mods-not-found: "Ничего не найдено";
     in-out property <string> mods-download-missing: "Скачать отсутствующие";
+    in-out property <string> mods-enable-all: "Включить все";
+    in-out property <string> mods-disable-all: "Выключить все";
 }
 
 // Visibility helpers for the layout editor. Hidden flags are plain properties
@@ -1416,6 +1418,7 @@ export component AppWindow inherits Window {
     callback mods-filter-changed(string);
     callback mods-open-folder-clicked();
     callback mods-download-missing-clicked();
+    callback mods-set-all-toggled(bool);
     callback server-clicked(int);
     callback profile-clicked(int);
     callback save-settings-clicked();
@@ -2943,6 +2946,22 @@ export component AppWindow inherits Window {
                 color: Theme.text-muted;
                 font-size: 14px;
                 wrap: word-wrap;
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                ActionButton {
+                    label: Texts.mods-enable-all;
+                    width: 150px;
+                    height: 34px;
+                    clicked => { root.mods-set-all-toggled(true); }
+                }
+                ActionButton {
+                    label: Texts.mods-disable-all;
+                    width: 150px;
+                    height: 34px;
+                    clicked => { root.mods-set-all-toggled(false); }
+                }
             }
 
             if root.mods-total == 0: Text {

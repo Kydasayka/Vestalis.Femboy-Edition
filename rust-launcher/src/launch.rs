@@ -57,7 +57,7 @@ pub fn build_spec(
     })
 }
 
-pub fn spawn(spec: &LaunchSpec) -> Result<u32> {
+pub fn spawn(spec: &LaunchSpec) -> Result<std::process::Child> {
     if !spec.working_dir.is_dir() {
         std::fs::create_dir_all(&spec.working_dir)
             .with_context(|| format!("создание {}", spec.working_dir.display()))?;
@@ -85,16 +85,9 @@ pub fn spawn(spec: &LaunchSpec) -> Result<u32> {
         }
     }
 
-    let mut child = command
+    command
         .spawn()
-        .with_context(|| format!("запуск {}", spec.java.display()))?;
-    let pid = child.id();
-
-    std::thread::spawn(move || {
-        let _ = child.wait();
-    });
-
-    Ok(pid)
+        .with_context(|| format!("запуск {}", spec.java.display()))
 }
 
 fn apply_auth_endpoint(arguments: &str, base: &str) -> String {

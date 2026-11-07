@@ -282,6 +282,8 @@ pub fn get(lang: &str, key: &str) -> &'static str {
             "Download missing",
             "Завантажити відсутні",
         ),
+        "mods.enable_all" => pick(lang, "Включить все", "Enable all", "Увімкнути всі"),
+        "mods.disable_all" => pick(lang, "Выключить все", "Disable all", "Вимкнути всі"),
         "buttons.cancel" => pick(lang, "Отмена", "Cancel", "Скасувати"),
         "settings.interface.discord" => pick(
             lang,
