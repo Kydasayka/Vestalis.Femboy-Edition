@@ -1404,9 +1404,17 @@ impl Worker {
             }
         }
 
-        for item in &mut self.mods {
-            if item.downloaded {
-                item.enabled = enabled;
+        // Reflect what is actually on disk; a failed rename must not make the
+        // toggle look successful.
+        let states: Vec<(usize, bool)> = self
+            .mods
+            .iter()
+            .filter(|item| item.downloaded)
+            .map(|item| (item.id, self.mod_file_state(&profile.name, &item.name).1))
+            .collect();
+        for (id, actual) in states {
+            if let Some(item) = self.mods.get_mut(id) {
+                item.enabled = actual;
             }
         }
         self.emit_mods();
