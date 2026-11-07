@@ -82,6 +82,7 @@ pub enum Command {
         enabled: bool,
     },
     DownloadMod(usize),
+    DownloadMissingMods,
     SetModsFilter(String),
     SetProfileFilter(String),
     OpenModsFolder,
@@ -140,6 +141,7 @@ pub enum Event {
         views: Vec<ModView>,
         enabled: usize,
         total: usize,
+        missing: usize,
     },
     CanPlay(bool),
     Progress {
@@ -351,6 +353,7 @@ impl Worker {
                         Some(Command::OpenMods) => self.open_mods().await,
                         Some(Command::ToggleMod { id, enabled }) => self.toggle_mod(id, enabled),
                         Some(Command::DownloadMod(id)) => self.download_mod(id).await,
+                        Some(Command::DownloadMissingMods) => self.download_missing_mods().await,
                         Some(Command::SetModsFilter(filter)) => {
                             self.mods_filter = filter;
                             self.emit_mods();
@@ -1504,6 +1507,7 @@ impl Worker {
 
     fn emit_mods(&self) {
         let enabled = self.mods.iter().filter(|item| item.enabled).count();
+        let missing = self.mods.iter().filter(|item| !item.downloaded).count();
         let needle = self.mods_filter.trim().to_lowercase();
         let views = if needle.is_empty() {
             self.mods.clone()
@@ -1522,7 +1526,38 @@ impl Worker {
             views,
             enabled,
             total: self.mods.len(),
+            missing,
         });
+    }
+
+    async fn download_missing_mods(&mut self) {
+        if self.offline {
+            self.emit(Event::Error(
+                "Скачивание модов доступно только при подключённом бэкенде".into(),
+            ));
+            return;
+        }
+
+        let ids: Vec<usize> = self
+            .mods
+            .iter()
+            .filter(|item| !item.downloaded)
+            .map(|item| item.id)
+            .collect();
+
+        if ids.is_empty() {
+            self.emit(Event::MainStatus("Все моды уже скачаны".into()));
+            return;
+        }
+
+        self.emit(Event::MainStatus(format!(
+            "Скачивание отсутствующих модов: {}…",
+            ids.len()
+        )));
+        for id in ids {
+            self.download_mod(id).await;
+        }
+        self.emit(Event::MainStatus("Скачивание модов завершено".into()));
     }
 
     fn open_mods_folder(&mut self) {

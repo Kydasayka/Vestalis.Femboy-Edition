@@ -137,6 +137,7 @@ pub const TEXT_KEYS: &[&str] = &[
     "mods.search",
     "mods.not_found",
     "mods.folder",
+    "mods.download_missing",
 ];
 
 /// sRGB triplet, 0..=255 per channel.

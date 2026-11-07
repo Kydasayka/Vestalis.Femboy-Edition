@@ -276,6 +276,12 @@ pub fn get(lang: &str, key: &str) -> &'static str {
         "mods.search" => pick(lang, "Поиск модов", "Search mods", "Пошук модів"),
         "mods.not_found" => pick(lang, "Ничего не найдено", "Nothing found", "Нічого не знайдено"),
         "mods.folder" => pick(lang, "Папка модов", "Mods folder", "Папка модів"),
+        "mods.download_missing" => pick(
+            lang,
+            "Скачать отсутствующие",
+            "Download missing",
+            "Завантажити відсутні",
+        ),
         "buttons.cancel" => pick(lang, "Отмена", "Cancel", "Скасувати"),
         "settings.interface.discord" => pick(
             lang,

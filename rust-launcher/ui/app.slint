@@ -174,6 +174,7 @@ export global Texts {
     in-out property <string> mods-search: "Поиск модов";
     in-out property <string> mods-folder: "Папка модов";
     in-out property <string> mods-not-found: "Ничего не найдено";
+    in-out property <string> mods-download-missing: "Скачать отсутствующие";
 }
 
 // Visibility helpers for the layout editor. Hidden flags are plain properties
@@ -1365,6 +1366,7 @@ export component AppWindow inherits Window {
     in-out property <int> mods-enabled: 0;
     in-out property <int> mods-total: 0;
     in-out property <string> mods-filter: "";
+    in-out property <int> mods-missing: 0;
     in-out property <bool> can-play: false;
 
     in-out property <bool> progress-visible: false;
@@ -1413,6 +1415,7 @@ export component AppWindow inherits Window {
     callback mod-download-clicked(int);
     callback mods-filter-changed(string);
     callback mods-open-folder-clicked();
+    callback mods-download-missing-clicked();
     callback server-clicked(int);
     callback profile-clicked(int);
     callback save-settings-clicked();
@@ -2901,12 +2904,23 @@ export component AppWindow inherits Window {
                     vertical-alignment: center;
                 }
                 Rectangle { horizontal-stretch: 1; }
+            }
+
+            HorizontalLayout {
+                spacing: 10px;
                 TextField {
                     text <=> root.mods-filter;
                     placeholder: Texts.mods-search;
-                    width: 220px;
                     height: 38px;
+                    horizontal-stretch: 1;
                     edited(value) => { root.mods-filter-changed(value); }
+                }
+                if root.mods-missing > 0: ActionButton {
+                    label: Texts.mods-download-missing + " (\{root.mods-missing})";
+                    width: 240px;
+                    height: 38px;
+                    primary: true;
+                    clicked => { root.mods-download-missing-clicked(); }
                 }
                 ActionButton {
                     label: Texts.mods-folder;

@@ -51,10 +51,11 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
 - Mods page: optional mods from `/api/v1/profiles/{name}/mods/optionals`,
   search by name/description, open the mods folder, and enable/disable by
   renaming `.jar` ↔ `.jar.disabled`. Mods that were never
-  downloaded get a «Скачать» button: the file hash is resolved from the profile
-  manifest, the existing downloader shows byte progress, retries and stores the
-  new file as `.jar.disabled`. The list updates without a game launch or a
-  launcher restart.
+  downloaded get a «Скачать» button and a batch «Скачать отсутствующие»
+  action: the file hash is resolved from the profile manifest, the existing
+  downloader shows byte progress, retries and stores the new file as
+  `.jar.disabled`. The list updates without a game launch or a launcher
+  restart.
 - In-app toast notifications for new news (de-duplicated by title/date through
   `seenNews` in `state.json`) and for server-side profile list changes. No
   external notification service is used.

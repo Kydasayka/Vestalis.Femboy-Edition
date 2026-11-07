@@ -579,6 +579,18 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         }
     });
 
+    ui.on_mods_download_missing_clicked({
+        let tx = tx.clone();
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+                ui.set_main_status("Скачивание модов…".into());
+            }
+            let _ = tx.send(Command::DownloadMissingMods);
+        }
+    });
+
     ui.on_mods_open_folder_clicked({
         let tx = tx.clone();
         let ui = ui.as_weak();
@@ -1279,6 +1291,7 @@ fn apply_event(ui: &AppWindow, event: Event) {
             views,
             enabled,
             total,
+            missing,
         } => {
             let items: Vec<ModItem> = views
                 .into_iter()
@@ -1295,6 +1308,7 @@ fn apply_event(ui: &AppWindow, event: Event) {
             ui.set_mods(ModelRc::new(VecModel::from(items)));
             ui.set_mods_enabled(enabled as i32);
             ui.set_mods_total(total as i32);
+            ui.set_mods_missing(missing as i32);
         }
         Event::CanPlay(value) => ui.set_can_play(value),
         Event::News(news) => {
@@ -1813,6 +1827,7 @@ fn apply_texts(ui: &AppWindow, item: &ThemeItem) {
     set!("mods.search", set_mods_search);
     set!("mods.folder", set_mods_folder);
     set!("mods.not_found", set_mods_not_found);
+    set!("mods.download_missing", set_mods_download_missing);
 }
 
 fn apply_theme(ui: &AppWindow, theme: &crate::theme::Theme) {
