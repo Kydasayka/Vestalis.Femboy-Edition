@@ -954,11 +954,9 @@ component ProfileList inherits VerticalLayout {
         font-size: 13px;
     }
 
-    ScrollView {
-        vertical-stretch: 1;
-        VerticalLayout {
-            spacing: 6px;
-            for p in root.profiles: Rectangle {
+    VerticalLayout {
+        spacing: 6px;
+        for p in root.profiles: Rectangle {
                 height: 62px;
                 border-radius: Theme.radius-md;
                 background: p.id == root.selected-index
@@ -1021,7 +1019,6 @@ component ProfileList inherits VerticalLayout {
                 }
             }
         }
-    }
 }
 
 component CountdownCard inherits Rectangle {
@@ -1210,7 +1207,11 @@ component ZoneItem inherits Rectangle {
     callback refresh-clicked();
     callback mods-clicked();
 
-    height: LayoutState.block-height(item) * 1px;
+    // Profiles grow with their content (search + rows); the sidebar ScrollView
+    // handles overflow. Other blocks use the configured height.
+    height: item == "profiles"
+        ? Math.max(LayoutState.block-height(item), 64 + root.profiles.length * 68) * 1px
+        : LayoutState.block-height(item) * 1px;
 
     if item == "user": UserCard {
         width: 100%;
@@ -1686,6 +1687,7 @@ export component AppWindow inherits Window {
             // ---- sidebar ----
             Rectangle {
                 width: root.layout-sidebar-left-width * 1px;
+                clip: true;
                 background: Theme.mode == "liquid-glass" ? Theme.glass-tint : (Theme.mode == "material3" ? Theme.surface-low : Theme.background-alt.with-alpha(0.95));
                 border-width: 0px;
 
@@ -1995,6 +1997,7 @@ export component AppWindow inherits Window {
 
             if root.sidebar-right-has-visible: Rectangle {
                 width: root.layout-sidebar-right-width * 1px;
+                clip: true;
                 background: Theme.mode == "liquid-glass" ? Theme.glass-tint : (Theme.mode == "material3" ? Theme.surface-low : Theme.background-alt.with-alpha(0.95));
                 border-width: 0px;
 

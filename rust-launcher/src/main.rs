@@ -89,6 +89,9 @@ fn main() -> anyhow::Result<()> {
     );
 
     let mut state = load_state();
+    // Normalise old layouts (including the migration from the clipped 200 px
+    // profile block) before the first frame and before the worker starts.
+    state.settings.layout.normalize();
     let saved_geometry = storage::load_window_geometry();
     WINDOW_GEOMETRY.with(|geometry| {
         geometry.set((

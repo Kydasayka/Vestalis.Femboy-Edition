@@ -36,7 +36,7 @@ pub const WIDTH_DEFAULT_RIGHT: u32 = 300;
 /// Default block height, minimum and maximum in logical pixels.
 pub const BLOCK_HEIGHTS: [(&str, u32, u32, u32); 6] = [
     ("user", 64, 56, 96),
-    ("profiles", 200, 120, 520),
+    ("profiles", 280, 120, 520),
     ("countdown", 124, 96, 240),
     ("sidebar-actions", 44, 40, 72),
     ("news", 220, 120, 600),
@@ -167,12 +167,17 @@ impl LayoutConfig {
         self.block_heights
             .retain(|item, _| ITEMS.contains(&item.as_str()) && item != "server");
         for (item, default, min, max) in BLOCK_HEIGHTS {
-            let height = self
+            let mut height = self
                 .block_heights
                 .get(item)
                 .copied()
                 .unwrap_or(default)
                 .clamp(min, max);
+            // 200 px was the old default and left the search field + three
+            // profile rows clipped; migrate it to the new default.
+            if item == "profiles" && height == 200 {
+                height = default;
+            }
             self.block_heights.insert(item.to_string(), height);
         }
     }
@@ -386,7 +391,7 @@ mod tests {
         let mut layout = LayoutConfig::default();
         layout.normalize();
         assert_eq!(layout.block_height("countdown"), 124);
-        assert_eq!(layout.block_height("profiles"), 200);
+        assert_eq!(layout.block_height("profiles"), 280);
         assert_eq!(layout.block_height("server"), 0);
 
         layout.set_block_height("countdown", 10);
