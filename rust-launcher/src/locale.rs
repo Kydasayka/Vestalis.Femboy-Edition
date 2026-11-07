@@ -72,6 +72,18 @@ pub fn get(lang: &str, key: &str) -> &'static str {
             "Nothing found",
             "Нічого не знайдено",
         ),
+        "profiles.empty" => pick(
+            lang,
+            "Профили не загружены",
+            "Profiles not loaded",
+            "Профілі не завантажені",
+        ),
+        "settings.interface.test_sound" => pick(
+            lang,
+            "Проверить звук",
+            "Test sound",
+            "Перевірити звук",
+        ),
         "sections.news" => pick(lang, "НОВОСТИ", "NEWS", "НОВИНИ"),
 
         "settings.title" => pick(lang, "Настройки", "Settings", "Налаштування"),

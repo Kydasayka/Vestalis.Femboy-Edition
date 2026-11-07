@@ -42,6 +42,8 @@ pub const TEXT_KEYS: &[&str] = &[
     "sections.profiles",
     "profiles.search",
     "profiles.not_found",
+    "profiles.empty",
+    "settings.interface.test_sound",
     "sections.news",
     "settings.title",
     "settings.back",
@@ -538,6 +540,75 @@ fn discord_theme() -> Theme {
     }
 }
 
+fn nord_theme() -> Theme {
+    Theme {
+        background: "#2e3440".into(),
+        background_alt: "#272c36".into(),
+        surface: "#3b4252".into(),
+        surface_hover: "#434c5e".into(),
+        border: "#4c566a".into(),
+        text: "#eceff4".into(),
+        text_muted: "#d8dee9".into(),
+        accent: "#88c0d0".into(),
+        accent_hover: "#8fbcbb".into(),
+        accent_text: "#2e3440".into(),
+        success: "#a3be8c".into(),
+        warning: "#ebcb8b".into(),
+        danger: "#ff8f98".into(),
+        gradient_start: "#5e81ac".into(),
+        gradient_end: "#88c0d0".into(),
+        card_opacity: 0.94,
+        background_effect: "snow".into(),
+        ..Theme::default()
+    }
+}
+
+fn dracula_theme() -> Theme {
+    Theme {
+        background: "#282a36".into(),
+        background_alt: "#21222c".into(),
+        surface: "#343746".into(),
+        surface_hover: "#44475a".into(),
+        border: "#6272a4".into(),
+        text: "#f8f8f2".into(),
+        text_muted: "#c9c9d4".into(),
+        accent: "#bd93f9".into(),
+        accent_hover: "#ff79c6".into(),
+        accent_text: "#282a36".into(),
+        success: "#50fa7b".into(),
+        warning: "#f1fa8c".into(),
+        danger: "#ff5555".into(),
+        gradient_start: "#bd93f9".into(),
+        gradient_end: "#ff79c6".into(),
+        card_opacity: 0.93,
+        background_effect: "fireflies".into(),
+        ..Theme::default()
+    }
+}
+
+fn gruvbox_theme() -> Theme {
+    Theme {
+        background: "#282828".into(),
+        background_alt: "#1d2021".into(),
+        surface: "#3c3836".into(),
+        surface_hover: "#504945".into(),
+        border: "#665c54".into(),
+        text: "#ebdbb2".into(),
+        text_muted: "#bdae93".into(),
+        accent: "#fabd2f".into(),
+        accent_hover: "#fe8019".into(),
+        accent_text: "#282828".into(),
+        success: "#b8bb26".into(),
+        warning: "#fabd2f".into(),
+        danger: "#fb4934".into(),
+        gradient_start: "#fe8019".into(),
+        gradient_end: "#fabd2f".into(),
+        card_opacity: 0.94,
+        background_effect: "leaves".into(),
+        ..Theme::default()
+    }
+}
+
 fn minecraft_theme() -> Theme {
     Theme {
         background: "#14180f".into(),
@@ -681,6 +752,27 @@ pub fn builtin_themes() -> Vec<ThemeItem> {
             name: "Minecraft".into(),
             builtin: true,
             theme: minecraft_theme(),
+            icons: HashMap::new(),
+            texts: HashMap::new(),
+        },
+        ThemeItem {
+            name: "Nord".into(),
+            builtin: true,
+            theme: nord_theme(),
+            icons: HashMap::new(),
+            texts: HashMap::new(),
+        },
+        ThemeItem {
+            name: "Dracula".into(),
+            builtin: true,
+            theme: dracula_theme(),
+            icons: HashMap::new(),
+            texts: HashMap::new(),
+        },
+        ThemeItem {
+            name: "Gruvbox".into(),
+            builtin: true,
+            theme: gruvbox_theme(),
             icons: HashMap::new(),
             texts: HashMap::new(),
         },

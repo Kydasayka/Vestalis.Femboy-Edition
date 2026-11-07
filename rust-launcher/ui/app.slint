@@ -87,6 +87,8 @@ export global Texts {
     in-out property <string> profile-select: "Выберите профиль";
     in-out property <string> profiles-search: "Поиск профилей";
     in-out property <string> profiles-not-found: "Ничего не найдено";
+    in-out property <string> profiles-empty: "Профили не загружены";
+    in-out property <string> interface-test-sound: "Проверить звук";
 
     in-out property <string> save: "Сохранить";
     in-out property <string> apply: "Применить";
@@ -945,7 +947,7 @@ component ProfileList inherits VerticalLayout {
     }
 
     if root.profiles.length == 0: Text {
-        text: Texts.profiles-not-found;
+        text: ProfileFilter.text.is-empty ? Texts.profiles-empty : Texts.profiles-not-found;
         color: Theme.text-muted;
         font-size: 13px;
     }
@@ -1444,6 +1446,7 @@ export component AppWindow inherits Window {
     callback clear-cache-clicked();
     callback check-files-clicked();
     callback pick-java-clicked();
+    callback test-sound-clicked();
     callback reset-window-clicked();
     callback theme-reset-clicked();
     callback layout-move(string, string);
@@ -2381,6 +2384,12 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     spacing: 10px;
                                     Text { text: Texts.interface-sounds; color: Theme.text-muted; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    ActionButton {
+                                        label: Texts.interface-test-sound;
+                                        width: 145px;
+                                        height: 30px;
+                                        clicked => { root.test-sound-clicked(); }
+                                    }
                                     Toggle {
                                         checked: root.set-sounds;
                                         toggled(v) => { root.set-sounds = v; }

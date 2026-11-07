@@ -897,6 +897,15 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         }
     });
 
+    ui.on_test_sound_clicked({
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Toggle);
+            }
+        }
+    });
+
     ui.on_pick_java_clicked({
         let ui = ui.as_weak();
         move || {
@@ -1749,6 +1758,8 @@ fn apply_texts(ui: &AppWindow, item: &ThemeItem) {
     set!("sections.profiles", set_profiles);
     set!("profiles.search", set_profiles_search);
     set!("profiles.not_found", set_profiles_not_found);
+    set!("profiles.empty", set_profiles_empty);
+    set!("settings.interface.test_sound", set_interface_test_sound);
     set!("sections.news", set_news);
     set!("settings.title", set_settings_title);
     set!("settings.back", set_back);

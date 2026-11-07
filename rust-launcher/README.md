@@ -63,8 +63,9 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
 - Rounded UI typography: Nunito (Regular/SemiBold/Bold, Cyrillic included),
   embedded in the binary and used as the default font family.
 - Visual themes: built-in `dark`, `light`, `femboy`, `ocean`, `Apple`,
-  `Discord`, `Minecraft` and generated `Windows` (from the sampled Windows
-  accent), plus user themes in `%APPDATA%\Vestalis\rust-launcher\themes`
+  `Discord`, `Minecraft`, `Nord`, `Dracula`, `Gruvbox` and generated `Windows`
+  (from the sampled Windows accent), plus user themes in
+  `%APPDATA%\Vestalis\rust-launcher\themes`
   (old `name.json` and new `name/theme.json` layouts). Three presentation
   modes — `base`, `material3` and `liquid-glass` — switch instantly and apply to
   every screen. Material 3 accent priority is manual hex → Windows accent →
@@ -195,8 +196,8 @@ so an existing C# installation does not re-hash its whole 16k-file client.
 ## Themes and modes
 
 Built-in palettes live in `src/theme.rs`: `dark`, `light`, `femboy`, `ocean`,
-`Apple`, `Discord`, `Minecraft` and `Windows` (generated from the current
-Windows accent). The palette is stored as `settings.theme` and the presentation
+`Apple`, `Discord`, `Minecraft`, `Nord`, `Dracula`, `Gruvbox` and `Windows`
+(generated from the current Windows accent). The palette is stored as `settings.theme` and the presentation
 mode as `settings.themeMode` in `state.json`. Settings → «Оформление» switches
 both live; «Сохранить настройки» persists the choice. A manual accent
 (`settings.accent`) overrides the Windows accent for Material 3.
