@@ -1270,6 +1270,7 @@ impl Worker {
             return;
         };
 
+        self.emit(Event::Error(String::new()));
         self.emit(Event::MainStatus("Загрузка списка модов…".into()));
         let backend = self.data_backend().clone();
         let mods = backend.optional_mods(&profile.name, &token).await;
@@ -1409,7 +1410,7 @@ impl Worker {
             }
         }
         self.emit_mods();
-        self.emit(Event::SettingsStatus(if failed == 0 {
+        self.emit(Event::MainStatus(if failed == 0 {
             format!("Моды переключены: {changed}")
         } else {
             format!("Переключено: {changed}, ошибок: {failed}")
