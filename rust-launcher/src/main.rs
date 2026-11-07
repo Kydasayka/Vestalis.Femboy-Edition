@@ -1135,6 +1135,13 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
     });
 
     // LayoutState / LayoutDrag globals: visibility checks and the drag payload.
+    ui.global::<ProfileFilter>().on_changed({
+        let tx = tx.clone();
+        move |filter| {
+            let _ = tx.send(Command::SetProfileFilter(filter.to_string()));
+        }
+    });
+
     ui.global::<LayoutState>().on_resize_block({
         let tx = tx.clone();
         move |item, height| {
@@ -1687,6 +1694,8 @@ fn apply_texts(ui: &AppWindow, item: &ThemeItem) {
     set!("buttons.refresh", set_refresh);
     set!("buttons.mods", set_mods);
     set!("sections.profiles", set_profiles);
+    set!("profiles.search", set_profiles_search);
+    set!("profiles.not_found", set_profiles_not_found);
     set!("sections.news", set_news);
     set!("settings.title", set_settings_title);
     set!("settings.back", set_back);
@@ -1787,6 +1796,7 @@ fn apply_texts(ui: &AppWindow, item: &ThemeItem) {
     set!("mods.empty", set_mods_empty);
     set!("mods.search", set_mods_search);
     set!("mods.folder", set_mods_folder);
+    set!("mods.not_found", set_mods_not_found);
 }
 
 fn apply_theme(ui: &AppWindow, theme: &crate::theme::Theme) {

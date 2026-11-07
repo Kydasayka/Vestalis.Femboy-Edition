@@ -40,6 +40,8 @@ pub const TEXT_KEYS: &[&str] = &[
     "buttons.refresh",
     "buttons.mods",
     "sections.profiles",
+    "profiles.search",
+    "profiles.not_found",
     "sections.news",
     "settings.title",
     "settings.back",
@@ -133,6 +135,7 @@ pub const TEXT_KEYS: &[&str] = &[
     "mods.desc",
     "mods.empty",
     "mods.search",
+    "mods.not_found",
     "mods.folder",
 ];
 

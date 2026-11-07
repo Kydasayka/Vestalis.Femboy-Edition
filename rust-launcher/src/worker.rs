@@ -83,6 +83,7 @@ pub enum Command {
     },
     DownloadMod(usize),
     SetModsFilter(String),
+    SetProfileFilter(String),
     OpenModsFolder,
     ExportDiagnostics,
     Shutdown,
@@ -188,6 +189,7 @@ pub struct Worker {
     views: Vec<ProfileView>,
     mods: Vec<ModView>,
     mods_filter: String,
+    profile_filter: String,
     selected: usize,
     offline: bool,
     busy: bool,
@@ -211,6 +213,7 @@ impl Worker {
             views: Vec::new(),
             mods: Vec::new(),
             mods_filter: String::new(),
+            profile_filter: String::new(),
             selected: 0,
             offline: false,
             busy: false,
@@ -351,6 +354,10 @@ impl Worker {
                         Some(Command::SetModsFilter(filter)) => {
                             self.mods_filter = filter;
                             self.emit_mods();
+                        }
+                        Some(Command::SetProfileFilter(filter)) => {
+                            self.profile_filter = filter;
+                            self.emit_profiles();
                         }
                         Some(Command::OpenModsFolder) => self.open_mods_folder(),
                         Some(Command::ExportDiagnostics) => self.export_diagnostics(),
@@ -785,10 +792,7 @@ impl Worker {
         self.profiles = profiles;
         self.selected = selected.min(self.views.len().saturating_sub(1));
 
-        self.emit(Event::Profiles {
-            views: self.views.clone(),
-            selected: self.selected,
-        });
+        self.emit_profiles();
 
         if let Some(view) = self.views.get(self.selected) {
             self.emit(Event::Selected(view.clone()));
@@ -849,6 +853,27 @@ impl Worker {
             .unwrap_or_default();
 
         self.emit(Event::Notification { title, body });
+    }
+
+    fn emit_profiles(&self) {
+        let needle = self.profile_filter.trim().to_lowercase();
+        let views = if needle.is_empty() {
+            self.views.clone()
+        } else {
+            self.views
+                .iter()
+                .filter(|view| {
+                    view.display_name.to_lowercase().contains(&needle)
+                        || view.name.to_lowercase().contains(&needle)
+                })
+                .cloned()
+                .collect()
+        };
+
+        self.emit(Event::Profiles {
+            views,
+            selected: self.selected,
+        });
     }
 
     async fn ensure_discord(&mut self) {

@@ -65,6 +65,13 @@ pub fn get(lang: &str, key: &str) -> &'static str {
         "buttons.downloading" => pick(lang, "Скачивание…", "Downloading…", "Завантаження…"),
 
         "sections.profiles" => pick(lang, "ПРОФИЛИ", "PROFILES", "ПРОФІЛІ"),
+        "profiles.search" => pick(lang, "Поиск профилей", "Search profiles", "Пошук профілів"),
+        "profiles.not_found" => pick(
+            lang,
+            "Ничего не найдено",
+            "Nothing found",
+            "Нічого не знайдено",
+        ),
         "sections.news" => pick(lang, "НОВОСТИ", "NEWS", "НОВИНИ"),
 
         "settings.title" => pick(lang, "Настройки", "Settings", "Налаштування"),
@@ -267,6 +274,7 @@ pub fn get(lang: &str, key: &str) -> &'static str {
             "Для цього профілю немає опціональних модів.",
         ),
         "mods.search" => pick(lang, "Поиск модов", "Search mods", "Пошук модів"),
+        "mods.not_found" => pick(lang, "Ничего не найдено", "Nothing found", "Нічого не знайдено"),
         "mods.folder" => pick(lang, "Папка модов", "Mods folder", "Папка модів"),
         "buttons.cancel" => pick(lang, "Отмена", "Cancel", "Скасувати"),
         "settings.interface.discord" => pick(

@@ -85,6 +85,8 @@ export global Texts {
     in-out property <string> login-busy: "Подключение…";
     in-out property <string> login-checking: "Проверка…";
     in-out property <string> profile-select: "Выберите профиль";
+    in-out property <string> profiles-search: "Поиск профилей";
+    in-out property <string> profiles-not-found: "Ничего не найдено";
 
     in-out property <string> save: "Сохранить";
     in-out property <string> apply: "Применить";
@@ -171,6 +173,7 @@ export global Texts {
     in-out property <string> mods-empty: "Для этого профиля нет опциональных модов.";
     in-out property <string> mods-search: "Поиск модов";
     in-out property <string> mods-folder: "Папка модов";
+    in-out property <string> mods-not-found: "Ничего не найдено";
 }
 
 // Visibility helpers for the layout editor. Hidden flags are plain properties
@@ -218,6 +221,11 @@ export global LayoutState {
     }
 
     callback toggle-hidden(string, bool);
+}
+
+export global ProfileFilter {
+    in-out property <string> text: "";
+    callback changed(string);
 }
 
 export global LayoutDrag {
@@ -924,6 +932,19 @@ component ProfileList inherits VerticalLayout {
         font-size: 14px;
         font-weight: 700;
         letter-spacing: 1.4px;
+    }
+
+    TextField {
+        text <=> ProfileFilter.text;
+        placeholder: Texts.profiles-search;
+        height: 34px;
+        edited(value) => { ProfileFilter.changed(value); }
+    }
+
+    if root.profiles.length == 0: Text {
+        text: Texts.profiles-not-found;
+        color: Theme.text-muted;
+        font-size: 13px;
     }
 
     ScrollView {
@@ -2901,6 +2922,11 @@ export component AppWindow inherits Window {
 
             if root.mods-total == 0: Text {
                 text: Texts.mods-empty;
+                color: Theme.text-muted;
+                font-size: 14px;
+            }
+            if root.mods.length == 0 && root.mods-total > 0: Text {
+                text: Texts.mods-not-found;
                 color: Theme.text-muted;
                 font-size: 14px;
             }
