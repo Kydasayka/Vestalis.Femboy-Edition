@@ -1,8 +1,9 @@
 # Vestalis Launcher — Rust rewrite
 
-Native Rust implementation of the Vestalis launcher, kept in its own branch
-(`feature/rust-launcher-rewrite`) and its own folder. The C#/Avalonia code in
-`src/` is untouched.
+Native Rust implementation of the Vestalis launcher, kept in `rust-launcher/`
+on the `rust` branch. The C#/Avalonia code in `src/` is untouched. This file is
+the technical reference; the project overview and build/run quick start live in
+the [root README](../README.md).
 
 ## What works
 
@@ -77,7 +78,7 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   `Catppuccin Mocha`/`Macchiato`/`Frappe`/`Latte` and generated `Windows`
   (from the sampled Windows accent), plus user themes in
   `%APPDATA%\Vestalis\rust-launcher\themes`
-  (old `name.json` and new `name/theme.json` layouts). Three presentation
+  (old `name.json` and new `name/theme.json` layouts). Four presentation
   modes — `base`, `material3`, `liquid-glass` and `acrylic` — switch instantly
   and apply to every screen. Acrylic is an imitation: Slint 1.18 has no
   backdrop blur, so it uses denser translucency, a bright rim, a deep shadow
@@ -373,9 +374,11 @@ size and the existing scrolling/clicks intact.
 
 ## Known gaps / next steps
 
-1. Skin marketplace/page (the head avatar itself is already rendered) and Sentry.
+1. Skin marketplace/page (the head avatar itself is already rendered).
 2. The exact splash-to-window morph of the Avalonia build (the Rust build uses
    an animated branded start overlay).
 3. Installer and code signing.
 4. Background error/status strings from the backend stay in the language the
    backend returns; static launcher strings are localized in `src/locale.rs`.
+5. macOS/Linux are not supported: the window layer, HWID and DWM integration
+   are Windows-only.
