@@ -5,7 +5,7 @@ use uuid::Uuid;
 use winreg::enums::{HKEY_LOCAL_MACHINE, KEY_READ};
 use winreg::RegKey;
 
-/// Must match the C# launcher exactly: `Hardware.Info` sends
+/// Must match the reference client exactly: `Hardware.Info` sends
 /// `CPU.ProcessorId-Motherboard.SerialNumber-Disk1-Disk2...`. A different value
 /// looks like another device to the backend, which can reject the account.
 pub fn real_hwid() -> String {
@@ -117,7 +117,7 @@ pub fn screen_size() -> (u32, u32) {
 }
 
 pub fn os_architecture() -> &'static str {
-    // Must match the C# launcher: OSArchitecture.ToString().ToLower().Replace("x", "").
+    // Must match the reference client: OSArchitecture.ToString().ToLower().Replace("x", "").
     // The backend returns an empty/error profile for "x64" but full data for "64".
     if cfg!(target_arch = "x86_64") {
         "64"

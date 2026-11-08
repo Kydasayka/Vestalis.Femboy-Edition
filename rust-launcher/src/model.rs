@@ -364,7 +364,7 @@ pub struct DiscordConfig {
 
 impl Default for DiscordConfig {
     fn default() -> Self {
-        // Exactly the values used by the C# launcher in ApiProcedures.
+        // Exactly the values used by the reference client in ApiProcedures.
         Self {
             client_id: "1558556890605162577".to_string(),
             details: "Продам гараж с чулочками, по поводу покупки - пишите в ЛС. Myaw >w<"

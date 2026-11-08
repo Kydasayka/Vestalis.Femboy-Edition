@@ -1,512 +1,238 @@
-# AGENTS.md — рабочие заметки (Vestalis Femboy edition)
+# AGENTS.md — Vestalis Rust launcher
 
-Короткая карта проекта, чтобы не перечитывать весь код. Держать этот файл в актуальном
-состоянии: сюда дописываются решения, подводные камни и проверенные команды.
+Короткая карта проекта для ветки `rust`. В этой ветке есть только нативный
+лаунчер на Rust + Slint; C#/Avalonia лаунчер развивается отдельно и его файлов
+здесь нет.
 
 ## Что это
 
-- **Vestalis Femboy edition** — форк лаунчера Vestalis, который сам форк GML Launcher
-  (GamerVII-NET). Avalonia 11.3.3, .NET 8, Windows.
-- Решение: `Gml.Launcher.sln`; UI: `src/Gml.Launcher`.
-- Клиентская логика (авторизация, загрузка файлов, SignalR) — в сабмодуле `src/Gml.Client`
-  (`src/Gml.Client/src/Gml.Client`, интерфейсы `src/Gml.Client/src/Gml.Client.Interfaces`).
-- Уведомления — сабмодуль `src/GamerVII.Notification.Avalonia`.
-- Тесты клиента: `src/Gml.Client/Tests/Gml.Client.Tests` (8 тестов).
-- CI: `.github/workflows/dotnet.yml` — `ubuntu-latest`, `dotnet restore/build/test`,
-  сабмодули обязательны (`git submodule update --init --recursive`).
+- **Vestalis Rust launcher** — нативный лаунчер на Rust + Slint 1.18, Windows.
+- Crate: `rust-launcher/Cargo.toml`; UI: `rust-launcher/ui/app.slint`.
+- Точка входа и соединение UI/воркера: `rust-launcher/src/main.rs`.
+- Асинхронная логика, авторизация, профили, моды и запуск:
+  `rust-launcher/src/worker.rs`.
+- Документация: корневой `README.md` — обзор и быстрый старт;
+  `rust-launcher/README.md` — технический справочник;
+  `rust-launcher/docs/ARCHITECTURE.md` — архитектура.
 
-## Состояние репозитория (проверять перед работой)
+## Состояние репозитория
 
 ```powershell
-git status --short; git log --oneline -6; git log --oneline origin/main..main
-git -C src/Gml.Client status --short; git -C src/Gml.Client log --oneline -3
+git status --short
+git log --oneline -6
+git branch --show-current
 ```
 
-- Корень: ветка `main`, origin — `https://github.com/Kydasayka/Vestalis.Femboy-Edition.git`.
-  Локально бывают незапушенные коммиты — не считать `origin/main` актуальным.
-- `src/Gml.Client` — ветка `master`, origin — форк `Kydasayka/Gml.Client` (upstream —
-  `GamerVII-NET/Gml.Client`). Коммит `4690172` `Faster Game loading`: параллельный SHA-1,
-  `ValidationCache`, `.disabled`-моды, `LaunchTrace` (см. раздел про подводные камни).
-- `src/GamerVII.Notification.Avalonia` — ветка `master`, upstream `f063e0b`, не трогается.
-- Сабмодули — отдельные клоны: коммитятся отдельно, потом в корне обновляется указатель
-  (`git add src/Gml.Client`).
-
-## Открытые вопросы (не забыть в следующей сессии)
-
-- Бэкенд отвечает `400 «Пользователь заблокирован!»` даже с рандомным HWID — это бан
-  аккаунта/IP на стороне сервера, а не баг лаунчера. HWID-часть уже сделана.
-- Тексты карточки «Сервисный доступ» и сообщения `MirrorControlService` захардкожены
-  по-русски (локализация не сделана, см. ниже).
-- `dist/portable/Gml.Launcher.exe` — локальный артефакт; после правок его надо пересобрать,
-  в git он не попадает.
-- Корневые коммиты могут быть не запушены: перед PR проверить `git log origin/main..main`.
+- Рабочая ветка — `rust`. `main` содержит старый C#/Avalonia проект и не
+  затрагивается правками Rust-лаунчера.
+- `rust-launcher/Cargo.lock` коммитится, это бинарный crate.
+- Сабмодулей, solution-файлов и .NET CI в ветке `rust` нет.
+- `dist/` — локальный вывод сборки, в git не попадает.
 
 ## Сборка, тесты, запуск
 
 ```powershell
-# Обязательно: остановить запущенный лаунчер, иначе MSB3027/MSB3021 (файл занят)
-Stop-Process -Name Gml.Launcher -Force -ErrorAction SilentlyContinue
+cd rust-launcher
 
-dotnet build Gml.Launcher.sln -v q 2>&1 | Select-Object -Last 4
-dotnet test Gml.Launcher.sln --no-build -v q 2>&1 | Select-Object -Last 2
-
-# Запуск (старт ~35–50 с: сплэш, загрузка данных)
-Start-Process 'src\Gml.Launcher\bin\Debug\net8.0\Gml.Launcher.exe'
+cargo run
+cargo run -- --offline      # кэшированные профили, без бэкенда
+cargo test
+cargo clippy --all-targets -- -D warnings
+cargo fmt --check
+cargo build --release
 ```
 
-Портативная single-file сборка (результат gitignored, лежит в `dist/portable`):
+Для линковки нужны MSVC Build Tools с workload «Desktop development with C++».
+Release-бинарь: `rust-launcher/target/release/vestalis-launcher.exe`. Портативная
+копия (gitignored):
 
 ```powershell
-dotnet publish 'src\Gml.Launcher\Gml.Launcher.csproj' -c Release -r win-x64 `
-  --self-contained true -p:PublishSingleFile=true `
-  -p:IncludeNativeLibrariesForSelfExtract=true -o dist\portable
+Copy-Item target\release\vestalis-launcher.exe ..\dist\rust\vestalis-launcher.exe -Force
 ```
 
-`IncludeNativeLibrariesForSelfExtract` обязателен, иначе рядом с exe окажутся нативные
-`libSkiaSharp`/`libHarfBuzzSharp`/`e_sqlite3`/`av_libglesv2`.
+Без необходимости не завершать `javaw.exe`/Minecraft: для сборки, тестов и
+clippy это не требуется.
 
-Известные предупреждения сборки (не ошибки, не связаны с текущими правками):
-`CS4014` в `LoginPageViewModel` и `CS8600` в `SkinService`.
-
-## Локальные данные и артефакты
-
-- `%APPDATA%\Vestalis\data.db` — SQLite, таблица `StorageItems` (`Key`, `Value` — JSON).
-  Ключи: `Settings`, `ServerHost`, `LastSelectedProfile`, `SavedCredentials`, `UserInfo`,
-  `InstallationDirectory`, `MirrorControlKey` (сервисный ключ зеркала, в репозиторий его
-  не класть; у обычного пользователя его нет).
-- Пока лаунчер запущен, БД читать только копией. Дамп:
-  `python %LOCALAPPDATA%\Temp\opencode\read_db.py`.
-- `%LOCALAPPDATA%\Gml.Launcher\validation-cache-v1.json` — кэш SHA-1 (можно удалять).
-- `%LOCALAPPDATA%\Gml.Launcher\launch-trace.log` — трассировка запуска, только при
-  `GML_LAUNCH_TRACE=1`.
-- `.gitignore` игнорирует `dist/`, `*.db-wal/-shm/-journal`, `launch-trace.log`,
-  `validation-cache*.json`.
-
-## Серверы и режимы бэкенда
-
-Хосты — `src/Gml.Launcher/Assets/Resources/ResourceKeysDictionary.cs`:
-
-- `ServerRu1Host` — `https://gmlfrr.vestalis.xyz/`
-- `ServerRu2Host` — `https://msk1.gmlfr.vestalis.xyz/`
-- `ServerEu1Host` — `https://gmlfr.vestalis.xyz/`
-- `ServerPl1Host` / `Host` — `https://201-58-180-2.sslip.io/` (сторонний, см. README)
-
-Режимы зеркала (`GET /api/v1/mirror/mode`), бейдж в правом верхнем углу:
-
-| `data.mode` | Бейдж | Цвет | Смысл |
-| --- | --- | --- | --- |
-| `local` | `ЗЕРКАЛО` | `#2E9E5B` зелёный | ответы из локального кэша VDS |
-| `proxy` | `ПРОКСИ` | `#D9822B` оранжевый | запросы напрямую на основной бэкенд |
-| `direct` | `ОСНОВНОЙ` | `#3B82F6` синий | основного бэкенда, зеркальных эндпоинтов нет |
-| `null`/ошибка | бейдж скрыт | — | бэкенд недоступен или режим неизвестен |
-
-## Карта кода (главное)
+## Данные
 
 | Что | Где |
 | --- | --- |
-| Точка входа, DI | `Program.cs`, `App.axaml.cs`, `Core/Extensions/ServiceLocator.cs` |
-| Сплэш, старт, валидация токена с HWID | `ViewModels/SplashScreenViewModel.cs` |
-| Главное окно: сервер, бейдж режима | `ViewModels/MainWindowViewModel.cs`, `Views/MainWindow.axaml` |
-| Глобальное состояние (режим, доступ) | `ViewModels/GlobalVariables.cs` |
-| Логин, 2FA, HWID | `ViewModels/Pages/LoginPageViewModel.cs`, `Core/Services/AutoLoginService.cs` |
-| Настройки (RAM/JVM/звук/HWID/ключ) | `ViewModels/Pages/SettingsPageViewModel.cs`, `Views/Pages/SettingsPageView.axaml` |
-| Проверка бэкенда и режим | `Core/Services/BackendChecker.cs`, `IBackendChecker.cs` |
-| Сервисный ключ, смена режима, selftest | `Core/Services/MirrorControlService.cs`, `IMirrorControlService.cs` |
-| Модель строки самодиагностики | `Models/SelfTestRow.cs` |
-| Настройки/хранилище | `Core/Services/SettingsService.cs`, `LocalStorageService.cs`, `StorageConstants.cs` |
-| Главная, профили, новости | `ViewModels/Pages/OverviewPageViewModel.cs` |
-| Список профилей | `ViewModels/Components/ListViewModel.cs`, `Views/Components/ServerListComponent.axaml` |
-| Выбор сервера | `Views/Components/ServerSelectorComponent.axaml`, `Models/GmlServer.cs` |
-| Звуки интерфейса | `Core/Services/SoundService.cs` |
-| Система / HWID из железа | `Core/Services/SystemService.cs`, `ISystemService.cs` |
-| Sentry, VPN, скины | `Core/Services/SentryInitializer.cs`, `VpnChecker.cs`, `SkinService.cs` |
-| SignalR | `src/Gml.Client/.../Helpers/SignalRConnect.cs`, `GmlClientManager.cs` |
-| Валидация/загрузка файлов | `src/Gml.Client/.../Helpers/Files/*`, `ApiProcedures.cs` |
-| Кэш SHA-1, трассировка | `Helpers/Files/ValidationCache.cs`, `Gml.Client.Interfaces/Helpers/LaunchTrace.cs` |
+| Настройки/сессия | `%APPDATA%\Vestalis\rust-launcher\state.json` (+ `.bak`) |
+| Геометрия окна | `%APPDATA%\Vestalis\rust-launcher\window.json` |
+| Игровые файлы | `%APPDATA%\Vestalis` |
+| Оффлайн-снимки | `%APPDATA%\Vestalis\offline-mode\...` |
+| Темы | `%APPDATA%\Vestalis\rust-launcher\themes` |
+| SHA-1 кэш | `%LOCALAPPDATA%\Vestalis\validation-cache-rust.json` |
+| Головы скинов | `%LOCALAPPDATA%\Vestalis\avatars\<uuid>.png` |
+| Иконки новостей | `%LOCALAPPDATA%\Vestalis\news-icons` |
+| Фоны профилей | `%LOCALAPPDATA%\Vestalis\profile-backgrounds` |
+| Кэш иконок темы | `%LOCALAPPDATA%\Vestalis\theme-icons` |
+| Логи | `%LOCALAPPDATA%\Vestalis\logs\launcher.log.<date>` |
 
-## Решения и подводные камни (не ломать)
+`state.json` пишется атомарно tmp→rename + `.bak`; битый JSON восстанавливается
+по валидным полям (`recover_state`/`merge_settings`), не сбрасывать весь файл.
+Первый запуск импортирует старый кэш
+`%LOCALAPPDATA%\Gml.Launcher\validation-cache-v1.json`.
 
-- **Самообновление удалено.** Лаунчер не дергает `/api/v1/launcher`, не скачивает и не
-  перезапускает себя. Обновления — вручную с сайта. В `Gml.Client` удалён старый API
-  (`SkipUpdate`, `GetActualVersion`, `UpdateCurrentLauncher`, `LauncherUpdater` и т.п.).
-- **HWID обязателен для нового бэкенда.** Без заголовка `X-HWID` авторизация отдаёт 403
-  («HWID отключена или недействительна»). Поэтому `SettingsService.GetHwidForAuthAsync`
-  никогда не возвращает `null`: с включённым тумблером уходит реальный HWID
-  (`CPU-плата-диски`), с выключенным — **новый случайный GUID на каждый запрос**
-  (`SystemService.GetRandomHwid`). Не возвращать `null` обратно. `checkToken` тоже обязан
-  слать `X-HWID`: `Auth(accessToken, hwid)` в интерфейсе → менеджере → `ApiProcedures`.
-- **Звуки не должны играть от фоновых событий.** Бэкенд по SignalR присылает
-  `RefreshProfiles`; перестройка списка профилей поднимает `SelectionChanged`, как от клика.
-  Лечится `SoundService.Suppress()` вокруг перестройки коллекций + проверкой
-  `TopLevel.GetTopLevel(control) is Window { IsActive: true }`. `ProfilesChanges`
-  маршалится через `ObserveOn(RxApp.MainThreadScheduler)`.
-- **UI-поток.** Подписки Rx, меняющие UI, переводить на `RxApp.MainThreadScheduler`;
-  анимации/изменения из других потоков — через `Dispatcher.UIThread.CheckAccess()/Post`.
-  Симптом нарушения: `InvalidOperationException: Call from invalid thread`.
-- **Опциональные моды** хранятся с суффиксом `.disabled`; сервер отдаёт имя без суффикса.
-  `HashValidationDecorator` считает мод опциональным по `-optional-mod.jar` в пути и
-  принимает `<файл>.disabled` как актуальную копию, чтобы не качать его каждый запуск.
-- **Кэш валидации файлов.** `ValidationCache` доверяет сохранённому SHA-1, только пока
-  совпадают размер и `LastWriteTimeUtc` (тики). Хэширование — параллельное
-  (`ProcessorCount * 2`, зажато в 4..16), `SystemHelper.CalculateFileHash` читает файл
-  чанками по 1 МБ через `ArrayPool`. Битый кэш не роняет запуск; запись атомарная
-  через `.tmp`. Формат файлов профиля меняется — кэш можно смело удалять.
-- **Старое исключение для `assets` при валидации убрано.** Если сервер начнёт отдавать
-  другие хэши для `assets`, файлы будут перекачиваться — это ожидаемо, не «чинить»
-  возвратом исключения без проверки формата на сервере.
-- **Трассировка запуска** — `Gml.Client.Interfaces/Helpers/LaunchTrace.cs` (namespace
-  `Gml.Client.Helpers`), включается `GML_LAUNCH_TRACE=1`, пишет в
-  `%LOCALAPPDATA%\Gml.Launcher\launch-trace.log`. По умолчанию выключена, на запуск не влияет.
-- **Бейдж режима бэкенда.** `BackendChecker.UpdateBackendStatus` (сплэш, смена сервера,
-  кнопка проверки) определяет доступность и режим; `MainWindowViewModel` опрашивает
-  `RefreshBackendModeAsync` через 3 с после старта и каждые 20 с, применяет изменения в
-  UI-потоке. `IsOffline` — это `GlobalVariables.BackendInactive` (глобальное состояние,
-  не поле экземпляра). Ошибки сети не должны валить лаунчер: бейдж скрывается.
-- **Управление режимом.** `MirrorControlService` шлёт заголовок `X-Mirror-Control-Key`:
-  `GET /api/v1/mirror/mode` (таймаут 10 с) — статус и `data.canControl`;
-  `PUT /api/v1/mirror/mode` с `{"mode":"local"|"proxy"}` — переключение.
-  Ключ вводится вручную в настройках, сохраняется только если сервер его принял
-  (`data.canControl == true`), лежит в `data.db` под `MirrorControlKey`; **в исходники
-  его не класть**. Кнопки «Зеркало»/«Прокси» видны только при `IsBackendControlAvailable`.
-  После смены режима сразу вызывается `MainWindowViewModel.RefreshBackendModeAsync`.
-- **Маршрутизация через Tor.** В той же карточке есть переключатель
-  «Отправлять запросы к основному бэкенду через Tor» (`PUT /api/v1/mirror/tor`,
-  состояние читается из `GET /api/v1/mirror/mode`: `torEnabled`, `torAvailable`).
-  Через Tor идут **только** запросы бэкенда к основному серверу (хосту из
-  `MIRROR_BASE_URL`/`MIRROR_PROXY_BASE_URL`); маркет, скины,
-  авторизация и сам лаунчер остаются прямыми. Состояние хранится на бэкенде
-  (`tor.json`), поэтому переключатель общий для всех клиентов с сервисным ключом.
-- **Самодиагностика.** `GET /api/v1/mirror/selftest` с тем же ключом, таймаут 45 с,
-  только чтение (ничего не меняет). Ответ: `data.status/mode/upstream/durationMs` и
-  `data.checks[]` (`key`, `name`, `status`, `message`, `durationMs`). Статусы строк:
-  `ok` → «ОК» зелёный, `warn` → «ВНИМАНИЕ» оранжевый, иначе «ОШИБКА» красный.
-  Без ключа сервер отвечает 403 — это не ошибка кода, а ожидаемое поведение.
-- **Главное окно без системной рамки.** `MainWindow` объявлен с `SystemDecorations="None"` и
-  **без** `ExtendClientAreaToDecorationsHint`: этот флаг заставлял DWM рисовать тень вокруг
-  окна, которая на ярком фоне выглядела как матовая серая обводка. Кнопки
-  свернуть/развернуть/закрыть свои (`Button.CaptionButton`), обработчики `MinimizeClick`/
-  `MaximizeClick`/`CloseClick`. Ресайз за края и углы сделан вручную: `BeginResizeDrag` по
-  8 зонам (`HitTestEdge`, хват 6 px), курсор меняется в `OnPointerMoved`. У корневого `Border`
-  стоит `Margin="-5"`, чтобы контент перекрывал невидимую 5-пиксельную рамку окна — без этого
-  страницы получают меньше высоты и низ наезжает на кнопки. Не возвращать
-  `ExtendClientAreaToDecorationsHint` и не убирать отрицательный margin.
-- **Брендинг окна загрузки.** Сплэш сделан типографикой: закруглённый тяжёлый шрифт Fredoka One
-  (`Assets/Fonts/FredokaOne-Regular.ttf`, OFL рядом — статичные веса берутся из истории
-  google/fonts, актуальный `Fredoka` там только вариативный, а Avalonia вес варианта не
-  выбирает). Слева иконка `logo.svg` (56 px, по высоте строки вордмарка), `Vestalis` белым
-  (кегль 58), `Femboy Edition` — по ширине примерно половина надписи (кегль 15), прижата к
-  правому краю. Брендовый блок специально уже полоски загрузки (полоска идёт с полями 20,
-  блок — с 22). У карточки **нет** `BorderBrush` (была матовая серая обводка), фон —
-  `FrameBackgroundColor`. Переливание — `LinearGradientBrush` с `SpreadMethod="Repeat"`, который
-  `DispatcherTimer` (32 мс, цикл 1.6 с) сдвигает через `StartPoint`/`EndPoint`; таймер
-  останавливается по `Closed`. Пастельная палитра и медленный цикл — намеренно: яркий/быстрый
-  градиент выглядел навязчиво.
-- **Переход сплэш → лаунчер и запуск в фоне.** `App.OnFrameworkInitializationCompleted` создаёт
-  главное окно с `PrepareIntro()` (контент `Opacity = 0`), показывает его и запускает морфинг:
-  окно сплэша реально растягивается до границ окна лаунчера (`MorphBoundsAsync`, 520 мс, шаг
-  16 мс через `DispatcherTimer`), затем карточка растворяется, а контент лаунчера проявляется
-  (`Core/Helpers/WindowTransitions.cs`). Фаза `MainWindow` — `AvaloniaXamlLoader.Load(this)`,
-  поэтому x:Name-полей нет, контент берётся через `Content`. Оба окна объявлены с
-  `ShowActivated="False"` и поднимаются в z-order через `RaiseWithoutActivation`
-  (`SetWindowPos` с `SWP_NOACTIVATE`), чтобы лаунчер было видно, но фокус оставался у
-  приложения пользователя. Главное окно само скрывается примерно через 5 с после старта —
-  так было и до перехода, это не регрессия.
-- **Локализация карточки сервисного доступа.** Тексты карточки и сообщения
-  `MirrorControlService`/`SettingsPageViewModel` захардкожены по-русски в axaml и коде,
-  а не через `Resources.*` (в отличие от остального UI). При добавлении языков это
-  первое место, где нужно вынести строки в ресурсы.
-- **Смена сервера** (`MainWindowViewModel.SwitchServerAsync`) сохраняет хост, меняет
-  хост клиента, **сбрасывает `UserInfo` и `SavedCredentials`** (авторизация привязана к
-  бэкенду), обновляет режим и Sentry DSN. Это поведение по дизайну.
-- **Git.** Сабмодуль коммитится отдельно, потом обновляется указатель в корне
-  (`git add src/Gml.Client`). Локальные правки хостов в `ResourceKeysDictionary.cs`
-  не коммитить без просьбы.
+## Карта кода
 
-## Проверка UI (живой лаунчер)
+| Что | Где |
+| --- | --- |
+| Точка входа, Slint callbacks, event pump | `src/main.rs` |
+| Воркер: команды, auth, профили, моды, запуск | `src/worker.rs` |
+| HTTP-клиент, auth, профили, новости | `src/api.rs` |
+| Валидация манифеста и загрузки | `src/files.rs` |
+| Запуск JVM и authlib | `src/launch.rs` |
+| SignalR | `src/signalr.rs` |
+| Темы, Catppuccin, Material 3, HSV | `src/theme.rs` |
+| Layout-редактор | `src/layout.rs` |
+| Локализация RU/EN/UA | `src/locale.rs` |
+| Sentry и санитайзер | `src/telemetry.rs` |
+| Диагностический ZIP | `src/diagnostics.rs` |
+| Экранная пипетка (GDI) | `src/screen_picker.rs` |
+| Win32-окно, DWM, буфер обмена | `src/window.rs` |
+| Discord RPC | `src/discord.rs` |
+| state.json и кэши | `src/storage.rs` |
+| HWID, RAM, ОС | `src/hwid.rs` |
+| Настройки, сессия, DTO, серверы | `src/model.rs` |
+| UI | `ui/app.slint` |
 
-Окно `Gml.Launcher`, координаты клика = смещение окна + координаты на скриншоте.
-Готовые хелперы (вне репозитория): `%LOCALAPPDATA%\Temp\opencode\`
-`shot.ps1` (скрин окна), `input.ps1 -X -Y` (клик), `focus.ps1` (вывести окно вперёд),
-`read_db.py` (дамп `data.db`). Если окно перекрыто — сначала `focus.ps1`, иначе
-`CopyFromScreen` снимет чужое окно.
+## Решения и подводные камни
 
-Типовые сценарии:
-
-- **Логин/HWID:** форма входа, тумблер «Отправлять HWID» и подсказка. Выключенный
-  тумблер = случайный HWID на каждую попытку, включённый = реальный.
-- **Бейдж режима:** правый верхний угол; пропал — бэкенд недоступен или эндпоинта нет.
-- **Сервисный доступ:** Настройки → карточка «Сервисный доступ»; без принятого ключа
-  блоки режима и самодиагностики скрыты.
-- **Самодиагностика:** Настройки → «Проверить бэкенд» → строки со статусом и временем.
-
-## Rust rewrite (`rust-launcher/`, ветка `feature/rust-launcher-rewrite`)
-
-- Отдельный нативный лаунчер на Rust + Slint 1.18 (`ui/app.slint`), `main` и `src/`
-  не трогаются. Ветка создана от `rust`.
-- Сборка/запуск/тесты (MSVC Build Tools + VC workload обязательны для линковки):
-
-```powershell
-cd rust-launcher
-cargo run
-cargo test
-cargo clippy --all-targets -- -D warnings
-```
-
-- Что уже работает: вход + 2FA + HWID, выбор сервера, профили/новости (обновление
-  раз в 90 с), оффлайн-режим по `%APPDATA%\Vestalis\offline-mode`, SHA-1-валидация
-  (импортирует старый кэш `%LOCALAPPDATA%\Gml.Launcher\validation-cache-v1.json`),
-  параллельные загрузки, запуск `javaw.exe` с `-Xms/-Xmx` и подменой
-  authlib-эндпоинта, страница модов (`.jar` ↔ `.jar.disabled`), звуки, безрамочное
-  окно со своими кнопками, сплэш, настройки, сервисный доступ, Discord RPC.
-- Выбор сервера — выпадающий список в правом верхнем углу. При смене бэкенда
-  сохранённые логин/пароль остаются и выполняется автологин; сплэш висит до
-  `Event::Ready` (жёсткий таймаут 20 с), поэтому форма входа не мелькает.
-- Аватар игрока в сайдбаре — настоящая голова скина (базовый слой + слой шляпы),
-  а не первая буква ника. Берётся из `GET /api/v1/users/info/{name}` →
-  `textureSkinGuid`/`externalTextureSkinUrl`, режется 8×8 в (8,8), апскейлится
-  nearest до 96×96 и кэшируется в `%LOCALAPPDATA%\Vestalis\avatars\<uuid>.png`.
-  Буква остаётся только фолбэком, пока голова не загрузилась.
-- Сервисный доступ (ключ, режимы `local/proxy`, Tor, selftest) — **только PL-1 и
-  только под аккаунтом Kydasay** (`server-index == 3 && is-kydasay`): RU/EU
-  отдают 404 на `/api/v1/mirror/*`, карточка скрыта, команды в воркере
-  дополнительно проверяют хост.
-- Официальные RU/EU требуют `X-Client-Signature`:
+- **Авторизация.** Официальные RU/EU требуют `X-HWID` и `X-Client-Signature`:
   `HMAC-SHA256(secret, "{unixSeconds}:{guidN}:{hwid}:Vestalis")`, заголовок
-  `unixSeconds:guidN:hexDigest`. Ключ выдаёт проект; в билд он вшит обфусцированно
-  (XOR в `client_secret()` в `worker.rs`), настройки для него нет — поле
-  «Ключ подписи клиента» удалено, чтобы опечатка не ломала сессии на официальных
-  хостах. **В исходники и git открытый ключ не класть.**
-- Тихий fallback на PL-1 при `403` от официального хоста **удалён**. Зеркальная
-  сессия не может зайти на игровой сервер: `join` у PL-1 отвечает `401`, сервер
-  получает `204` от `hasJoined`, и Minecraft пишет «сессия недействительна».
-  Теперь ошибка официального хоста показывается как есть; PL-1 остаётся в
-  селекторе только для просмотра/сервисного доступа.
-- Проверка токена (`checkToken`) выполняется только при старте. Фоновое
-  обновление профилей раз в 90 с больше не разлогинивает при ошибке: иначе
-  повторный sign-in менял AccessToken в БД, и уже запущенная игра получала
-  «сессия недействительна» при подключении к серверу.
-- `OsArchitecture` в `/profiles/info` обязан быть `"64"` (как в C#:
-  `ToString().ToLower().Replace("x","")`). С `"x64"` бэкенд отдаёт пустой
-  профиль (`state=Error`, `files=[]`), и запуск падает с «Java не найдена».
-- Полноэкранный запуск передаёт разрешение монитора (`GetSystemMetrics`), а не
-  900×600 — иначе игра растягивается. Кнопка «развернуть» у безрамочного окна
-  сделана через Win32 `SetWindowPos` по `SPI_GETWORKAREA`: стандартный
-  `maximized` накрывал панель задач.
-- Discord RPC — крейт `discord-rich-presence` в `src/discord.rs` (named pipe,
-  READY, `SET_ACTIVITY`). Значения как в C# `ApiProcedures`: client id
-  `1558556890605162577`, details «Продам гараж…», assets `logo2`/`logo`,
-  state «Сидит в лаунчере» / `Играет в "Surv10"`.
-- Иконка exe встраивается `winres` из `assets/logo.ico` в `build.rs`; окну
-  дополнительно ставится `WM_SETICON` (32px/DPI-фрейм для обоих размеров), а
-  процессу — тот же AppUserModelID, что в C#
-  (`Vestalis.FemboyEdition.Launcher`). `assets/logo.ico`/`logo.png` генерируются
-  `cargo run --example make_icon` из **нарисованной вручную** SVG-морды кота на
-  скруглённом градиентном тайле (фиолетовый → розовый). Не возвращать трассировку
-  `logo.svg` как источник иконки: у неё белый квадрат-подложка, который на панели
-  задач выглядел тонкой рамкой, а мелкие детали пропадали в 16 px.
-- В настройках есть «Скрывать лаунчер при запуске игры» (`hide_on_launch`):
-  после spawn процесса окно сворачивается (`ShowWindow(SW_MINIMIZE)`).
-- Настройки собраны в Slint-дереве постоянно (`visible: screen == 2`), поэтому
-  открываются без холодного layout; переходы экранов/кнопки/строки профилей
-  анимированы. Разворот окна — плавный `animate_to` по work area.
-- Кастомный хром: заголовок 42 px, селектор сервера — пилюля 138×30 с
-  градиентной иконкой и шевроном (`Path`), кнопки окна 38×28 рисуются
-  примитивами (`CaptionButton.kind` = `min`/`max`/`restore`/`close`), без
-  текстовых глифов. Минимальный размер окна — `min-width: 1080px`,
-  `min-height: 620px` (проверяется через `WM_GETMINMAXINFO`), меньше окно
-  сжать нельзя. Скругление окна — DWM `DWMWA_WINDOW_CORNER_PREFERENCE` в
-  `window::apply_rounded_corners` (не `SetWindowRgn`: DWM сам пересчитывает
-  радиус при ресайзе/развороте).
-- Данные: `%APPDATA%\Vestalis\rust-launcher\state.json`,
-  кэш `%LOCALAPPDATA%\Vestalis\validation-cache-rust.json`,
-  головы скинов `%LOCALAPPDATA%\Vestalis\avatars\<uuid>.png`,
-  логи `%LOCALAPPDATA%\Vestalis\logs\launcher.log.<date>`.
-- Мелкие шрифты подняты (10→12, 11→13, 12/13→14) — не возвращать 10–11 px.
-  Шрифт UI — Nunito (`assets/fonts/Nunito-{Regular,SemiBold,Bold}.ttf`, OFL
-  рядом); подключается файловыми `import` в `app.slint`, семья задана через
-  `Window.default-font-family: "Nunito"`, базовый вес — `default-font-weight:
-  600` (Regular 400 на тёмном фоне «рябит»). Не заменять на Fredoka One: в нём
-  нет кириллицы.
-- Темы: `src/theme.rs` + `export global Theme` в `app.slint`. Встроенные
-  `dark/light/femboy/ocean` заданы в Rust (`builtin_themes()`), пользовательские
-  — `name.json` **или** `name/theme.json` + ассеты в
-  `%APPDATA%\Vestalis\rust-launcher\themes` (формат
-  `{"name","mode","theme","icons","texts"}`, поля опциональны, битые
-  цвета/JSON логируются и заменяются на `dark`). `Settings.theme` хранит имя,
-  `Settings.themeMode` — режим. Тема применяется в `main` до `ui.run()` и
-  мгновенно в Настройки → «Оформление».
-- Режимы: `base`, `material3`, `liquid-glass`. M3-палитра генерируется в Rust
-  из точного WinRT `UISettings.GetColorValue(Accent)` (крейт `windows`,
-  `UI_ViewManagement`), с fallback на `AccentColor` (ABGR),
-  `ColorizationColor` (ARGB) и Explorer `AccentPalette`; выбирается самый
-  насыщенный кандидат. Серый/чёрный accent — валидная настройка Windows и
-  используется как есть; accent темы берётся только если Windows вообще не
-  отдал значение. Кнопка «Тема Windows» показывает считанный hex. При
-  активном M3 accent опрашивается раз в 20 с. **Важно:** не инициализировать
-  COM как MTA до создания окна — winit делает `OleInitialize` (STA) и падает с
-  `RPC_E_CHANGED_MODE`; `system_accent()` вызывается только после
-  `AppWindow::new()`. Liquid Glass —
-  **имитация**: в Slint 1.18 нет backdrop-blur, поэтому используются
-  полупрозрачные слои, градиентные блики (`glass-*`) и размытые цветовые поля
-  (`GlassBackdrop`).
-- Иконки темы: семантические ID (`server/chevron/play/settings/mods/refresh/
-  minimize/maximize/restore/close/warning/error/success`), только SVG/PNG до
-  512 КиБ, относительные пути внутри папки темы, без `..`/абсолютных путей/
-  симлинков; SVG `currentColor` тонируется и кэшируется в
-  `%LOCALAPPDATA%\Vestalis\theme-icons`. Тексты — только allowlist
-  `TEXT_KEYS` (заголовки/кнопки), ошибки и управление окном не переопределяются.
-- Layout: `src/layout.rs`, отдельно от темы, `Settings.layout` (camelCase).
-  Шесть зон, блоки `user/profiles/countdown/sidebar-actions/news/main-actions`,
-  серверный селектор закреплён в header. Экран Настройки → «Layout» двигает
-  блоки кнопками, всё нормализуется и сохраняется сразу; свободного canvas нет.
-- Все цвета/радиусы в `app.slint` идут через `Theme.*`; литералы допустимы
-  только в дефолтах global Theme. Не добавлять сетевую загрузку тем и не читать
-  файлы вне папки тем.
-- Фон лаунчера: настройка `background-effect` (`none`/`fireflies`/`leaves`/
-  `snow`) в карточке «Лаунчер», хранится как `backgroundEffect` в `state.json`.
-  Слой `BackgroundEffect` вставлен после градиента и до контента на экранах
-  входа и главного; анимация на `animation-tick()` (без Rust-таймера), `%`
-  в Slint нельзя — только `Math.mod`, `sin/cos` принимают угол (`* 1deg`),
-  `border-radius: 50%` не поддерживается — используется длина.
-- На карточке отсчёта «НЕДРОЧАБРЬ» стоит `assets/nedrochabr.png` (картинка
-  пользователя), скруглённая рамка 102×104, текст — свойство `countdown-text`.
-- PL-1 (`https://201-58-180-2.sslip.io/`) **временно выключен**:
-  `model::PL1_AVAILABLE = false`, пункт скрыт в селекторе, `select_server(3)`
-  игнорируется, а сохранённый PL-1 при старте мигрирует на RU-2 (с автологином).
-  Вернуть: поставить `true` — пункт и сервисная карточка появятся снова.
-- Валидация файлов: сначала сравнивается `size` из манифеста (быстрый признак
-  обновления), затем SHA-1. Кэш доверяет локальному хэшу только если совпали
-  размер, mtime и `server_hash` (пустой у старых записей — доверяем). После
-  скачивания запись кэша обновляется; количество файлов к обновлению пишется
-  в лог (`profile files validated`).
-- SignalR (`src/signalr.rs`): реальный хаб `wss://<host>/ws/launcher?access_token=…`,
-  negotiate → WebSocket handshake `{"protocol":"json","version":1}` → события
-  `RefreshProfiles`, `RequestLauncherHash`/`ConfirmLauncherHash`, ping `{"type":6}`
-  каждые 15 с. Реконнект с backoff 1→30 с; задача отменяется при логауте, смене
-  сервера и оффлайне. Опрос 90 с оставлен только фолбэком. Токен идёт в query,
-  как в C#.
-- Моды: кнопка «Скачать» берёт хэш из манифеста `/profiles/info`, качает тем же
-  `files::download_optional` (3 попытки, прогресс по байтам) в `.jar.disabled`;
-  список обновляется без запуска игры. Имена сопоставляются по alphanumerics
-  (`normalize_name`), иначе `-1.0`/пробелы ломают поиск.
-- Тексты/иконки темы: `TEXT_KEYS` расширен под карточки настроек, layout, язык и
-  моды; приоритет theme override → `locale::get(lang, key)`. Ошибки и кнопки
-  окна по-прежнему не переопределяются. `locale.rs` — RU/EN/UA, язык в
-  `settings.language`; `Event::Settings` теперь `Box<Settings>` (clippy
-  large_enum_variant).
-- Смена темы анимируется в Rust (`Theme::mix`, 280 мс, `THEME_TIMER`), потому что
-  **глобалы Slint не поддерживают `animate`** (`A global component cannot have
-  animations`). Не возвращать animate в `global Theme`.
-- `DragArea`/`DropArea` в Slint 1.18: `data-transfer` нельзя создать из строки в
-  биндинге. Payload готовится заранее: `TouchArea.pointer-event` на hover/down
-  вызывает `LayoutDrag.begin(item)`, Rust кладёт `DataTransfer` в
-  `LayoutDrag.payload`; `data: LayoutDrag.payload`. Дроп читается через
-  `LayoutDrag.transfer-text(event.data)`. Стрелки в редакторе — обязательный
-  fallback.
-- Layout: `settings.layout` (активный) + `settings.layouts` (профили) +
-  `layoutProfile`; ширины 240–420 px, `hidden` хранит скрытые блоки в зоне,
-  `blockHeights` — высоты блоков (мин/макс в `layout::BLOCK_HEIGHTS`).
-  DnD→`move_to_zone`, скрытие→`set_hidden`, высота→`set_block_height`; всё
-  нормализуется и сохраняется сразу.
-- **Скрытые блоки не должны занимать место.** В Slint `visible: false` у
-  `ZoneItem` всё равно оставляет высоту и spacing. Поэтому Rust отдаёт для
-  главного экрана отдельные списки `layout-*-visible` без скрытых элементов, а
-  редактор получает полные списки. Не возвращать `visible: !is-hidden(...)`.
-- `sidebar-actions` прижат к низу сайдбара: остальные блоки лежат в `ScrollView`,
-  кнопки — отдельным слотом под ним. Если все блоки правого сайдбара скрыты,
-  панель исчезает (`sidebar-right-has-visible`).
-- `--offline` запускает лаунчер на кэшированных профилях без бэкенда — удобно
-  для проверки layout/темы без автологина.
-- Геометрия окна — отдельный `%APPDATA%\Vestalis\rust-launcher\window.json`
-  (не `state.json`: воркер перезаписывает state при выходе). Пишется раз в 2 с
-  при изменении и по кнопке закрытия; при старте клампится к work area и
-  1080×620. «Сбросить окно» центрирует. `maximized` + `NORMAL_GEOMETRY`
-  позволяют восстановить развёрнутое окно и вернуться к прежнему normal-размеру;
-  не сохранять work-area rect как normal.
-- Буфер обмена — `window::copy_text` (Win32 `OpenClipboard` + `SetClipboardData`
-  CF_UNICODETEXT). Кнопка «Скопировать HWID» всегда копирует реальный HWID,
-  независимо от тумблера отправки.
-- Иконки новостей и фоны профилей — из бэкенда (`News.iconUrl`,
-  `Profile.background`). `worker::cached_remote_image` качает их в
-  `%LOCALAPPDATA%\Vestalis\news-icons` / `profile-backgrounds` (ключ SHA-1 URL,
-  png/jpg, атомарная запись tmp→rename, очистка 30 дней, лимиты 300/200), а
-  Slint получает локальные пути; `main::decode_cached_image` декодирует их через
-  thread-local `IMAGE_CACHE`, чтобы не читать диск на каждом обновлении. Фон
-  профиля показывается только на hover/выборе: `Image` + градиент `Theme.*` с
-  `animate opacity`.
-- Переходы экранов: `MainWindow` держит `screen-opacity`, `switch_screen` ставит
-  его в 0, меняет `screen` и через 20 мс возвращает 1; у контейнеров экранов
-  стоит `animate opacity` 190 мс. Экран модов (`OpenMods`) открывается сразу, а
-  список догружается — не ждать сеть перед анимацией.
-- Плавность: `apply_profiles` сравнивает новые `ProfileView` со старыми, а
-  `emit_news` — `NewsView`; при одинаковых данных модель Slint не пересобирается
-  (иначе сбрасывались scroll/hover каждые 90 с). Частицы фона уменьшены
-  (fireflies 10, leaves 14, snow 22), у светлячков меньший blur.
-- Темы: Catppuccin Mocha/Macchiato/Frappe/Latte (официальные hex), режим
-  `acrylic` — имитация без backdrop-blur (слои + `AcrylicGrain`), использует те
-  же настройки прозрачности, что и glass. `normalize_mode` знает 4 режима.
-- Настройки автосохраняются: кнопки «Сохранить» нет. `settings_from_ui`
+  `unixSeconds:guidN:hexDigest`. Ключ вшит обфусцированно (XOR в
+  `client_secret()` в `worker.rs`), поля для него нет. Открытый ключ в исходники
+  и git не класть.
+- **checkToken** выполняется только при старте. Фоновое обновление профилей раз
+  в 90 с не должно разлогинивать: иначе повторный sign-in меняет AccessToken и
+  уже запущенная игра получает «сессия недействительна».
+- **`OsArchitecture`** в `/profiles/info` обязан быть `"64"`. С `"x64"` бэкенд
+  отдаёт пустой профиль (`state=Error`, `files=[]`).
+- **PL-1** (`https://201-58-180-2.sslip.io/`) выключен:
+  `model::PL1_AVAILABLE = false`, пункт в селекторе показан как disabled
+  `W.I.P`, `select_server(3)` игнорируется, сохранённый PL-1 мигрирует на RU-2.
+  Сервисная карточка и `/api/v1/mirror/*` в Rust-лаунчере отсутствуют.
+- **Сплэш** висит до `Event::Ready` (жёсткий таймаут 20 с), поэтому форма входа
+  не мелькает. При смене сервера сохранённые логин/пароль остаются и выполняется
+  автологин.
+- **Аватар** — настоящая голова скина: `GET /api/v1/users/info/{name}` →
+  `textureSkinGuid`/`externalTextureSkinUrl`, crop 8×8 в (8,8), nearest до
+  96×96, кэш `avatars\<uuid>.png`. Буква — только фолбэк.
+- **Темы.** `src/theme.rs` + `export global Theme` в `app.slint`. Встроенные
+  палитры: `dark`, `light`, `femboy`, `ocean`, `Apple`, `Discord`, `Minecraft`,
+  `Nord`, `Dracula`, `Gruvbox`, Catppuccin Mocha/Macchiato/Frappe/Latte,
+  `Windows` (из акцента Windows). Пользовательские темы —
+  `name.json` или `name/theme.json` + `icons/` в
+  `%APPDATA%\Vestalis\rust-launcher\themes`. Битые значения логируются и
+  заменяются на `dark`.
+- **Режимы:** `base`, `material3`, `liquid-glass`, `acrylic`. M3-палитра
+  генерируется из WinRT `UISettings.GetColorValue(Accent)` с registry-fallback.
+  Серый/чёрный accent — валидная настройка Windows. Liquid Glass и Acrylic —
+  имитации: в Slint 1.18 нет backdrop blur. Акцент M3 опрашивается раз в 20 с.
+- **COM.** Не инициализировать COM как MTA до создания окна: winit делает
+  `OleInitialize` (STA), иначе `RPC_E_CHANGED_MODE`. `system_accent()`
+  вызывается только после `AppWindow::new()`.
+- **Иконки темы:** семантические ID, только SVG/PNG до 512 КиБ, пути внутри
+  папки темы, без `..`/абсолютных путей/симлинков. SVG `currentColor`
+  тонируется и кэшируется в `theme-icons`. Тексты — allowlist `TEXT_KEYS`;
+  ошибки и кнопки окна не переопределяются.
+- **Layout.** `Settings.layout` отдельно от темы: шесть зон и блоки
+  `user/profiles/countdown/sidebar-actions/news/main-actions`, селектор сервера
+  закреплён в header. DnD + стрелки, ширины 240–420 px, `hidden` и
+  `blockHeights`. Всё нормализуется и сохраняется сразу.
+- **Скрытые блоки не занимают место.** Rust отдаёт для главного экрана списки
+  `layout-*-visible` без скрытых элементов; редактор получает полные списки.
+  Не возвращать `visible: !is-hidden(...)`.
+- **`sidebar-actions`** прижат к низу сайдбара, остальные блоки — в `ScrollView`.
+  Если все блоки правого сайдбара скрыты, панель исчезает.
+- **Фон лаунчера:** `background-effect` (`none`/`fireflies`/`leaves`/`snow`),
+  анимация на `animation-tick()` без Rust-таймера. В Slint нет `%`,
+  `border-radius: 50%`; использовать `Math.mod`, `sin/cos` с `* 1deg` и длину.
+  Частиц немного (10/14/22), чтобы не дёргать прокрутку.
+- **Шрифт:** Nunito (`assets/fonts/Nunito-{Regular,SemiBold,Bold}.ttf` + OFL),
+  `default-font-family: "Nunito"`, базовый вес 600. Fredoka One не использовать:
+  в нём нет кириллицы. Мелкие размеры 10–11 px не возвращать.
+- **Валидация файлов:** сначала `size` из манифеста, затем SHA-1. Кэш доверяет
+  локальному хэшу только при совпадении размера, mtime и `server_hash` (пустой
+  у старых записей — доверяем). Опциональные моды — `.jar.disabled`.
+- **SignalR:** `wss://<host>/ws/launcher?access_token=…`, negotiate → handshake
+  `{"protocol":"json","version":1}` → `RefreshProfiles`,
+  `RequestLauncherHash`/`ConfirmLauncherHash`, ping `{"type":6}` каждые 15 с.
+  Реконнект 1→30 с; задача отменяется при логауте, смене сервера и оффлайне.
+  Опрос 90 с — только фолбэк.
+- **Моды:** «Скачать» берёт хэш из манифеста и качает через
+  `files::download_optional` в `.jar.disabled`; имена сопоставляются по
+  alphanumerics (`normalize_name`). Список обновляется без запуска игры.
+- **Темы и локализация:** приоритет theme override → `locale::get(lang, key)`.
+  `Event::Settings` — `Box<Settings>` (clippy large_enum_variant).
+- **Смена темы** анимируется в Rust (`Theme::mix`, 280 мс, `THEME_TIMER`):
+  глобалы Slint не поддерживают `animate`.
+- **DragArea/DropArea:** `data-transfer` нельзя создать из строки в биндинге.
+  Payload готовится в Rust (`LayoutDrag.begin`/`LayoutDrag.payload`), дроп
+  читается через `LayoutDrag.transfer-text(event.data)`. Стрелки — fallback.
+- **Геометрия окна** — отдельный `window.json`, не `state.json` (воркер
+  перезаписывает state при выходе). Клампится к work area и 1080×620;
+  `maximized` + `NORMAL_GEOMETRY` не сохранять как normal.
+- **Окно:** кастомный хром 42 px, кнопки 38×28, минимум 1080×620 через
+  `WM_GETMINMAXINFO`, скругление DWM `DWMWA_WINDOW_CORNER_PREFERENCE`.
+  Разворот — Win32 `SetWindowPos` по `SPI_GETWORKAREA`, не стандартный
+  `maximized` (иначе накрывает панель задач).
+- **Один экземпляр:** `window::ensure_single_instance` держит mutex
+  `Local\\Vestalis.FemboyEdition.Launcher`.
+- **Буфер обмена:** `window::copy_text` (Win32 `OpenClipboard` +
+  `SetClipboardData` CF_UNICODETEXT). «Скопировать HWID» всегда копирует
+  реальный HWID независимо от тумблера отправки.
+- **Иконки новостей и фоны профилей:** `News.iconUrl`, `Profile.background` →
+  `worker::cached_remote_image` в `news-icons`/`profile-backgrounds` (SHA-1 URL,
+  png/jpg, tmp→rename, 30 дней, лимиты 300/200). `main::decode_cached_image`
+  декодирует через thread-local `IMAGE_CACHE`. Фон профиля — `Image` + градиент
+  `Theme.*` с `animate opacity` на hover/выборе.
+- **Переходы:** `switch_screen` ставит `screen-opacity` в 0, меняет `screen` и
+  через 20 мс возвращает 1; у экранов `animate opacity` 190 мс. Моды
+  открываются сразу, список догружается.
+- **Плавность:** `apply_profiles`/`emit_news` не пересобирают модель Slint при
+  одинаковых данных (иначе сбрасываются scroll/hover каждые 90 с).
+- **Автосохранение настроек:** кнопки «Сохранить» нет. `settings_from_ui`
   валидирует RAM/разрешение/путь/Java/accent, `autosave_timer` (150 мс опрос,
-  500 мс стабильности) шлёт `SaveSettings`; невалидный снапшот не пишется и
-  показывает красный статус. Не возвращать ручное сохранение.
-- Телеметрия: `settings.telemetryEnabled` (по умолчанию false) +
-  `src/telemetry.rs` (Sentry). DSN только из `VESTALIS_SENTRY_DSN`/`SENTRY_DSN`,
-  в бинарь не вшивать. `before_send` прогоняет событие через JSON-санитайзер:
-  ключи token/password/secret/credential/hwid/authorization/savedLogin/user/
-  email/login удаляются, пути `C:\Users\<name>` и имя пользователя вычищаются,
-  лог-хвост очищается. `telemetry::configure` вызывается при старте и после
-  применения настроек.
-- Онбординг: `settings.onboardingCompleted`; показывается после сплэша, если
-  false. Старые `state.json` без ключа мигрируют в completed, чтобы обновление
-  не показывало его снова. «Пройти обучение заново» в настройках сбрасывает
-  флаг. Шаги: язык, тема/режим, телеметрия, установка/Java.
-- Пикер цвета: `picker-*` свойства/колбэки в Slint (HSV, hue slider, hex,
-  recent), `theme::hsv_to_rgb`/`rgb_to_hsv`, `accentHistory` в state.
-  Экранная пипетка — `src/screen_picker.rs`: topmost окно с GDI-лупой,
-  `GetPixel`/`BitBlt`/`StretchBlt`, клик выбирает, Esc/ПКМ отменяет. Старый
-  `ChooseColorW` удалён.
-- Один экземпляр: `window::ensure_single_instance` держит named mutex
-  `Local\\Vestalis.FemboyEdition.Launcher`; второй процесс показывает
-  MessageBox и выходит, чтобы не перезаписывать state.
-- Обслуживание в настройках: открыть папку установки/логов, «Проверить файлы»
-  (тот же `sync_profile`, без запуска игры), очистка SHA-1 кэша, диагностика.
-  Discord RPC отключается настройкой `discordRpc`.
-- `settings.customJava` (пусто = путь из манифеста) переопределяет `java_path`;
-  проверяется `is_file()`; путь выбирается кнопкой «Обзор…» через
-  `window::pick_file` (Win32 `GetOpenFileNameW` из крейта `windows`, не
-  самописная структура). `settings.autoLogin` выключает автовход, но
-  сохранённые креды не удаляет. Страница модов фильтруется в воркере
-  (`SetModsFilter`), умеет открывать папку модов, качать все отсутствующие
-  (`DownloadMissingMods`, последовательно через `download_mod`) и переключать
-  все скачанные (`SetAllMods` через `set_mod_enabled`).
-- Завершение игры: `launch::spawn` возвращает `Child`; воркер держит поток с
-  `child.wait()` и шлёт `Event::GameExited`, main пересылает
-  `Command::GameExited(pid)` для сброса Discord presence и статуса и
-  восстанавливает свёрнутое окно (`window::restore_launcher`), если включено
-  «Скрывать лаунчер при запуске игры».
-- Отмена запуска: `Worker.launch_cancel: Arc<AtomicBool>`, `Command::CancelLaunch`;
-  `files::sync_profile` проверяет флаг между файлами и внутри потока загрузки,
-  удаляет `.tmp`, а `play_inner` не спавнит игру после отмены. Не забывать
-  сбрасывать флаг в начале `play`.
-- `state.json`: атомарная запись tmp→rename + `.bak`; при частично битом JSON
-  `recover_state`/`merge_settings` сохраняют валидные поля. Не сбрасывать весь
-  файл на одной ошибке типа.
-- Кэши: аватары/иконки темы чистить `storage::cleanup_cache_dir` (30 дней,
-  200/500 файлов), запись только tmp→rename; битые файлы игнорировать.
-- Диагностика: `src/diagnostics.rs`, ZIP на рабочий стол (логи, версия, темы,
-  санитизированный state). Вычищать `token/password/secret/credential/user/
-  savedLogin` рекурсивно; в исходники секреты не класть.
-- Подводные камни: в Rust `regex` **нет look-around** — не тащить сюда C#-паттерны
-  с `(?<!…)`/`(?=…)`; `slint` facade не экспортирует feature `svg`, она включается
-  через прямую зависимость `i-slint-core = { features = ["svg"] }`; UI-поток обязан
-  остаться главным (`ui.run()`), Tokio — фоновый.
-- Ещё не сделано: SignalR-подписки (вместо них опрос раз в 90 с), витрина/страница
-  скинов (голова игрока уже рендерится), Sentry, установщик и подпись кода.
-  Подробности — `rust-launcher/README.md` и `rust-launcher/docs/ARCHITECTURE.md`.
+  500 мс стабильности) шлёт `SaveSettings`. Невалидный снапшот не пишется.
+- **Телеметрия:** `telemetryEnabled` (по умолчанию false) + Sentry. DSN только
+  из `VESTALIS_SENTRY_DSN`/`SENTRY_DSN`, в бинарь не вшивать. `before_send`
+  удаляет token/password/secret/credential/hwid/authorization/savedLogin/user/
+  email/login, чистит `C:\Users\<name>` и лог-хвост.
+- **Онбординг:** `onboardingCompleted`; показывается после сплэша, старые state
+  мигрируют в completed. «Пройти обучение заново» сбрасывает флаг.
+- **Пикер цвета:** HSV-модал + `screen_picker.rs` (topmost GDI-лупа,
+  `StretchBlt`, клик выбирает, Esc/ПКМ отменяет). `ChooseColorW` не возвращать.
+- **Завершение игры:** `launch::spawn` возвращает `Child`; поток ждёт
+  `child.wait()`, шлёт `Event::GameExited`, main сбрасывает Discord/статус и
+  восстанавливает свёрнутое окно.
+- **Отмена запуска:** `Worker.launch_cancel` (`Arc<AtomicBool>`),
+  `Command::CancelLaunch`; `sync_profile` проверяет флаг между файлами и внутри
+  загрузки, удаляет `.tmp`; `play_inner` не спавнит игру после отмены. Флаг
+  сбрасывать в начале `play`.
+- **Кэши:** аватары/иконки/новости/фоны чистить `storage::cleanup_cache_dir`
+  (30 дней, лимиты), писать только tmp→rename, битые файлы игнорировать.
+- **Диагностика:** ZIP на рабочий стол (логи, версия, темы, санитизированный
+  state). Секреты в исходники не класть.
+- **Rust/Slint:** в `regex` нет look-around — не тащить .NET-паттерны с
+  `(?<!…)`/`(?=…)`. Feature `svg` включается через прямую зависимость
+  `i-slint-core`; UI-поток обязан остаться главным (`ui.run()`), Tokio — фон.
+
+## Ещё не сделано
+
+- Витрина/страница скинов (голова игрока уже рендерится).
+- Установщик и подпись кода.
+- Точный morph сплэш → окно как в старой версии (сейчас анимированный стартовый
+  оверлей).
+- Ошибки/статусы, которые приходят с бэкенда, остаются на языке бэкенда;
+  статические строки локализованы в `src/locale.rs`.
+- macOS/Linux не поддерживаются: окно, HWID и DWM — Windows-only.
 
 ## Стиль работы
 
-- Не читать большие каталоги целиком (там runtime Java и тысячи файлов) — только
-  точечный `grep`/`read` по конкретным путям.
-- Сборку/тесты выводить хвостом (`Select-Object -Last 4`), не заливать лог в контекст.
+- Не читать большие каталоги целиком — только точечный `grep`/`read` по
+  конкретным путям.
+- Сборку/тесты выводить хвостом (`Select-Object -Last 4`), не заливать лог в
+  контекст.
 - Держать изменения в стиле окружающего кода, комментарии по-английски.

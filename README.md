@@ -2,8 +2,8 @@
 
 **Vestalis Femboy edition** is a community fork of the **Vestalis launcher**, which in turn is a
 fork of [Gml Launcher (GamerVII Minecraft Launcher)](https://github.com/GamerVII-NET/minecraft-launcher).
-This branch ships a native **Rust + Slint** implementation in `rust-launcher/`; the original .NET 8
-and Avalonia launcher remains in `src/` and is left untouched.
+This branch ships a native **Rust + Slint** implementation in `rust-launcher/`. The original .NET 8
+and Avalonia launcher is maintained as a separate project and is not part of this branch.
 
 Lineage: **GML Launcher** (GamerVII-NET) → **Vestalis launcher** → **Vestalis Femboy edition** (this repo).
 
@@ -24,11 +24,12 @@ and no changelog of differences is maintained here.
 
 ## About this edition
 
-- Native Rust rewrite in `rust-launcher/`, using Slint for the UI. The C#/Avalonia launcher in
-  `src/` is still present and is not modified by this branch.
+- Native Rust rewrite in `rust-launcher/`, using Slint for the UI. This branch contains only the
+  Rust launcher; the legacy C#/Avalonia launcher is developed separately.
 - Standalone executable: no .NET runtime is required to run the Rust launcher.
-- Uses the same backend API and the same game/data folders as the C# launcher, and imports the
-  existing `%LOCALAPPDATA%\Gml.Launcher\validation-cache-v1.json` on the first validation.
+- Uses the same backend API and the same game/data folders as earlier launcher versions, and
+  imports the existing `%LOCALAPPDATA%\Gml.Launcher\validation-cache-v1.json` on the first
+  validation.
 - Not an official Vestalis release; for a supported launcher use the official one.
 - Bugs found here should not be reported to the Vestalis team or to GML Launcher.
 
@@ -75,7 +76,7 @@ and no changelog of differences is maintained here.
 - **Visual Studio Build Tools** with the **Desktop development with C++** workload (the MSVC
   linker is required; an existing Visual Studio installation with the VC tools works too).
 - **Git** — <https://git-scm.com/downloads>
-- The .NET 8 SDK is **not** required for the Rust build.
+- No .NET SDK is required for this project.
 
 ```powershell
 winget install --id Rustlang.Rustup -e
@@ -95,8 +96,8 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
 
-`Cargo.lock` is committed because this is a binary crate. Submodules are only needed for the C#
-launcher, not for the Rust build.
+`Cargo.lock` is committed because this is a binary crate. No submodules are required for the Rust
+build.
 
 ## Run
 
@@ -144,7 +145,7 @@ Local data:
 | --- | --- |
 | Settings/session | `%APPDATA%\Vestalis\rust-launcher\state.json` (+ `.bak`) |
 | Window size/position | `%APPDATA%\Vestalis\rust-launcher\window.json` |
-| Game files | `%APPDATA%\Vestalis` (same as the C# launcher) |
+| Game files | `%APPDATA%\Vestalis` (shared Vestalis data folder) |
 | Offline snapshots | `%APPDATA%\Vestalis\offline-mode\...` |
 | User themes | `%APPDATA%\Vestalis\rust-launcher\themes` |
 | SHA-1 cache | `%LOCALAPPDATA%\Vestalis\validation-cache-rust.json` |
@@ -156,7 +157,7 @@ Local data:
 | Diagnostics ZIP | Desktop, or `%LOCALAPPDATA%\Vestalis` when Desktop is absent |
 
 `state.json` is written atomically and backed up to `.bak`; a partially broken file recovers every
-valid field instead of resetting all settings. The first validation imports the C# cache
+valid field instead of resetting all settings. The first validation imports the legacy cache
 `%LOCALAPPDATA%\Gml.Launcher\validation-cache-v1.json`, so an existing installation does not
 re-hash its whole client.
 
@@ -198,8 +199,8 @@ saved immediately and applied without a restart.
 - SignalR is negotiated at `/ws/launcher/negotiate`; the token is passed as the `access_token`
   query parameter. `RefreshProfiles` updates the list instantly, and a 90-second poll remains as a
   fallback.
-- The API speaks camelCase JSON; sign-in request bodies keep the PascalCase names used by the C#
-  client.
+- The API speaks camelCase JSON; sign-in request bodies keep the PascalCase names used by the
+  existing client.
 - The mirror-control endpoints (`/api/v1/mirror/*`) and the service-access card are not part of the
   Rust launcher.
 
@@ -226,7 +227,6 @@ saved immediately and applied without a restart.
 | `rust-launcher/src/hwid.rs` | Windows HWID, RAM and OS information |
 | `rust-launcher/src/model.rs` | Settings, session, API DTOs and server list |
 | `rust-launcher/assets/` | Logo, meme image, Nunito fonts and icons |
-| `src/` | Original C#/Avalonia launcher (not part of the Rust build) |
 | `dist/` | Local build/publish output (ignored by git) |
 
 Threading model: Slint owns the main thread, a Tokio multi-thread runtime runs the worker, and

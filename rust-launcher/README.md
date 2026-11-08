@@ -1,9 +1,10 @@
 # Vestalis Launcher — Rust rewrite
 
 Native Rust implementation of the Vestalis launcher, kept in `rust-launcher/`
-on the `rust` branch. The C#/Avalonia code in `src/` is untouched. This file is
-the technical reference; the project overview and build/run quick start live in
-the [root README](../README.md).
+on the `rust` branch. This branch contains only the Rust launcher; the legacy
+C#/Avalonia launcher is developed separately. This file is the technical
+reference; the project overview and build/run quick start live in the
+[root README](../README.md).
 
 ## What works
 
@@ -108,14 +109,13 @@ the [root README](../README.md).
   changed, and decoded images are cached in memory to avoid UI-thread stalls.
   The ambient effects use fewer particles than before to keep scrolling smooth.
 - Discord Rich Presence with the same application ID, assets and texts as the
-  C# launcher (`ApiProcedures.UpdateDiscordRpcState`): states «Сидит в
-  лаунчере» / «Играет в "profile"», details «Продам гараж…», logo2/logo. The
-  game process is awaited in a background thread; when it exits, the status
-  returns to «Игра закрыта», Discord presence switches back to the launcher and
-  a minimized launcher is restored when «Скрывать лаунчер при запуске игры» is
-  enabled.
+  legacy launcher: states «Сидит в лаунчере» / «Играет в "profile"», details
+  «Продам гараж…», logo2/logo. The game process is awaited in a background
+  thread; when it exits, the status returns to «Игра закрыта», Discord presence
+  switches back to the launcher and a minimized launcher is restored when
+  «Скрывать лаунчер при запуске игры» is enabled.
 - Native taskbar/Explorer icon embedded into the executable, plus `WM_SETICON`
-  and the same AppUserModelID as the C# launcher. The icon is generated from a
+  and the same AppUserModelID as earlier builds. The icon is generated from a
   hand-written vector cat face on a rounded gradient tile (no inner frame, no
   traced square), so it stays readable at 16–32 px.
 - The settings tree is pre-built and fades in, so opening it does not wait for
@@ -191,7 +191,7 @@ rust-launcher/
 │  ├─ launch.rs         JVM argument rewriting and process spawn
 │  ├─ discord.rs        minimal Discord IPC rich presence
 │  ├─ window.rs         Win32 work-area maximize for the borderless window
-│  ├─ storage.rs        state.json + validation cache (legacy C# cache import)
+│  ├─ storage.rs        state.json + validation cache (legacy cache import)
 │  ├─ theme.rs          theme tokens, built-ins and user theme loading
 │  ├─ hwid.rs           Windows HWID, RAM, OS info
 │  └─ model.rs          settings, session, API DTOs
@@ -209,7 +209,7 @@ No blocking I/O happens in a Slint callback.
 | --- | --- |
 | Settings/session | `%APPDATA%\Vestalis\rust-launcher\state.json` (+ `.bak`) |
 | Window size/position | `%APPDATA%\Vestalis\rust-launcher\window.json` |
-| Game files | `%APPDATA%\Vestalis` (same as the C# launcher) |
+| Game files | `%APPDATA%\Vestalis` (shared Vestalis data folder) |
 | SHA-1 cache | `%LOCALAPPDATA%\Vestalis\validation-cache-rust.json` |
 | Player head avatars | `%LOCALAPPDATA%\Vestalis\avatars\<uuid>.png` |
 | Logs | `%LOCALAPPDATA%\Vestalis\logs\launcher.log.<date>` |
@@ -218,7 +218,8 @@ No blocking I/O happens in a Slint callback.
 | Diagnostics ZIP | Desktop, or `%LOCALAPPDATA%\Vestalis` when Desktop is absent |
 
 The first validation imports `%LOCALAPPDATA%\Gml.Launcher\validation-cache-v1.json`,
-so an existing C# installation does not re-hash its whole 16k-file client.
+so an existing installation of the legacy launcher does not re-hash its whole
+16k-file client.
 
 ## Themes and modes
 
@@ -368,14 +369,14 @@ size and the existing scrolling/clicks intact.
 - RU-2 is the default host. PL-1 mirror-control endpoints (`/api/v1/mirror/*`)
   and the service-access card were removed from the Rust launcher.
 - The API speaks camelCase JSON; request bodies for sign-in keep the PascalCase
-  names used by the C# client.
+  names used by the existing client.
 - The hub is negotiated at `/ws/launcher/negotiate`; the token is passed as the
-  `access_token` query parameter, exactly like the C# client.
+  `access_token` query parameter, exactly like the existing client.
 
 ## Known gaps / next steps
 
 1. Skin marketplace/page (the head avatar itself is already rendered).
-2. The exact splash-to-window morph of the Avalonia build (the Rust build uses
+2. The exact splash-to-window morph of the original launcher (the Rust build uses
    an animated branded start overlay).
 3. Installer and code signing.
 4. Background error/status strings from the backend stay in the language the

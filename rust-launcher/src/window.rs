@@ -213,7 +213,7 @@ const SM_CYICON: i32 = 12;
 const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
 const DWMWCP_ROUND: i32 = 2;
 
-/// Same explicit AppUserModelID as the C# launcher, so Windows keeps one
+/// Same explicit AppUserModelID as earlier builds, so Windows keeps one
 /// taskbar group and uses the right icon/shortcut identity.
 pub fn set_app_user_model_id() {
     let app_id: Vec<u16> = "Vestalis.FemboyEdition.Launcher"

@@ -149,7 +149,7 @@ pub async fn download_optional(
 }
 
 /// Validates every manifest entry and downloads the missing or changed files.
-/// Files larger than 100 MiB are trusted by size, exactly like the C# client:
+/// Files larger than 100 MiB are trusted by size, exactly like the reference client:
 /// hashing a whole client jar on every launch would dominate startup time.
 pub async fn sync_profile(
     backend: &Backend,
@@ -301,7 +301,7 @@ fn validate_one(
         let size = metadata.len() as i64;
 
         // User-owned files (options, configs, saves, logs) must survive updates.
-        // This is the same containment check the C# client uses.
+        // This is the same containment check the reference client uses.
         let whitelisted = white_list
             .iter()
             .any(|allowed| allowed.directory.contains(&file.directory));

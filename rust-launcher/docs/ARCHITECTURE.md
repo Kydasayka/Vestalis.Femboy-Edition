@@ -75,7 +75,7 @@
 ## Launch pipeline
 
 1. `POST /api/v1/profiles/info` with the token in the `Authorization` header
-   (raw token, matching the C# client).
+   (raw token, matching the existing client).
 2. Validate the manifest: optional mods may live as `.jar.disabled`; files
    ≥100 MiB are trusted by presence; SHA-1 results are cached by size+mtime.
 3. Download changed files with 32-way concurrency, retries and a temporary
@@ -89,13 +89,13 @@
 ## Security notes
 
 - Tokens and saved credentials live in `state.json` in the user profile. This
-  matches the C# launcher's local storage; moving them to the Windows
+  matches the legacy launcher's local storage; moving them to the Windows
   Credential Manager is a future improvement. `state.json.bak` contains the
   same data and must be treated as sensitive too.
 - The diagnostics ZIP scrubs `token`, `password`, `secret`, `credential`, `user`
   and `savedLogin` keys recursively before writing.
 - Tokens and HWIDs must never be logged. Login logs only the login name and the
   outcome. The hub keeps the token in the WebSocket query string, mirroring the
-  C# client; logs only report connection state.
+  existing client; logs only report connection state.
 - Paths from the manifest are sanitized (`..`, drive letters and absolute
   paths are rejected) before joining them to the install directory.

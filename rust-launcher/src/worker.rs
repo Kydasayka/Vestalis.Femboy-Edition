@@ -304,7 +304,7 @@ impl Worker {
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         tick.tick().await;
 
-        // Approximates the SignalR "RefreshProfiles" event of the C# client.
+        // Approximates the SignalR "RefreshProfiles" event of the reference client.
         let mut profiles_tick = tokio::time::interval(Duration::from_secs(90));
         profiles_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         profiles_tick.tick().await;

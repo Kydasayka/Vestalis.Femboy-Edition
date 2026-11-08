@@ -1,5 +1,15 @@
 # Vestalis Launcher — Rust rewrite: update log
 
+## 2026-11-09 — Rust-only branch cleanup
+
+- Removed the C#/Avalonia launcher from the `rust` branch: `src/`, the solution,
+  submodules, `load-repositories.*`, the .NET GitHub Actions workflow and the
+  local `identifier.sqlite` artifact.
+- Trimmed `.gitignore` and `.editorconfig` to the Rust/Windows project.
+- Rewrote the root README and `AGENTS.md` around `rust-launcher/`; the legacy
+  launcher is documented as a separate project.
+- No Rust source behaviour changed. 47 tests pass, clippy and fmt are clean.
+
 ## 2026-11-08 — backend news icons, profile backgrounds and smoother UI
 
 - News cards render the backend `iconUrl`; icons are downloaded and cached in

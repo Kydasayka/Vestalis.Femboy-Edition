@@ -211,7 +211,7 @@ pub fn load_cache() -> ValidationCache {
     load_legacy_cache().unwrap_or_default()
 }
 
-/// Reuses the SHA-1 cache of the C# launcher so the first Rust launch does not
+/// Reuses the SHA-1 cache of the legacy launcher so the first Rust launch does not
 /// re-hash an entire 16k-file client. Ticks are converted to Unix seconds.
 fn load_legacy_cache() -> Option<ValidationCache> {
     #[derive(Deserialize)]

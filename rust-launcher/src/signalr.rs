@@ -1,6 +1,6 @@
 //! Minimal SignalR (JSON protocol) client for the launcher hub.
 //!
-//! The C# client connects to `wss://<host>/ws/launcher?access_token=...` and
+//! The reference client connects to `wss://<host>/ws/launcher?access_token=...` and
 //! listens for `RefreshProfiles`. Reimplementing the whole SignalR stack is not
 //! necessary here: negotiation, the JSON handshake, invocations and pings are
 //! enough for the events the launcher consumes.
