@@ -21,9 +21,8 @@ mod win {
     use windows::core::w;
     use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::Graphics::Gdi::{
-        BeginPaint, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, CreateSolidBrush, DeleteDC,
-        DeleteObject, EndPaint, FillRect, GetDC, GetPixel, ReleaseDC, SelectObject, SetBkMode,
-        SetTextColor, StretchBlt, TextOutW, HDC, PAINTSTRUCT, SRCCOPY, TRANSPARENT,
+        BeginPaint, CreateSolidBrush, DeleteObject, EndPaint, FillRect, GetDC, GetPixel, ReleaseDC,
+        SetBkMode, SetTextColor, StretchBlt, TextOutW, HDC, PAINTSTRUCT, SRCCOPY, TRANSPARENT,
     };
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::WindowsAndMessaging::{
@@ -86,9 +85,6 @@ mod win {
         }
 
         let screen = unsafe { GetDC(None) };
-        let memory = unsafe { CreateCompatibleDC(Some(screen)) };
-        let bitmap = unsafe { CreateCompatibleBitmap(screen, WINDOW_W, WINDOW_H) };
-        let old_bitmap = unsafe { SelectObject(memory, bitmap.into()) };
 
         // Wait for the mouse button that opened the picker to be released.
         std::thread::sleep(std::time::Duration::from_millis(180));
@@ -125,7 +121,7 @@ mod win {
                     ));
                 }
 
-                paint(hwnd, memory, screen, x, y, color);
+                paint(hwnd, screen, x, y, color);
                 move_window(hwnd, x, y);
             }
 
@@ -133,9 +129,6 @@ mod win {
         }
 
         unsafe {
-            SelectObject(memory, old_bitmap);
-            let _ = DeleteObject(bitmap.into());
-            let _ = DeleteDC(memory);
             let _ = ReleaseDC(None, screen);
             let _ = DestroyWindow(hwnd);
         }
@@ -193,14 +186,7 @@ mod win {
         }
     }
 
-    unsafe fn paint(
-        window: HWND,
-        memory: HDC,
-        screen: HDC,
-        cursor_x: i32,
-        cursor_y: i32,
-        color: COLORREF,
-    ) {
+    unsafe fn paint(window: HWND, screen: HDC, cursor_x: i32, cursor_y: i32, color: COLORREF) {
         let window_dc = GetDC(Some(window));
         if window_dc.is_invalid() {
             return;
@@ -222,26 +208,15 @@ mod win {
         let _ = DeleteObject(background.into());
 
         let half = SAMPLE / 2;
-        let _ = BitBlt(
-            memory,
-            0,
-            0,
-            MAGNIFIED,
-            MAGNIFIED,
-            Some(screen),
-            cursor_x - half,
-            cursor_y - half,
-            SRCCOPY,
-        );
         let _ = StretchBlt(
             window_dc,
             15,
             15,
             MAGNIFIED,
             MAGNIFIED,
-            Some(memory),
-            0,
-            0,
+            Some(screen),
+            cursor_x - half,
+            cursor_y - half,
             SAMPLE,
             SAMPLE,
             SRCCOPY,
