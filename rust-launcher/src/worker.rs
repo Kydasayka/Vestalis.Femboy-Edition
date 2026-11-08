@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use futures::FutureExt;
+use sha1::{Digest, Sha1};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tracing::{error, info};
 
@@ -92,7 +93,7 @@ pub enum Command {
     Shutdown,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct ProfileView {
     pub id: usize,
     pub name: String,
@@ -103,6 +104,8 @@ pub struct ProfileView {
     pub online: String,
     pub icon: Option<String>,
     pub has_icon: bool,
+    pub background: Option<String>,
+    pub has_background: bool,
 }
 
 #[derive(Clone)]
@@ -115,11 +118,13 @@ pub struct ModView {
     pub downloading: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct NewsView {
     pub title: String,
     pub body: String,
     pub date: String,
+    pub icon: Option<String>,
+    pub has_icon: bool,
 }
 
 pub enum Event {
@@ -203,6 +208,7 @@ pub struct Worker {
     pending_login: (String, String),
     discord: Option<DiscordRpc>,
     profiles_signature: String,
+    last_news: Vec<NewsView>,
     launch_cancel: Arc<AtomicBool>,
     hub: Option<tokio::task::JoinHandle<()>>,
     hub_tx: Option<UnboundedSender<HubEvent>>,
@@ -227,6 +233,7 @@ impl Worker {
             pending_login: (String::new(), String::new()),
             discord: None,
             profiles_signature: String::new(),
+            last_news: Vec::new(),
             launch_cancel: Arc::new(AtomicBool::new(false)),
             hub: None,
             hub_tx: None,
@@ -235,6 +242,16 @@ impl Worker {
 
     fn emit(&self, event: Event) {
         let _ = self.tx.send(event);
+    }
+
+    /// Sends the news list only when something actually changed. The 90 s poll
+    /// otherwise replaces the whole model and interrupts scrolling.
+    fn emit_news(&mut self, views: Vec<NewsView>) {
+        if views == self.last_news {
+            return;
+        }
+        self.last_news = views.clone();
+        self.emit(Event::News(views));
     }
 
     fn token(&self) -> Option<String> {
@@ -444,6 +461,13 @@ impl Worker {
             Duration::from_secs(30 * 24 * 60 * 60),
             200,
         );
+        for (dir, limit) in [("news-icons", 300), ("profile-backgrounds", 200)] {
+            crate::storage::cleanup_cache_dir(
+                &local_app_dir().join(dir),
+                Duration::from_secs(30 * 24 * 60 * 60),
+                limit,
+            );
+        }
         let hwid = hwid::hwid_for(&self.state.settings);
         self.backend.set_hwid(hwid);
         self.spawn_check();
@@ -586,6 +610,7 @@ impl Worker {
         self.offline = false;
         self.profiles.clear();
         self.views.clear();
+        self.last_news.clear();
         self.selected = 0;
         self.emit(Event::LoggedOut);
         self.emit(Event::Screen(0));
@@ -621,6 +646,7 @@ impl Worker {
         self.busy = false;
         self.profiles.clear();
         self.views.clear();
+        self.last_news.clear();
         self.selected = 0;
 
         self.emit(Event::Screen(0));
@@ -754,10 +780,11 @@ impl Worker {
 
         match result {
             Ok(profiles) => {
-                self.apply_profiles(profiles);
+                self.apply_profiles(profiles).await;
                 self.ensure_discord().await;
                 let news = backend.news(&token).await;
-                self.emit(Event::News(map_news(&news)));
+                let views = map_news(&backend, &news).await;
+                self.emit_news(views);
                 self.notify_news(&news);
             }
             Err(error) => {
@@ -780,8 +807,19 @@ impl Worker {
         }
     }
 
-    fn apply_profiles(&mut self, mut profiles: Vec<Profile>) {
+    async fn apply_profiles(&mut self, mut profiles: Vec<Profile>) {
         profiles.sort_by_key(|profile| std::cmp::Reverse(profile.priority));
+
+        // Backgrounds are independent downloads; fetching them concurrently keeps
+        // the splash from waiting on one request per profile in sequence.
+        let backgrounds = futures::future::join_all(profiles.iter().map(|profile| {
+            cached_remote_image(
+                &self.backend,
+                profile.background.as_deref().unwrap_or_default(),
+                "profile-backgrounds",
+            )
+        }))
+        .await;
 
         let signature = profiles
             .iter()
@@ -803,15 +841,23 @@ impl Worker {
             .and_then(|name| profiles.iter().position(|profile| &profile.name == name))
             .unwrap_or(0);
 
-        self.views = profiles
+        let new_views: Vec<ProfileView> = profiles
             .iter()
             .enumerate()
-            .map(|(id, profile)| view_for(id, profile))
+            .map(|(id, profile)| view_for(id, profile, backgrounds[id].clone()))
             .collect();
-        self.profiles = profiles;
-        self.selected = selected.min(self.views.len().saturating_sub(1));
+        let selected = selected.min(new_views.len().saturating_sub(1));
+        // The 90 s poll usually returns identical data; rebuilding the Slint
+        // model then resets scroll/hover and makes the list look jumpy.
+        let changed = selected != self.selected || new_views != self.views;
 
-        self.emit_profiles();
+        self.views = new_views;
+        self.profiles = profiles;
+        self.selected = selected;
+
+        if changed {
+            self.emit_profiles();
+        }
 
         if let Some(view) = self.views.get(self.selected) {
             self.emit(Event::Selected(view.clone()));
@@ -945,12 +991,14 @@ impl Worker {
             initial: "O".into(),
         });
         self.emit(Event::Screen(1));
-        self.apply_profiles(response.data.unwrap_or_default());
-        self.emit(Event::News(vec![NewsView {
+        self.apply_profiles(response.data.unwrap_or_default()).await;
+        self.emit_news(vec![NewsView {
             title: "Оффлайн-режим".into(),
             body: "Бэкенд не используется. Запуск идёт по сохранённому снимку профиля.".into(),
             date: String::new(),
-        }]));
+            icon: None,
+            has_icon: false,
+        }]);
         self.emit(Event::MainStatus("Оффлайн-режим".into()));
     }
 
@@ -1272,6 +1320,11 @@ impl Worker {
 
         self.emit(Event::Error(String::new()));
         self.emit(Event::MainStatus("Загрузка списка модов…".into()));
+        // Enter the screen immediately so the transition is not blocked by the
+        // network round-trip; the list fills in when the request finishes.
+        self.mods.clear();
+        self.emit_mods();
+        self.emit(Event::Screen(3));
         let backend = self.data_backend().clone();
         let mods = backend.optional_mods(&profile.name, &token).await;
         let details = backend.optional_mods_details(&token).await;
@@ -1318,10 +1371,10 @@ impl Worker {
                 self.mods = views;
                 self.emit_mods();
                 self.emit(Event::MainStatus(String::new()));
-                self.emit(Event::Screen(3));
             }
             Err(error) => {
                 self.emit(Event::MainStatus(String::new()));
+                self.emit(Event::Screen(1));
                 self.emit(Event::Error(format!("Не удалось загрузить моды: {error}")));
             }
         }
@@ -2132,7 +2185,7 @@ fn find_optional_file<'a>(
     best.map(|(_, file)| file)
 }
 
-fn view_for(id: usize, profile: &Profile) -> ProfileView {
+fn view_for(id: usize, profile: &Profile, background: Option<String>) -> ProfileView {
     let display_name = profile
         .display_name
         .clone()
@@ -2197,25 +2250,121 @@ fn view_for(id: usize, profile: &Profile) -> ProfileView {
             .map(|value| !value.trim().is_empty())
             .unwrap_or(false),
         icon: profile.icon_base64.clone(),
+        background,
+        has_background: profile
+            .background
+            .as_ref()
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false),
     }
 }
 
-fn map_news(news: &[News]) -> Vec<NewsView> {
+async fn map_news(backend: &Backend, news: &[News]) -> Vec<NewsView> {
     if news.is_empty() {
         return vec![NewsView {
             title: "Новостей пока нет".into(),
             body: "Как только администрация опубликует новости, они появятся здесь.".into(),
             date: String::new(),
+            icon: None,
+            has_icon: false,
         }];
     }
 
+    let icons = futures::future::join_all(news.iter().map(|item| {
+        cached_remote_image(
+            backend,
+            item.icon_url.as_deref().unwrap_or_default(),
+            "news-icons",
+        )
+    }))
+    .await;
+
     news.iter()
-        .map(|item| NewsView {
+        .zip(icons)
+        .map(|(item, icon)| NewsView {
             title: item.title.clone(),
             body: plain_text(&item.content),
             date: format_date(item.date.as_deref()),
+            has_icon: icon.is_some(),
+            icon,
         })
         .collect()
+}
+
+/// Resolves a backend media path, which may be absolute or relative to the API host.
+fn media_url(backend: &Backend, value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        return None;
+    }
+    if value.starts_with("http://") || value.starts_with("https://") {
+        return Some(value.to_string());
+    }
+    if value.starts_with("data:") {
+        return None;
+    }
+    let base = backend.base().trim_end_matches('/');
+    Some(format!("{base}/{}", value.trim_start_matches('/')))
+}
+
+/// Downloads a remote image once and caches it under `local_app_dir()/<subdir>`.
+/// The URL hash is the cache key, so renames on the server do not collide and
+/// the same asset is never downloaded twice.
+async fn cached_remote_image(backend: &Backend, url: &str, subdir: &str) -> Option<String> {
+    let url = media_url(backend, url)?;
+
+    let mut hasher = Sha1::new();
+    hasher.update(url.as_bytes());
+    let key = hex::encode(hasher.finalize());
+
+    let dir = local_app_dir().join(subdir);
+    if tokio::fs::create_dir_all(&dir).await.is_err() {
+        return None;
+    }
+
+    for extension in ["png", "jpg"] {
+        let path = dir.join(format!("{key}.{extension}"));
+        if path.exists() {
+            return Some(path.to_string_lossy().into_owned());
+        }
+    }
+
+    let response = backend
+        .client()
+        .get(&url)
+        .timeout(Duration::from_secs(12))
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let bytes = response.bytes().await.ok()?;
+    if bytes.is_empty() || bytes.len() > 8 * 1024 * 1024 {
+        return None;
+    }
+
+    // Validate before caching so an HTML error page never becomes a broken tile.
+    if image::load_from_memory(&bytes).is_err() {
+        return None;
+    }
+
+    let extension = detect_image_extension(&bytes)?;
+    let path = dir.join(format!("{key}.{extension}"));
+    let temporary = dir.join(format!("{key}.tmp"));
+    tokio::fs::write(&temporary, &bytes).await.ok()?;
+    tokio::fs::rename(&temporary, &path).await.ok()?;
+    Some(path.to_string_lossy().into_owned())
+}
+
+fn detect_image_extension(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]) {
+        Some("png")
+    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some("jpg")
+    } else {
+        None
+    }
 }
 
 fn plain_text(html: &str) -> String {
@@ -2334,4 +2483,38 @@ fn _settings_path() -> PathBuf {
 #[allow(dead_code)]
 fn _state() -> Persisted {
     load_state()
+}
+
+#[cfg(test)]
+mod media_tests {
+    use super::*;
+
+    #[test]
+    fn resolves_relative_media_urls() {
+        let backend = Backend::new("https://example.test/");
+
+        assert_eq!(
+            media_url(&backend, "/api/v1/file/icon.png").as_deref(),
+            Some("https://example.test/api/v1/file/icon.png")
+        );
+        assert_eq!(
+            media_url(&backend, "api/v1/file/icon.png").as_deref(),
+            Some("https://example.test/api/v1/file/icon.png")
+        );
+        assert!(media_url(&backend, "   ").is_none());
+        assert!(media_url(&backend, "data:image/png;base64,AAAA").is_none());
+    }
+
+    #[test]
+    fn detects_supported_image_magic() {
+        assert_eq!(
+            detect_image_extension(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]),
+            Some("png")
+        );
+        assert_eq!(
+            detect_image_extension(&[0xFF, 0xD8, 0xFF, 0xE0]),
+            Some("jpg")
+        );
+        assert_eq!(detect_image_extension(b"<html>not an image</html>"), None);
+    }
 }

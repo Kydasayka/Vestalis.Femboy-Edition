@@ -252,6 +252,9 @@ pub struct Profile {
     pub launch_version: Option<String>,
     #[serde(default)]
     pub icon_base64: Option<String>,
+    /// Personal profile background URL returned by the backend.
+    #[serde(default)]
+    pub background: Option<String>,
     #[serde(default)]
     pub priority: i32,
     #[serde(default)]
@@ -302,6 +305,9 @@ pub struct News {
     pub content: String,
     #[serde(default)]
     pub date: Option<String>,
+    /// News icon URL returned by the backend.
+    #[serde(default)]
+    pub icon_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

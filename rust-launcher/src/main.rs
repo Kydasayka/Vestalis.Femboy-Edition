@@ -40,6 +40,11 @@ use crate::worker::{Command, Event, ProfileView, Worker};
 
 thread_local! {
     static THEME_CATALOG: RefCell<Vec<ThemeItem>> = const { RefCell::new(Vec::new()) };
+    /// Decoded backend images keyed by cache path. Decoding a full-size profile
+    /// background on the UI thread is expensive, and the same assets are rebuilt
+    /// on every profile/news refresh.
+    static IMAGE_CACHE: RefCell<std::collections::HashMap<String, slint::Image>> =
+        RefCell::new(std::collections::HashMap::new());
     static SYSTEM_ACCENT: std::cell::Cell<Option<crate::theme::Rgb>> = const { std::cell::Cell::new(None) };
     static CURRENT_THEME: RefCell<Option<crate::theme::Theme>> = const { RefCell::new(None) };
     static THEME_TRANSITION: RefCell<Option<ThemeTransition>> = const { RefCell::new(None) };
@@ -1615,6 +1620,8 @@ fn apply_event(
                     title: item.title.into(),
                     body: item.body.into(),
                     date: item.date.into(),
+                    icon: decode_cached_image(item.icon.as_deref()),
+                    has_icon: item.has_icon,
                 })
                 .collect();
             ui.set_news(ModelRc::new(VecModel::from(items)));
@@ -1720,7 +1727,7 @@ fn apply_event(
             ui.set_error_text(message.into());
         }
         Event::LoggedOut => {
-            ui.set_screen(0);
+            switch_screen(ui, 0);
             ui.global::<ProfileFilter>().set_text("".into());
             ui.set_mods_filter("".into());
             ui.set_user_name("".into());
@@ -2538,6 +2545,8 @@ fn profile_item(view: &ProfileView) -> ProfileItem {
         online: 0,
         icon: decode_icon(view.icon.as_deref()),
         has_icon: view.has_icon,
+        background: decode_cached_image(view.background.as_deref()),
+        has_background: view.has_background,
     }
 }
 
@@ -2566,7 +2575,36 @@ fn decode_icon(value: Option<&str>) -> slint::Image {
     let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(payload) else {
         return slint::Image::default();
     };
-    let Ok(image) = image::load_from_memory(&bytes) else {
+
+    decode_image_bytes(&bytes)
+}
+
+fn decode_cached_image(value: Option<&str>) -> slint::Image {
+    let Some(path) = value else {
+        return slint::Image::default();
+    };
+
+    IMAGE_CACHE.with(|cache| {
+        if let Some(image) = cache.borrow().get(path) {
+            return image.clone();
+        }
+
+        let image = std::fs::read(path)
+            .ok()
+            .map(|bytes| decode_image_bytes(&bytes))
+            .unwrap_or_default();
+
+        let mut cache = cache.borrow_mut();
+        if cache.len() >= 256 {
+            cache.clear();
+        }
+        cache.insert(path.to_string(), image.clone());
+        image
+    })
+}
+
+fn decode_image_bytes(bytes: &[u8]) -> slint::Image {
+    let Ok(image) = image::load_from_memory(bytes) else {
         return slint::Image::default();
     };
     let rgba = image.to_rgba8();

@@ -1,5 +1,23 @@
 # Vestalis Launcher — Rust rewrite: update log
 
+## 2026-11-08 — backend news icons, profile backgrounds and smoother UI
+
+- News cards render the backend `iconUrl`; icons are downloaded and cached in
+  `%LOCALAPPDATA%\Vestalis\news-icons` (SHA-1 URL key, png/jpg, atomic write,
+  30-day cleanup, 300-file cap).
+- Profile rows reveal the profile's personal backend `background` on hover and
+  selection, under a theme-tinted gradient. Backgrounds are cached in
+  `%LOCALAPPDATA%\Vestalis\profile-backgrounds` (200-file cap) and decoded once.
+- Screen changes fade in (`screen-opacity`, 190 ms); the mods page switches
+  immediately instead of waiting for the network; buttons, sidebar items,
+  caption buttons, mini buttons, profile rows and text fields animate their
+  hover/focus state.
+- Smoothness: unchanged profile/news responses no longer rebuild the Slint
+  models on the 90-second poll; decoded images are kept in a thread-local cache;
+  ambient particles were reduced (fireflies 10, leaves 14, snow 22) and the
+  firefly blur is cheaper.
+- Tests: 47 passed, clippy clean.
+
 ## 2026-11-08 — UX pack (Catppuccin, Acrylic, autosave, telemetry, onboarding, picker)
 
 - Catppuccin Mocha/Macchiato/Frappe/Latte with official palettes and contrast

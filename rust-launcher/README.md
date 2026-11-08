@@ -23,9 +23,14 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   `ConfirmLauncherHash`, keep-alive pings and reconnect with exponential
   backoff. The 90-second poll remains only as a fallback.
 - Profiles and news from the backend, with icons, version badges and online
-  counters. The sidebar avatar is the player's real skin head (base layer plus
-  hat overlay), cropped from `/api/v1/users/info/{name}` → texture endpoint and
-  cached locally; the nick initial is only a fallback before the head loads.
+  counters. News icons come from the backend `iconUrl`; each profile's personal
+  `background` is downloaded too. Both are cached under
+  `%LOCALAPPDATA%\Vestalis\news-icons` / `profile-backgrounds`, so the UI always
+  loads local files. Hovering or selecting a profile reveals its background
+  through a theme-tinted gradient. The sidebar avatar is the player's real skin
+  head (base layer plus hat overlay), cropped from
+  `/api/v1/users/info/{name}` → texture endpoint and cached locally; the nick
+  initial is only a fallback before the head loads.
 - Offline mode using the snapshots in `%APPDATA%\Vestalis\offline-mode`
   (`profiles.json` + `<profile>/profileInfo.json`).
 - File validation (SHA-1, size, mtime cache) and parallel downloads with
@@ -96,7 +101,11 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   rounded DWM corners and a minimum window size of 1080×620, and an animated
   branded start screen.
   The maximize button animates to the Windows work area, so the taskbar stays
-  usable. Screen changes, buttons, profile rows and the download bar animate.
+  usable. Screen changes fade in over 190 ms, buttons and rows animate their
+  hover/selection state, and the mods page opens immediately while its list is
+  fetched. Profile/news models are rebuilt only when the backend data actually
+  changed, and decoded images are cached in memory to avoid UI-thread stalls.
+  The ambient effects use fewer particles than before to keep scrolling smooth.
 - Discord Rich Presence with the same application ID, assets and texts as the
   C# launcher (`ApiProcedures.UpdateDiscordRpcState`): states «Сидит в
   лаунчере» / «Играет в "profile"», details «Продам гараж…», logo2/logo. The

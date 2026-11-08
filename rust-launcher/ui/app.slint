@@ -293,12 +293,16 @@ export struct ProfileItem {
     online: int,
     icon: image,
     has-icon: bool,
+    background: image,
+    has-background: bool,
 }
 
 export struct NewsItem {
     title: string,
     body: string,
     date: string,
+    icon: image,
+    has-icon: bool,
 }
 
 export struct ModItem {
@@ -339,12 +343,12 @@ component BackgroundEffect inherits Rectangle {
     in property <string> kind: "none";
 
     if kind == "fireflies": Rectangle {
-        for i in 16: Rectangle {
+        for i in 10: Rectangle {
             width: 3px + Math.mod(i, 3) * 1px;
             height: self.width;
             border-radius: Theme.radius-pill;
             background: Theme.warning;
-            drop-shadow-blur: 10px;
+            drop-shadow-blur: 6px;
             drop-shadow-color: Theme.warning.with-alpha(0.8);
             opacity: 0.2 + 0.75 * abs(sin((animation-tick() / 1s * (18 + Math.mod(i, 6)) + i * 61) * 1deg));
             x: parent.width * (0.04 + Math.mod(i * 37 + 13, 90) / 100.0)
@@ -355,7 +359,7 @@ component BackgroundEffect inherits Rectangle {
     }
 
     if kind == "leaves": Rectangle {
-        for i in 18: Rectangle {
+        for i in 14: Rectangle {
             width: 10px + Math.mod(i, 4) * 3px;
             height: self.width * 0.62;
             border-radius: Theme.radius-pill;
@@ -375,7 +379,7 @@ component BackgroundEffect inherits Rectangle {
     }
 
     if kind == "snow": Rectangle {
-        for i in 28: Rectangle {
+        for i in 22: Rectangle {
             width: 2px + Math.mod(i, 4) * 1.2px;
             height: self.width;
             border-radius: Theme.radius-pill;
@@ -449,6 +453,8 @@ component ActionButton inherits Rectangle {
             : (primary
                 ? (Theme.mode == "liquid-glass" ? Theme.accent.with-alpha(0.86) : Theme.accent)
                 : (Theme.mode == "liquid-glass" ? Theme.glass-tint : Theme.surface));
+    animate background { duration: 150ms; easing: ease-out; }
+    animate border-color { duration: 150ms; easing: ease-out; }
 
     area := TouchArea {
         enabled: root.available;
@@ -493,6 +499,7 @@ component TextField inherits Rectangle {
     border-color: input.has-focus
         ? Theme.accent
         : (Theme.mode == "liquid-glass" ? Theme.glass-border : Theme.border);
+    animate border-color { duration: 150ms; easing: ease-out; }
 
     input := TextInput {
         x: 14px;
@@ -542,6 +549,7 @@ component CaptionButton inherits Rectangle {
     background: area.has-hover
         ? (kind == "close" ? Theme.danger : Theme.surface-hover)
         : transparent;
+    animate background { duration: 130ms; easing: ease-out; }
 
     property <color> icon-color: area.has-hover
         ? (kind == "close" ? Theme.accent-text : Theme.text)
@@ -641,6 +649,7 @@ component ServerMenuItem inherits Rectangle {
         : active
             ? Theme.accent.with-alpha(0.18)
             : (area.has-hover ? Theme.surface-hover : transparent);
+    animate background { duration: 150ms; easing: ease-out; }
 
     Rectangle {
         width: 3px;
@@ -694,6 +703,7 @@ component MiniButton inherits Rectangle {
     height: 24px;
     border-radius: Theme.radius-sm;
     background: area.has-hover ? Theme.surface-hover : transparent;
+    animate background { duration: 130ms; easing: ease-out; }
 
     Text {
         text: root.label;
@@ -983,7 +993,34 @@ component ProfileList inherits VerticalLayout {
                     : row-area.has-hover ? Theme.surface-hover : transparent;
                 border-width: 1px;
                 border-color: p.id == root.selected-index ? Theme.accent : transparent;
-                animate border-color { duration: 140ms; }
+                clip: true;
+                animate border-color { duration: 160ms; }
+                animate background { duration: 160ms; }
+
+                // Personal profile background returned by the backend. It is
+                // revealed only on hover/selection so the list stays calm.
+                Image {
+                    source: p.background;
+                    width: 100%;
+                    height: 100%;
+                    image-fit: cover;
+                    opacity: p.has-background
+                        ? (p.id == root.selected-index ? 0.55 : (row-area.has-hover ? 0.38 : 0.0))
+                        : 0.0;
+                    animate opacity { duration: 200ms; easing: ease-out; }
+                }
+                Rectangle {
+                    width: 100%;
+                    height: 100%;
+                    background: @linear-gradient(100deg,
+                        Theme.background 0%,
+                        Theme.background.with-alpha(0.62) 52%,
+                        Theme.accent.with-alpha(0.45) 100%);
+                    opacity: p.has-background
+                        ? (p.id == root.selected-index ? 0.82 : (row-area.has-hover ? 0.62 : 0.0))
+                        : 0.0;
+                    animate opacity { duration: 200ms; easing: ease-out; }
+                }
 
                 row-area := TouchArea {
                     mouse-cursor: pointer;
@@ -1154,16 +1191,33 @@ component NewsBlock inherits VerticalLayout {
                     background: Theme.glass-highlight;
                     visible: Theme.mode == "liquid-glass";
                 }
-                news-layout := VerticalLayout {
+                news-layout := HorizontalLayout {
                     padding: 14px;
-                    spacing: 6px;
-                    Text { text: n.title; color: Theme.text; font-size: 14px; font-weight: 600; }
-                    Text { text: n.body; color: Theme.text-muted; font-size: 14px; wrap: word-wrap; }
-                    Text {
-                        text: n.date;
-                        color: Theme.text-muted;
-                        font-size: 14px;
-                        visible: !n.date.is-empty;
+                    spacing: 10px;
+                    if n.has-icon: Rectangle {
+                        width: 38px;
+                        height: 38px;
+                        border-radius: Theme.radius-sm;
+                        background: Theme.surface-hover;
+                        clip: true;
+                        Image {
+                            source: n.icon;
+                            width: 100%;
+                            height: 100%;
+                            image-fit: cover;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: 6px;
+                        horizontal-stretch: 1;
+                        Text { text: n.title; color: Theme.text; font-size: 14px; font-weight: 600; }
+                        Text { text: n.body; color: Theme.text-muted; font-size: 14px; wrap: word-wrap; }
+                        Text {
+                            text: n.date;
+                            color: Theme.text-muted;
+                            font-size: 14px;
+                            visible: !n.date.is-empty;
+                        }
                     }
                 }
             }
@@ -1516,6 +1570,7 @@ export component AppWindow inherits Window {
         y: 42px;
         height: root.height - 42px;
         opacity: root.screen-opacity;
+        animate opacity { duration: 190ms; easing: ease-out; }
         background: Theme.background;
 
         Image {
@@ -1698,6 +1753,7 @@ export component AppWindow inherits Window {
         y: 42px;
         height: root.height - 42px;
         opacity: root.screen-opacity;
+        animate opacity { duration: 190ms; easing: ease-out; }
         background: Theme.background;
 
         Image {
@@ -2102,6 +2158,7 @@ export component AppWindow inherits Window {
         y: 42px;
         height: root.height - 42px;
         opacity: root.screen-opacity;
+        animate opacity { duration: 190ms; easing: ease-out; }
         background: Theme.background;
 
         if Theme.mode == "liquid-glass": GlassBackdrop {
@@ -2988,6 +3045,7 @@ export component AppWindow inherits Window {
         y: 42px;
         height: root.height - 42px;
         opacity: root.screen-opacity;
+        animate opacity { duration: 190ms; easing: ease-out; }
         background: Theme.background;
 
         VerticalLayout {

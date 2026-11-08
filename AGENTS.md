@@ -426,6 +426,22 @@ cargo clippy --all-targets -- -D warnings
 - Буфер обмена — `window::copy_text` (Win32 `OpenClipboard` + `SetClipboardData`
   CF_UNICODETEXT). Кнопка «Скопировать HWID» всегда копирует реальный HWID,
   независимо от тумблера отправки.
+- Иконки новостей и фоны профилей — из бэкенда (`News.iconUrl`,
+  `Profile.background`). `worker::cached_remote_image` качает их в
+  `%LOCALAPPDATA%\Vestalis\news-icons` / `profile-backgrounds` (ключ SHA-1 URL,
+  png/jpg, атомарная запись tmp→rename, очистка 30 дней, лимиты 300/200), а
+  Slint получает локальные пути; `main::decode_cached_image` декодирует их через
+  thread-local `IMAGE_CACHE`, чтобы не читать диск на каждом обновлении. Фон
+  профиля показывается только на hover/выборе: `Image` + градиент `Theme.*` с
+  `animate opacity`.
+- Переходы экранов: `MainWindow` держит `screen-opacity`, `switch_screen` ставит
+  его в 0, меняет `screen` и через 20 мс возвращает 1; у контейнеров экранов
+  стоит `animate opacity` 190 мс. Экран модов (`OpenMods`) открывается сразу, а
+  список догружается — не ждать сеть перед анимацией.
+- Плавность: `apply_profiles` сравнивает новые `ProfileView` со старыми, а
+  `emit_news` — `NewsView`; при одинаковых данных модель Slint не пересобирается
+  (иначе сбрасывались scroll/hover каждые 90 с). Частицы фона уменьшены
+  (fireflies 10, leaves 14, snow 22), у светлячков меньший blur.
 - Темы: Catppuccin Mocha/Macchiato/Frappe/Latte (официальные hex), режим
   `acrylic` — имитация без backdrop-blur (слои + `AcrylicGrain`), использует те
   же настройки прозрачности, что и glass. `normalize_mode` знает 4 режима.
