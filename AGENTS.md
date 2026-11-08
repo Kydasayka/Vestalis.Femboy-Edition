@@ -426,6 +426,29 @@ cargo clippy --all-targets -- -D warnings
 - Буфер обмена — `window::copy_text` (Win32 `OpenClipboard` + `SetClipboardData`
   CF_UNICODETEXT). Кнопка «Скопировать HWID» всегда копирует реальный HWID,
   независимо от тумблера отправки.
+- Темы: Catppuccin Mocha/Macchiato/Frappe/Latte (официальные hex), режим
+  `acrylic` — имитация без backdrop-blur (слои + `AcrylicGrain`), использует те
+  же настройки прозрачности, что и glass. `normalize_mode` знает 4 режима.
+- Настройки автосохраняются: кнопки «Сохранить» нет. `settings_from_ui`
+  валидирует RAM/разрешение/путь/Java/accent, `autosave_timer` (150 мс опрос,
+  500 мс стабильности) шлёт `SaveSettings`; невалидный снапшот не пишется и
+  показывает красный статус. Не возвращать ручное сохранение.
+- Телеметрия: `settings.telemetryEnabled` (по умолчанию false) +
+  `src/telemetry.rs` (Sentry). DSN только из `VESTALIS_SENTRY_DSN`/`SENTRY_DSN`,
+  в бинарь не вшивать. `before_send` прогоняет событие через JSON-санитайзер:
+  ключи token/password/secret/credential/hwid/authorization/savedLogin/user/
+  email/login удаляются, пути `C:\Users\<name>` и имя пользователя вычищаются,
+  лог-хвост очищается. `telemetry::configure` вызывается при старте и после
+  применения настроек.
+- Онбординг: `settings.onboardingCompleted`; показывается после сплэша, если
+  false. Старые `state.json` без ключа мигрируют в completed, чтобы обновление
+  не показывало его снова. «Пройти обучение заново» в настройках сбрасывает
+  флаг. Шаги: язык, тема/режим, телеметрия, установка/Java.
+- Пикер цвета: `picker-*` свойства/колбэки в Slint (HSV, hue slider, hex,
+  recent), `theme::hsv_to_rgb`/`rgb_to_hsv`, `accentHistory` в state.
+  Экранная пипетка — `src/screen_picker.rs`: topmost окно с GDI-лупой,
+  `GetPixel`/`BitBlt`/`StretchBlt`, клик выбирает, Esc/ПКМ отменяет. Старый
+  `ChooseColorW` удалён.
 - Один экземпляр: `window::ensure_single_instance` держит named mutex
   `Local\\Vestalis.FemboyEdition.Launcher`; второй процесс показывает
   MessageBox и выходит, чтобы не перезаписывать state.

@@ -1,5 +1,27 @@
 # Vestalis Launcher — Rust rewrite: update log
 
+## 2026-11-08 — UX pack (Catppuccin, Acrylic, autosave, telemetry, onboarding, picker)
+
+- Catppuccin Mocha/Macchiato/Frappe/Latte with official palettes and contrast
+  tests; readable names and existing swatch previews.
+- Fourth presentation mode `acrylic`: denser translucency, bright rim, deep
+  shadow, deterministic grain; explicitly documented as a no-backdrop-blur
+  imitation. Reuses glass opacity/blur settings.
+- Settings auto-save: Save button removed; controls and text fields persist
+  with a 500 ms debounce, validation, and red/green status. Invalid snapshots
+  are not written. Existing worker `SaveSettings` path is unchanged.
+- Optional Sentry telemetry (`telemetryEnabled`, off by default), DSN from
+  `VESTALIS_SENTRY_DSN`/`SENTRY_DSN` only, sanitized events (no tokens,
+  passwords, HWID, logins, user paths) plus a short cleaned log tail.
+- First-run onboarding after the splash: language, theme/mode, telemetry
+  consent, install/Java check; skip/back/next/finish, once-only flag, and
+  «Пройти обучение заново» in Settings.
+- Custom colour picker: HSV field, hue slider, hex input, preview, recent
+  colours, and a native screen eyedropper with a GDI magnifier. The standard
+  `ChooseColorW` dialog is gone.
+- New tests: Catppuccin accent contrast, Acrylic validity, HSV round-trip,
+  telemetry sanitizer. 45 tests, clippy clean.
+
 ## 2026-11-07 — layout/profile hotfix (`ca0c074`)
 
 - Profile list no longer clips the first/last row: the nested `ScrollView` was

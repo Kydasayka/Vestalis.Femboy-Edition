@@ -51,24 +51,6 @@ extern "system" {
     fn GetModuleHandleW(module_name: *const u16) -> isize;
 }
 
-#[repr(C)]
-struct ChooseColor {
-    size: u32,
-    owner: isize,
-    instance: isize,
-    result: u32,
-    custom: *mut u32,
-    flags: u32,
-    custom_data: isize,
-    hook: *const c_void,
-    template: *const u16,
-}
-
-#[link(name = "comdlg32")]
-extern "system" {
-    fn ChooseColorW(value: *mut ChooseColor) -> i32;
-}
-
 /// Ensures only one launcher instance owns the state files. Returns false when
 /// another process already holds the named mutex; the caller should exit.
 pub fn ensure_single_instance() -> bool {
@@ -205,44 +187,6 @@ pub fn pick_file(title: &str, filter: &str) -> Option<std::path::PathBuf> {
     }
 
     None
-}
-
-/// Opens the standard Windows colour picker. Returns an sRGB triplet.
-pub const CC_RGBINIT: u32 = 0x0000_0001;
-pub const CC_FULLOPEN: u32 = 0x0000_0002;
-
-pub fn pick_color(initial: Option<(u8, u8, u8)>) -> Option<(u8, u8, u8)> {
-    let mut custom = [0u32; 16];
-    let initial_value = initial
-        .map(|(r, g, b)| (r as u32) | ((g as u32) << 8) | ((b as u32) << 16))
-        .unwrap_or(0);
-
-    let mut dialog = ChooseColor {
-        size: std::mem::size_of::<ChooseColor>() as u32,
-        owner: find_launcher_window().unwrap_or(0),
-        instance: 0,
-        result: initial_value,
-        custom: custom.as_mut_ptr(),
-        flags: if initial.is_some() {
-            CC_RGBINIT | CC_FULLOPEN
-        } else {
-            CC_FULLOPEN
-        },
-        custom_data: 0,
-        hook: std::ptr::null(),
-        template: std::ptr::null(),
-    };
-
-    let ok = unsafe { ChooseColorW(&mut dialog) };
-    if ok == 0 {
-        return None;
-    }
-
-    Some((
-        (dialog.result & 0xFF) as u8,
-        ((dialog.result >> 8) & 0xFF) as u8,
-        ((dialog.result >> 16) & 0xFF) as u8,
-    ))
 }
 
 #[link(name = "dwmapi")]

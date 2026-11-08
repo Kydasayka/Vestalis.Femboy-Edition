@@ -56,7 +56,7 @@ pub fn avatar_path(uuid: &str) -> PathBuf {
     local_app_dir().join("avatars").join(format!("{key}.png"))
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
     pub game_width: u32,
@@ -89,6 +89,12 @@ pub struct Settings {
     pub glass_blur: f32,
     /// Discord Rich Presence enabled.
     pub discord_rpc: bool,
+    /// Anonymous Sentry telemetry. Off by default until the user opts in.
+    pub telemetry_enabled: bool,
+    /// First-run onboarding has been completed or skipped.
+    pub onboarding_completed: bool,
+    /// Recently applied manual accents, newest first (#RRGGBB).
+    pub accent_history: Vec<String>,
     /// Follow the Windows light/dark app mode instead of a fixed theme.
     pub follow_windows_theme: bool,
     /// Theme applied when Windows is in light mode.
@@ -126,6 +132,9 @@ impl Default for Settings {
             glass_opacity: 0.55,
             glass_blur: 0.5,
             discord_rpc: true,
+            telemetry_enabled: false,
+            onboarding_completed: false,
+            accent_history: Vec::new(),
             follow_windows_theme: false,
             light_theme: "light".to_string(),
             dark_theme: "dark".to_string(),

@@ -611,6 +611,98 @@ fn gruvbox_theme() -> Theme {
     }
 }
 
+fn catppuccin_mocha_theme() -> Theme {
+    Theme {
+        background: "#1e1e2e".into(),
+        background_alt: "#181825".into(),
+        surface: "#313244".into(),
+        surface_hover: "#45475a".into(),
+        border: "#585b70".into(),
+        text: "#cdd6f4".into(),
+        text_muted: "#a6adc8".into(),
+        accent: "#cba6f7".into(),
+        accent_hover: "#f5c2e7".into(),
+        accent_text: "#11111b".into(),
+        success: "#a6e3a1".into(),
+        warning: "#f9e2af".into(),
+        danger: "#f38ba8".into(),
+        gradient_start: "#cba6f7".into(),
+        gradient_end: "#89b4fa".into(),
+        card_opacity: 0.94,
+        background_effect: "none".into(),
+        ..Theme::default()
+    }
+}
+
+fn catppuccin_macchiato_theme() -> Theme {
+    Theme {
+        background: "#24273a".into(),
+        background_alt: "#1e2030".into(),
+        surface: "#363a4f".into(),
+        surface_hover: "#494d64".into(),
+        border: "#5b6078".into(),
+        text: "#cad3f5".into(),
+        text_muted: "#a5adcb".into(),
+        accent: "#c6a0f6".into(),
+        accent_hover: "#f5bde6".into(),
+        accent_text: "#181926".into(),
+        success: "#a6da95".into(),
+        warning: "#eed49f".into(),
+        danger: "#ed8796".into(),
+        gradient_start: "#c6a0f6".into(),
+        gradient_end: "#8aadf4".into(),
+        card_opacity: 0.94,
+        background_effect: "none".into(),
+        ..Theme::default()
+    }
+}
+
+fn catppuccin_frappe_theme() -> Theme {
+    Theme {
+        background: "#303446".into(),
+        background_alt: "#292c3c".into(),
+        surface: "#414559".into(),
+        surface_hover: "#51576d".into(),
+        border: "#626880".into(),
+        text: "#c6d0f5".into(),
+        text_muted: "#a5adce".into(),
+        accent: "#ca9ee6".into(),
+        accent_hover: "#f4b8e4".into(),
+        accent_text: "#232634".into(),
+        success: "#a6d189".into(),
+        warning: "#e5c890".into(),
+        danger: "#e78284".into(),
+        gradient_start: "#ca9ee6".into(),
+        gradient_end: "#8caaee".into(),
+        card_opacity: 0.94,
+        background_effect: "none".into(),
+        ..Theme::default()
+    }
+}
+
+fn catppuccin_latte_theme() -> Theme {
+    Theme {
+        background: "#eff1f5".into(),
+        background_alt: "#dce0e8".into(),
+        surface: "#e6e9ef".into(),
+        surface_hover: "#ccd0da".into(),
+        border: "#bcc0cc".into(),
+        text: "#4c4f69".into(),
+        text_muted: "#6c6f85".into(),
+        accent: "#8839ef".into(),
+        accent_hover: "#ea76cb".into(),
+        accent_text: "#eff1f5".into(),
+        success: "#179299".into(),
+        warning: "#e64553".into(),
+        danger: "#d20f39".into(),
+        gradient_start: "#8839ef".into(),
+        gradient_end: "#1e66f5".into(),
+        card_opacity: 0.98,
+        background_effect: "none".into(),
+        ..Theme::default()
+    }
+}
+
 fn minecraft_theme() -> Theme {
     Theme {
         background: "#14180f".into(),
@@ -778,6 +870,34 @@ pub fn builtin_themes() -> Vec<ThemeItem> {
             icons: HashMap::new(),
             texts: HashMap::new(),
         },
+        ThemeItem {
+            name: "Catppuccin Mocha".into(),
+            builtin: true,
+            theme: catppuccin_mocha_theme(),
+            icons: HashMap::new(),
+            texts: HashMap::new(),
+        },
+        ThemeItem {
+            name: "Catppuccin Macchiato".into(),
+            builtin: true,
+            theme: catppuccin_macchiato_theme(),
+            icons: HashMap::new(),
+            texts: HashMap::new(),
+        },
+        ThemeItem {
+            name: "Catppuccin Frappe".into(),
+            builtin: true,
+            theme: catppuccin_frappe_theme(),
+            icons: HashMap::new(),
+            texts: HashMap::new(),
+        },
+        ThemeItem {
+            name: "Catppuccin Latte".into(),
+            builtin: true,
+            theme: catppuccin_latte_theme(),
+            icons: HashMap::new(),
+            texts: HashMap::new(),
+        },
     ]
 }
 
@@ -818,6 +938,56 @@ fn relative_luminance(rgb: Rgb) -> f64 {
         }
     };
     0.2126 * channel(rgb.0) + 0.7152 * channel(rgb.1) + 0.0722 * channel(rgb.2)
+}
+
+/// Converts HSV (hue 0–360, saturation/value 0–1) to RGB.
+pub fn hsv_to_rgb(hue: f32, saturation: f32, value: f32) -> Rgb {
+    let hue = hue.rem_euclid(360.0);
+    let saturation = saturation.clamp(0.0, 1.0);
+    let value = value.clamp(0.0, 1.0);
+    let chroma = value * saturation;
+    let sector = hue / 60.0;
+    let x = chroma * (1.0 - ((sector % 2.0) - 1.0).abs());
+    let (r, g, b) = match sector as u32 {
+        0 => (chroma, x, 0.0),
+        1 => (x, chroma, 0.0),
+        2 => (0.0, chroma, x),
+        3 => (0.0, x, chroma),
+        4 => (x, 0.0, chroma),
+        _ => (chroma, 0.0, x),
+    };
+    let m = value - chroma;
+    let channel = |value: f32| ((value + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+    (channel(r), channel(g), channel(b))
+}
+
+/// Converts RGB to HSV (hue 0–360, saturation/value 0–1).
+pub fn rgb_to_hsv(rgb: Rgb) -> (f32, f32, f32) {
+    let (r, g, b) = (
+        rgb.0 as f32 / 255.0,
+        rgb.1 as f32 / 255.0,
+        rgb.2 as f32 / 255.0,
+    );
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    let delta = max - min;
+
+    let hue = if delta <= f32::EPSILON {
+        0.0
+    } else if max == r {
+        60.0 * (((g - b) / delta) % 6.0)
+    } else if max == g {
+        60.0 * ((b - r) / delta + 2.0)
+    } else {
+        60.0 * ((r - g) / delta + 4.0)
+    };
+
+    let saturation = if max <= f32::EPSILON {
+        0.0
+    } else {
+        delta / max
+    };
+    (hue.rem_euclid(360.0), saturation, max)
 }
 
 pub fn parse_hex_rgb(value: &str) -> Option<Rgb> {
@@ -1018,6 +1188,7 @@ pub fn normalize_mode(value: &str) -> &'static str {
     match value {
         "material3" => "material3",
         "liquid-glass" => "liquid-glass",
+        "acrylic" => "acrylic",
         _ => "base",
     }
 }
@@ -1038,6 +1209,7 @@ pub fn apply_mode(
     match mode {
         "material3" => apply_material3(&mut theme, accent),
         "liquid-glass" => apply_glass(&mut theme, glass_opacity, glass_blur),
+        "acrylic" => apply_acrylic(&mut theme, glass_opacity, glass_blur),
         _ => {}
     }
 
@@ -1167,6 +1339,37 @@ fn apply_glass(theme: &mut Theme, opacity: f32, blur: f32) {
     theme.shadow = with_alpha(
         "#000000",
         ((if light { 0x33u8 } else { 0x66 }) as f32 * (0.55 + blur))
+            .round()
+            .clamp(0.0, 255.0) as u8,
+    );
+}
+
+/// Windows 11 Acrylic imitation. Slint 1.18 has no backdrop blur, so the
+/// effect is built from denser translucency, a bright rim, a deep shadow and a
+/// separate grain overlay drawn by the UI.
+fn apply_acrylic(theme: &mut Theme, opacity: f32, blur: f32) {
+    apply_glass(theme, opacity, blur);
+
+    let opacity = opacity.clamp(0.25, 0.9);
+    let blur = blur.clamp(0.0, 1.0);
+    let alpha = |base: u8| -> u8 {
+        ((base as f32) * (0.7 + opacity * 0.6))
+            .round()
+            .clamp(0.0, 255.0) as u8
+    };
+
+    theme.card_opacity = (opacity + 0.16).clamp(0.3, 0.96);
+    theme.glass_tint = with_alpha(&theme.surface, alpha(0x9A));
+    theme.glass_border = with_alpha("#FFFFFF", alpha(0x3A));
+    theme.glass_highlight = with_alpha(
+        "#FFFFFF",
+        ((0x52u8) as f32 * (0.6 + blur * 0.7))
+            .round()
+            .clamp(0.0, 255.0) as u8,
+    );
+    theme.shadow = with_alpha(
+        "#000000",
+        ((0x74u8) as f32 * (0.55 + blur * 0.8))
             .round()
             .clamp(0.0, 255.0) as u8,
     );
@@ -1442,6 +1645,53 @@ mod tests {
                     ratio
                 );
             }
+        }
+    }
+
+    #[test]
+    fn acrylic_mode_is_valid_and_readable() {
+        assert_eq!(normalize_mode("acrylic"), "acrylic");
+        let theme = apply_mode(&light_theme(), "acrylic", None, 0.55, 0.5);
+        assert_eq!(theme.mode, "acrylic");
+        assert!(contrast(&theme.text, &theme.background) >= 4.5);
+        assert!(contrast(&theme.text, &theme.surface) >= 4.5);
+        assert!(theme.card_opacity > 0.0 && theme.card_opacity < 1.0);
+    }
+
+    #[test]
+    fn catppuccin_palettes_keep_accent_text_readable() {
+        for name in [
+            "Catppuccin Mocha",
+            "Catppuccin Macchiato",
+            "Catppuccin Frappe",
+            "Catppuccin Latte",
+        ] {
+            let item = builtin_themes()
+                .into_iter()
+                .find(|item| item.name == name)
+                .expect("Catppuccin preset");
+            let ratio = contrast(&item.theme.accent_text, &item.theme.accent);
+            assert!(ratio >= 4.5, "{name} accent text is only {ratio:.2}:1");
+        }
+    }
+
+    #[test]
+    fn hsv_roundtrip_is_stable() {
+        for color in [
+            (0x21, 0x1C, 0xAF),
+            (0xFF, 0x00, 0x00),
+            (0x00, 0x00, 0x00),
+            (0xFF, 0xFF, 0xFF),
+            (0x12, 0x9A, 0x55),
+        ] {
+            let (hue, saturation, value) = rgb_to_hsv(color);
+            let back = hsv_to_rgb(hue, saturation, value);
+            assert!(
+                (back.0 as i32 - color.0 as i32).abs() <= 1
+                    && (back.1 as i32 - color.1 as i32).abs() <= 1
+                    && (back.2 as i32 - color.2 as i32).abs() <= 1,
+                "{color:?} -> {back:?}"
+            );
         }
     }
 

@@ -26,6 +26,10 @@ export global Theme {
     in-out property <color> gradient-end: #6d28d9;
     in-out property <color> shadow: #00000080;
     in-out property <color> scrim: #00000000;
+    // Functional gradients for the colour picker; kept here so the UI does not
+    // contain hard-coded colours outside the Theme defaults.
+    in-out property <color> picker-white: #ffffff;
+    in-out property <color> picker-black: #000000;
 
 
     in-out property <color> primary-container: #4a044e;
@@ -316,6 +320,21 @@ export struct ThemeOption {
 
 // Ambient background effects, driven by Slint's animation clock so they do not
 // need a Rust timer. Only the selected variant is instantiated.
+// Tiny deterministic speckles used by the Acrylic mode. This is an imitation
+// of Windows grain; it is not a shader and does not blur the desktop.
+component AcrylicGrain inherits Rectangle {
+    background: transparent;
+
+    for i in 160: Rectangle {
+        width: 1px;
+        height: 1px;
+        x: parent.width * (Math.mod(i * 73 + 19, 100) / 100.0);
+        y: parent.height * (Math.mod(i * 131 + 7, 100) / 100.0);
+        background: Math.mod(i, 3) == 0 ? Theme.glass-highlight : Theme.glass-border;
+        opacity: 0.10 + Math.mod(i, 5) * 0.03;
+    }
+}
+
 component BackgroundEffect inherits Rectangle {
     in property <string> kind: "none";
 
@@ -1348,6 +1367,18 @@ export component AppWindow inherits Window {
     in-out property <[string]> layout-profiles: [];
     in-out property <string> layout-profile: "По умолчанию";
     in-out property <string> layout-profile-name: "";
+    in-out property <bool> picker-open: false;
+    in-out property <float> picker-hue: 270;
+    in-out property <float> picker-sat: 0.7;
+    in-out property <float> picker-val: 0.8;
+    in-out property <string> picker-hex: "#A21CAF";
+    in-out property <color> picker-hue-color: #A21CAF;
+    in-out property <color> picker-selected-color: #A21CAF;
+    in-out property <[color]> picker-recent: [];
+    in-out property <bool> onboarding: false;
+    in-out property <bool> onboarding-completed: false;
+    in-out property <int> onboarding-step: 0;
+    in-out property <float> onboarding-opacity: 0;
     in-out property <bool> toast-visible: false;
     in-out property <string> toast-title: "";
     in-out property <string> toast-body: "";
@@ -1403,6 +1434,7 @@ export component AppWindow inherits Window {
     in-out property <bool> set-sounds: true;
     in-out property <bool> set-hide-on-launch: true;
     in-out property <bool> set-discord-rpc: true;
+    in-out property <bool> set-telemetry: false;
     in-out property <int> max-ram: 16384;
     in-out property <string> settings-status: "";
     in-out property <bool> settings-status-error: false;
@@ -1428,7 +1460,6 @@ export component AppWindow inherits Window {
     callback mods-set-all-toggled(bool);
     callback server-clicked(int);
     callback profile-clicked(int);
-    callback save-settings-clicked();
     callback export-diagnostics-clicked();
     callback check-backend-clicked();
     callback adjust-xms(int);
@@ -1444,6 +1475,18 @@ export component AppWindow inherits Window {
     callback glass-changed();
     callback save-window-geometry();
     callback toast-close();
+    callback onboarding-next();
+    callback onboarding-back();
+    callback onboarding-skip();
+    callback onboarding-finish();
+    callback onboarding-restart-clicked();
+    callback picker-apply();
+    callback picker-cancel();
+    callback picker-eyedropper();
+    callback picker-hue-changed(float);
+    callback picker-sv-changed(float, float);
+    callback picker-hex-changed(string);
+    callback picker-recent-clicked(color);
     callback themes-refresh-clicked();
     callback themes-open-folder-clicked();
     callback open-install-clicked();
@@ -2440,6 +2483,20 @@ export component AppWindow inherits Window {
                                         toggled(v) => { root.set-auto-login = v; }
                                     }
                                 }
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Text { text: "Отправлять анонимную телеметрию"; color: Theme.text-muted; font-size: 14px; vertical-alignment: center; horizontal-stretch: 1; }
+                                    Toggle {
+                                        checked: root.set-telemetry;
+                                        toggled(v) => { root.set-telemetry = v; }
+                                    }
+                                }
+                                ActionButton {
+                                    label: "Пройти обучение заново";
+                                    width: 230px;
+                                    height: 34px;
+                                    clicked => { root.onboarding-restart-clicked(); }
+                                }
                             }
                         }
 
@@ -2482,24 +2539,38 @@ export component AppWindow inherits Window {
                                     ActionButton {
                                         label: "Base";
                                         primary: root.set-theme-mode == "base";
-                                        width: 110px;
+                                        width: 96px;
                                         height: 36px;
                                         clicked => { root.set-theme-mode = "base"; root.theme-mode-clicked("base"); }
                                     }
                                     ActionButton {
                                         label: "Material 3";
                                         primary: root.set-theme-mode == "material3";
-                                        width: 140px;
+                                        width: 125px;
                                         height: 36px;
                                         clicked => { root.set-theme-mode = "material3"; root.theme-mode-clicked("material3"); }
                                     }
                                     ActionButton {
                                         label: "Liquid Glass";
                                         primary: root.set-theme-mode == "liquid-glass";
-                                        width: 150px;
+                                        width: 130px;
                                         height: 36px;
                                         clicked => { root.set-theme-mode = "liquid-glass"; root.theme-mode-clicked("liquid-glass"); }
                                     }
+                                    ActionButton {
+                                        label: "Acrylic";
+                                        primary: root.set-theme-mode == "acrylic";
+                                        width: 110px;
+                                        height: 36px;
+                                        clicked => { root.set-theme-mode = "acrylic"; root.theme-mode-clicked("acrylic"); }
+                                    }
+                                }
+
+                                Text {
+                                    text: "Acrylic и Liquid Glass — имитация без backdrop-blur: слои, кромка и зерно.";
+                                    color: Theme.text-muted;
+                                    font-size: 12px;
+                                    wrap: word-wrap;
                                 }
 
                                 HorizontalLayout {
@@ -2886,12 +2957,12 @@ export component AppWindow inherits Window {
 
             HorizontalLayout {
                 spacing: 12px;
-                ActionButton {
-                    label: "Сохранить настройки";
-                    primary: true;
-                    width: 240px;
-                    height: 48px;
-                    clicked => { root.save-settings-clicked(); }
+                Text {
+                    text: "Изменения сохраняются автоматически";
+                    color: Theme.text-muted;
+                    font-size: 14px;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
                 }
                 ActionButton {
                     label: "Экспорт диагностики";
@@ -2899,7 +2970,6 @@ export component AppWindow inherits Window {
                     height: 48px;
                     clicked => { root.export-diagnostics-clicked(); }
                 }
-                Rectangle { horizontal-stretch: 1; }
                 Text {
                     text: "v" + root.app-version;
                     color: Theme.text-muted;
@@ -3080,6 +3150,394 @@ export component AppWindow inherits Window {
                 }
             }
         }
+    }
+
+    // Custom colour picker. A modal card with an HSV field, hue slider, hex
+    // input, preview and recent colours. The screen eyedropper is a separate
+    // native overlay so it can sample pixels outside this window.
+    if root.picker-open: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: Theme.background.with-alpha(0.62);
+
+        TouchArea {
+            clicked => { root.picker-cancel(); }
+        }
+
+        Rectangle {
+            width: 560px;
+            height: picker-layout.preferred-height + 40px;
+            x: (parent.width - 560px) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: Theme.radius-lg;
+            background: Theme.surface.with-alpha(0.98);
+            border-width: 1px;
+            border-color: Theme.border;
+            drop-shadow-blur: 28px;
+            drop-shadow-offset-y: 8px;
+            drop-shadow-color: Theme.shadow;
+
+            picker-layout := VerticalLayout {
+                padding: 20px;
+                spacing: 12px;
+
+                Text { text: "Выбор accent"; color: Theme.text; font-size: 19px; font-weight: 700; }
+
+                HorizontalLayout {
+                    spacing: 16px;
+
+                    Rectangle {
+                        width: 300px;
+                        height: 190px;
+                        border-radius: Theme.radius-md;
+                        clip: true;
+                        background: root.picker-hue-color;
+
+                        Rectangle {
+                            width: 100%;
+                            height: 100%;
+                            background: @linear-gradient(90deg, Theme.picker-white 0%, transparent 100%);
+                        }
+                        Rectangle {
+                            width: 100%;
+                            height: 100%;
+                            background: @linear-gradient(180deg, transparent 0%, Theme.picker-black 100%);
+                        }
+
+                        sv-area := TouchArea {
+                            moved => {
+                                root.picker-sv-changed(self.mouse-x / self.width, self.mouse-y / self.height);
+                            }
+                            pointer-event(event) => {
+                                if event.kind == PointerEventKind.down {
+                                    root.picker-sv-changed(self.mouse-x / self.width, self.mouse-y / self.height);
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            width: 14px;
+                            height: 14px;
+                            x: root.picker-sat * parent.width - 7px;
+                            y: (1 - root.picker-val) * parent.height - 7px;
+                            border-radius: 7px;
+                            border-width: 2px;
+                            border-color: Theme.picker-white;
+                            background: transparent;
+                        }
+                    }
+
+                    VerticalLayout {
+                        spacing: 8px;
+                        Rectangle {
+                            width: 120px;
+                            height: 56px;
+                            border-radius: Theme.radius-md;
+                            background: root.picker-selected-color;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                        }
+                        TextField {
+                            text <=> root.picker-hex;
+                            placeholder: "#RRGGBB";
+                            width: 150px;
+                            height: 36px;
+                            accepted => { root.picker-hex-changed(root.picker-hex); }
+                        }
+                        Text { text: "Недавние"; color: Theme.text-muted; font-size: 12px; }
+                        HorizontalLayout {
+                            spacing: 6px;
+                            for c in root.picker-recent: Rectangle {
+                                width: 24px;
+                                height: 24px;
+                                border-radius: Theme.radius-sm;
+                                background: c;
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                TouchArea {
+                                    clicked => { root.picker-recent-clicked(c); }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 10px;
+                    Text { text: "Оттенок"; color: Theme.text-muted; font-size: 13px; width: 70px; vertical-alignment: center; }
+                    Slider {
+                        minimum: 0;
+                        maximum: 360;
+                        value <=> root.picker-hue;
+                        changed(v) => { root.picker-hue-changed(v); }
+                        horizontal-stretch: 1;
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    ActionButton {
+                        label: "Пипетка";
+                        width: 120px;
+                        height: 34px;
+                        clicked => { root.picker-eyedropper(); }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    ActionButton {
+                        label: "Отмена";
+                        width: 110px;
+                        height: 34px;
+                        clicked => { root.picker-cancel(); }
+                    }
+                    ActionButton {
+                        label: "Применить";
+                        primary: true;
+                        width: 130px;
+                        height: 34px;
+                        clicked => { root.picker-apply(); }
+                    }
+                }
+            }
+        }
+    }
+
+    // First-run onboarding. It sits above the login/main screens and below the
+    // splash and toast layers.
+    if root.onboarding: Rectangle {
+        width: 100%;
+        height: 100%;
+        opacity: root.onboarding-opacity;
+        animate opacity { duration: 320ms; easing: ease-out; }
+        background: @linear-gradient(135deg, Theme.background 0%, Theme.background-alt 55%, Theme.surface 100%);
+
+        Rectangle {
+            x: -120px;
+            y: -80px;
+            width: 420px;
+            height: 420px;
+            border-radius: 210px;
+            background: Theme.gradient-start.with-alpha(0.16);
+            drop-shadow-blur: 80px;
+            drop-shadow-color: Theme.gradient-start.with-alpha(0.35);
+        }
+        Rectangle {
+            x: parent.width - 300px;
+            y: parent.height - 260px;
+            width: 380px;
+            height: 380px;
+            border-radius: 190px;
+            background: Theme.gradient-end.with-alpha(0.14);
+            drop-shadow-blur: 80px;
+            drop-shadow-color: Theme.gradient-end.with-alpha(0.3);
+        }
+
+        VerticalLayout {
+            alignment: center;
+            padding: 36px;
+            spacing: 16px;
+
+            HorizontalLayout {
+                alignment: center;
+                spacing: 12px;
+                Image {
+                    source: @image-url("../assets/logo.svg");
+                    width: 54px;
+                    height: 54px;
+                }
+                Text {
+                    text: "Vestalis";
+                    color: Theme.text;
+                    font-size: 46px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: Texts.app-subtitle;
+                    color: Theme.accent-hover;
+                    font-size: 15px;
+                    vertical-alignment: center;
+                }
+            }
+
+            HorizontalLayout {
+                alignment: center;
+            Rectangle {
+                width: 660px;
+                height: onboarding-content.preferred-height + 44px;
+                border-radius: Theme.radius-lg;
+                background: Theme.mode == "liquid-glass" || Theme.mode == "acrylic"
+                    ? Theme.glass-tint
+                    : Theme.surface.with-alpha(0.96);
+                border-width: 1px;
+                border-color: Theme.mode == "liquid-glass" || Theme.mode == "acrylic"
+                    ? Theme.glass-border : Theme.border;
+                drop-shadow-blur: 26px;
+                drop-shadow-offset-y: 8px;
+                drop-shadow-color: Theme.shadow;
+
+                onboarding-content := VerticalLayout {
+                    padding: 22px;
+                    spacing: 12px;
+
+                    if root.onboarding-step == 0: VerticalLayout {
+                        spacing: 10px;
+                        Text { text: "Добро пожаловать!"; color: Theme.text; font-size: 26px; font-weight: 700; }
+                        Text {
+                            text: "Настроим лаунчер за несколько шагов. Это займёт меньше минуты, всё можно изменить позже.";
+                            color: Theme.text-muted;
+                            font-size: 15px;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: "Язык, тема и телеметрия настраиваются здесь, остальное — в разделе «Настройки».";
+                            color: Theme.text-muted;
+                            font-size: 14px;
+                            wrap: word-wrap;
+                        }
+                    }
+
+                    if root.onboarding-step == 1: VerticalLayout {
+                        spacing: 10px;
+                        Text { text: "Язык интерфейса"; color: Theme.text; font-size: 22px; font-weight: 700; }
+                        Text { text: "Можно поменять в любой момент в настройках."; color: Theme.text-muted; font-size: 14px; wrap: word-wrap; }
+                        HorizontalLayout {
+                            spacing: 8px;
+                            ActionButton {
+                                label: "Русский";
+                                primary: root.set-language == "ru";
+                                width: 140px;
+                                height: 38px;
+                                clicked => { root.set-language = "ru"; root.language-clicked("ru"); }
+                            }
+                            ActionButton {
+                                label: "English";
+                                primary: root.set-language == "en";
+                                width: 140px;
+                                height: 38px;
+                                clicked => { root.set-language = "en"; root.language-clicked("en"); }
+                            }
+                            ActionButton {
+                                label: "Українська";
+                                primary: root.set-language == "ua";
+                                width: 150px;
+                                height: 38px;
+                                clicked => { root.set-language = "ua"; root.language-clicked("ua"); }
+                            }
+                        }
+                    }
+
+                    if root.onboarding-step == 2: VerticalLayout {
+                        spacing: 8px;
+                        Text { text: "Оформление"; color: Theme.text; font-size: 22px; font-weight: 700; }
+                        Text { text: "Выберите тему и режим. Позже это доступно в «Настройках»."; color: Theme.text-muted; font-size: 14px; wrap: word-wrap; }
+                        ScrollView {
+                            height: 118px;
+                            VerticalLayout {
+                                spacing: 4px;
+                                for t in root.themes: Rectangle {
+                                    height: 32px;
+                                    border-radius: Theme.radius-sm;
+                                    background: root.set-theme == t.name ? Theme.accent.with-alpha(0.16) : Theme.surface-hover;
+                                    Text {
+                                        x: 10px;
+                                        text: t.name;
+                                        color: Theme.text;
+                                        font-size: 13px;
+                                        vertical-alignment: center;
+                                    }
+                                    TouchArea {
+                                        clicked => { root.set-theme = t.name; root.theme-clicked(t.name); }
+                                    }
+                                }
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: 6px;
+                            ActionButton { label: "Base"; primary: root.set-theme-mode == "base"; width: 82px; height: 30px; clicked => { root.set-theme-mode = "base"; root.theme-mode-clicked("base"); } }
+                            ActionButton { label: "M3"; primary: root.set-theme-mode == "material3"; width: 82px; height: 30px; clicked => { root.set-theme-mode = "material3"; root.theme-mode-clicked("material3"); } }
+                            ActionButton { label: "Glass"; primary: root.set-theme-mode == "liquid-glass"; width: 90px; height: 30px; clicked => { root.set-theme-mode = "liquid-glass"; root.theme-mode-clicked("liquid-glass"); } }
+                            ActionButton { label: "Acrylic"; primary: root.set-theme-mode == "acrylic"; width: 96px; height: 30px; clicked => { root.set-theme-mode = "acrylic"; root.theme-mode-clicked("acrylic"); } }
+                        }
+                    }
+
+                    if root.onboarding-step == 3: VerticalLayout {
+                        spacing: 10px;
+                        Text { text: "Телеметрия"; color: Theme.text; font-size: 22px; font-weight: 700; }
+                        Text {
+                            text: "Анонимные отчёты помогают исправлять падения. Отправляются только версия, ОС, backtrace и очищенный лог. Токены, пароли, HWID и логины не отправляются.";
+                            color: Theme.text-muted;
+                            font-size: 14px;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            spacing: 10px;
+                            Toggle {
+                                checked: root.set-telemetry;
+                                toggled(v) => { root.set-telemetry = v; }
+                            }
+                            Text { text: "Отправлять анонимную телеметрию"; color: Theme.text; font-size: 14px; vertical-alignment: center; }
+                        }
+                        Text { text: "По умолчанию выключено. Можно изменить в любой момент."; color: Theme.text-muted; font-size: 13px; }
+                    }
+
+                    if root.onboarding-step == 4: VerticalLayout {
+                        spacing: 8px;
+                        Text { text: "Проверим окружение"; color: Theme.text; font-size: 22px; font-weight: 700; }
+                        Text { text: "Папка установки"; color: Theme.text-muted; font-size: 13px; }
+                        TextField { text <=> root.set-install-dir; placeholder: "C:\\Users\\...\\AppData\\Roaming\\Vestalis"; height: 38px; }
+                        Text { text: "Java (пусто — из манифеста профиля)"; color: Theme.text-muted; font-size: 13px; }
+                        HorizontalLayout {
+                            spacing: 8px;
+                            TextField { text <=> root.set-custom-java; placeholder: "javaw.exe"; height: 36px; horizontal-stretch: 1; }
+                            ActionButton { label: "Обзор…"; width: 110px; height: 34px; clicked => { root.pick-java-clicked(); } }
+                        }
+                        Text {
+                            text: "Проверка не блокирует работу: игры можно запускать и позже.";
+                            color: Theme.text-muted;
+                            font-size: 13px;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                if root.onboarding-step > 0: ActionButton {
+                    label: "Назад";
+                    width: 120px;
+                    height: 40px;
+                    clicked => { root.onboarding-back(); }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                ActionButton {
+                    label: "Пропустить";
+                    width: 130px;
+                    height: 40px;
+                    clicked => { root.onboarding-skip(); }
+                }
+                if root.onboarding-step < 4: ActionButton {
+                    label: "Далее";
+                    primary: true;
+                    width: 150px;
+                    height: 40px;
+                    clicked => { root.onboarding-next(); }
+                }
+                if root.onboarding-step == 4: ActionButton {
+                    label: "Начать";
+                    primary: true;
+                    width: 160px;
+                    height: 40px;
+                    clicked => { root.onboarding-finish(); }
+                }
+            }
+        }
+    }
+
+    if Theme.mode == "acrylic": AcrylicGrain {
+        width: 100%;
+        height: 100%;
     }
 
     // In-app toast for news and profile updates. No external notification

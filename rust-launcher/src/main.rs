@@ -15,8 +15,10 @@ mod launch;
 mod layout;
 mod locale;
 mod model;
+mod screen_picker;
 mod signalr;
 mod storage;
+mod telemetry;
 mod theme;
 mod window;
 mod worker;
@@ -49,6 +51,11 @@ thread_local! {
         const { std::cell::Cell::new((1180, 640, -1, -1)) };
     static NORMAL_GEOMETRY: std::cell::Cell<(u32, u32, i32, i32)> =
         const { std::cell::Cell::new((1180, 640, -1, -1)) };
+    static LAST_SAVED_SETTINGS: RefCell<Option<Settings>> = const { RefCell::new(None) };
+    static PENDING_SETTINGS: RefCell<Option<Settings>> = const { RefCell::new(None) };
+    static PENDING_SINCE: std::cell::Cell<Option<std::time::Instant>> =
+        const { std::cell::Cell::new(None) };
+    static PICKER_RECENT_HEX: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
 struct ThemeTransition {
@@ -88,10 +95,23 @@ fn main() -> anyhow::Result<()> {
         500,
     );
 
+    let state_existed = storage::state_path().exists();
+    let old_state_without_flag = state_existed
+        && std::fs::read_to_string(storage::state_path())
+            .map(|text| !text.contains("\"onboardingCompleted\""))
+            .unwrap_or(false);
     let mut state = load_state();
+    // Existing installations predate onboarding: do not show it again after
+    // an update. Fresh installs (no state file) still get the first-run flow.
+    if old_state_without_flag {
+        state.settings.onboarding_completed = true;
+        storage::save_state(&state);
+    }
     // Normalise old layouts (including the migration from the clipped 200 px
     // profile block) before the first frame and before the worker starts.
     state.settings.layout.normalize();
+    LAST_SAVED_SETTINGS.with(|value| *value.borrow_mut() = Some(state.settings.clone()));
+    telemetry::configure(state.settings.telemetry_enabled);
     let saved_geometry = storage::load_window_geometry();
     WINDOW_GEOMETRY.with(|geometry| {
         geometry.set((
@@ -176,6 +196,20 @@ fn main() -> anyhow::Result<()> {
     apply_item(&ui, &active, &state.settings.theme_mode);
     initialize_ui(&ui, &state);
     install_callbacks(&ui, command_tx.clone());
+
+    let onboarding_needed = !ui.get_onboarding_completed();
+    ui.set_onboarding(onboarding_needed);
+    ui.set_onboarding_opacity(0.0);
+    if onboarding_needed {
+        let onboarding_ui = ui.as_weak();
+        slint::Timer::single_shot(Duration::from_millis(2100), move || {
+            if let Some(ui) = onboarding_ui.upgrade() {
+                ui.set_onboarding_opacity(1.0);
+            }
+        });
+    } else {
+        ui.set_onboarding_opacity(1.0);
+    }
 
     runtime.spawn(Worker::new(state, event_tx).run(command_rx));
 
@@ -323,6 +357,72 @@ fn main() -> anyhow::Result<()> {
             );
             if last_geometry.replace(current) != current {
                 storage::save_window_geometry(geometry);
+            }
+        },
+    );
+
+    // Autosave: watch the UI, wait for 500 ms of stability, then send the
+    // validated settings to the worker. Invalid fields keep the old value and
+    // show a red status instead of writing a broken state.
+    let autosave_ui = ui.as_weak();
+    let autosave_tx = command_tx.clone();
+    let autosave_timer = slint::Timer::default();
+    autosave_timer.start(
+        slint::TimerMode::Repeated,
+        Duration::from_millis(150),
+        move || {
+            let Some(ui) = autosave_ui.upgrade() else {
+                return;
+            };
+
+            let snapshot = match settings_from_ui(&ui) {
+                Ok(settings) => settings,
+                Err(message) => {
+                    ui.set_settings_status(message.into());
+                    ui.set_settings_status_error(true);
+                    PENDING_SETTINGS.with(|pending| *pending.borrow_mut() = None);
+                    PENDING_SINCE.with(|value| value.set(None));
+                    return;
+                }
+            };
+
+            let unchanged = LAST_SAVED_SETTINGS.with(|saved| {
+                saved
+                    .borrow()
+                    .as_ref()
+                    .map(|saved| saved == &snapshot)
+                    .unwrap_or(false)
+            });
+            if unchanged {
+                PENDING_SETTINGS.with(|pending| *pending.borrow_mut() = None);
+                PENDING_SINCE.with(|value| value.set(None));
+                return;
+            }
+
+            let is_new = PENDING_SETTINGS.with(|pending| {
+                pending
+                    .borrow()
+                    .as_ref()
+                    .map(|pending| pending != &snapshot)
+                    .unwrap_or(true)
+            });
+            if is_new {
+                PENDING_SETTINGS.with(|pending| *pending.borrow_mut() = Some(snapshot));
+                PENDING_SINCE.with(|value| value.set(Some(std::time::Instant::now())));
+                return;
+            }
+
+            let elapsed = PENDING_SINCE.with(|value| value.get());
+            if elapsed
+                .map(|started| started.elapsed() >= Duration::from_millis(500))
+                .unwrap_or(false)
+            {
+                LAST_SAVED_SETTINGS.with(|saved| *saved.borrow_mut() = Some(snapshot.clone()));
+                PENDING_SETTINGS.with(|pending| *pending.borrow_mut() = None);
+                PENDING_SINCE.with(|value| value.set(None));
+                ui.set_settings_status("Сохранено".into());
+                ui.set_settings_status_error(false);
+                let _ = autosave_tx.send(Command::SaveSettings(Box::new(snapshot)));
             }
         },
     );
@@ -738,58 +838,6 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         }
     });
 
-    ui.on_save_settings_clicked({
-        let tx = tx.clone();
-        let ui = ui.as_weak();
-        move || {
-            let Some(ui) = ui.upgrade() else { return };
-            play_sound(&ui, Sound::Click);
-
-            let width = ui
-                .get_set_width_text()
-                .parse::<u32>()
-                .unwrap_or(900)
-                .clamp(640, 7680);
-            let height = ui
-                .get_set_height_text()
-                .parse::<u32>()
-                .unwrap_or(600)
-                .clamp(480, 4320);
-
-            let settings = Settings {
-                game_width: width,
-                game_height: height,
-                fullscreen: ui.get_set_fullscreen(),
-                xms: ui.get_set_xms() as u32,
-                xmx: ui.get_set_xmx() as u32,
-                custom_jvm: ui.get_set_custom_jvm().to_string(),
-                custom_java: ui.get_set_custom_java().to_string(),
-                auto_login: ui.get_set_auto_login(),
-                send_hwid: ui.get_set_send_hwid(),
-                sounds: ui.get_set_sounds(),
-                hide_on_launch: ui.get_set_hide_on_launch(),
-                discord_rpc: ui.get_set_discord_rpc(),
-                background_effect: ui.get_set_background_effect().to_string(),
-                theme: ui.get_set_theme().to_string(),
-                theme_mode: ui.get_set_theme_mode().to_string(),
-                language: ui.get_set_language().to_string(),
-                glass_opacity: ui.get_set_glass_opacity(),
-                glass_blur: ui.get_set_glass_blur(),
-                accent: ui.get_set_accent().to_string(),
-                follow_windows_theme: ui.get_follow_windows_theme(),
-                light_theme: ui.get_light_theme().to_string(),
-                dark_theme: ui.get_dark_theme().to_string(),
-                layout: ui_layout(&ui),
-                layouts: LAYOUT_PROFILES.with(|profiles| profiles.borrow().clone()),
-                layout_profile: ui.get_layout_profile().to_string(),
-                install_dir: ui.get_set_install_dir().to_string(),
-            };
-
-            ui.set_settings_status("Сохранение…".into());
-            let _ = tx.send(Command::SaveSettings(Box::new(settings)));
-        }
-    });
-
     ui.on_theme_clicked({
         let ui = ui.as_weak();
         move |name| {
@@ -848,11 +896,97 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
         move || {
             let Some(ui) = ui.upgrade() else { return };
             play_sound(&ui, Sound::Click);
-            let current = crate::theme::parse_hex_rgb(&ui.get_set_accent());
-            if let Some((r, g, b)) = window::pick_color(current) {
-                ui.set_set_accent(format!("#{r:02X}{g:02X}{b:02X}").into());
-                apply_theme_by_name(&ui, &ui.get_set_theme());
-                ui.set_settings_status("Ручной accent применён".into());
+            let current =
+                crate::theme::parse_hex_rgb(&ui.get_set_accent()).unwrap_or((162, 28, 175));
+            picker_set_rgb(&ui, current);
+            ui.set_picker_open(true);
+        }
+    });
+
+    ui.on_picker_cancel({
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                ui.set_picker_open(false);
+            }
+        }
+    });
+
+    ui.on_picker_hue_changed({
+        let ui = ui.as_weak();
+        move |hue| {
+            if let Some(ui) = ui.upgrade() {
+                ui.set_picker_hue(hue);
+                picker_update_from_hsv(&ui);
+            }
+        }
+    });
+
+    ui.on_picker_sv_changed({
+        let ui = ui.as_weak();
+        move |x, y| {
+            if let Some(ui) = ui.upgrade() {
+                ui.set_picker_sat(x.clamp(0.0, 1.0));
+                ui.set_picker_val((1.0 - y).clamp(0.0, 1.0));
+                picker_update_from_hsv(&ui);
+            }
+        }
+    });
+
+    ui.on_picker_hex_changed({
+        let ui = ui.as_weak();
+        move |value| {
+            let Some(ui) = ui.upgrade() else { return };
+            match crate::theme::parse_hex_rgb(value.as_str()) {
+                Some(rgb) => picker_set_rgb(&ui, rgb),
+                None => {
+                    ui.set_settings_status("Accent: нужен формат #RRGGBB".into());
+                    ui.set_settings_status_error(true);
+                }
+            }
+        }
+    });
+
+    ui.on_picker_recent_clicked({
+        let ui = ui.as_weak();
+        move |color| {
+            if let Some(ui) = ui.upgrade() {
+                let rgba = color.to_argb_u8();
+                picker_set_rgb(&ui, (rgba.red, rgba.green, rgba.blue));
+            }
+        }
+    });
+
+    ui.on_picker_apply({
+        let ui = ui.as_weak();
+        move || {
+            let Some(ui) = ui.upgrade() else { return };
+            let hex = ui.get_picker_hex().to_string();
+            if crate::theme::parse_hex_rgb(&hex).is_none() {
+                ui.set_settings_status("Accent: нужен формат #RRGGBB".into());
+                ui.set_settings_status_error(true);
+                return;
+            }
+            ui.set_set_accent(hex.clone().into());
+            apply_theme_by_name(&ui, &ui.get_set_theme());
+            picker_remember(&ui, &hex);
+            ui.set_picker_open(false);
+            ui.set_settings_status(format!("Accent применён: {hex}").into());
+            ui.set_settings_status_error(false);
+        }
+    });
+
+    ui.on_picker_eyedropper({
+        let ui = ui.as_weak();
+        move || {
+            let Some(ui) = ui.upgrade() else { return };
+            match crate::screen_picker::pick() {
+                Some(rgb) => {
+                    picker_set_rgb(&ui, rgb);
+                    ui.set_picker_open(true);
+                    ui.set_settings_status("Цвет выбран с экрана".into());
+                }
+                None => ui.set_settings_status("Пипетка отменена".into()),
             }
         }
     });
@@ -1033,6 +1167,63 @@ fn install_callbacks(ui: &AppWindow, tx: tokio::sync::mpsc::UnboundedSender<Comm
                 ui.set_settings_status("Сбор диагностики…".into());
             }
             let _ = tx.send(Command::ExportDiagnostics);
+        }
+    });
+
+    ui.on_onboarding_next({
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                ui.set_onboarding_step((ui.get_onboarding_step() + 1).min(4));
+            }
+        }
+    });
+
+    ui.on_onboarding_back({
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                ui.set_onboarding_step((ui.get_onboarding_step() - 1).max(0));
+            }
+        }
+    });
+
+    ui.on_onboarding_skip({
+        let ui = ui.as_weak();
+        let tx = tx.clone();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                finish_onboarding(&ui, &tx);
+            }
+        }
+    });
+
+    ui.on_onboarding_finish({
+        let ui = ui.as_weak();
+        let tx = tx.clone();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                finish_onboarding(&ui, &tx);
+            }
+        }
+    });
+
+    ui.on_onboarding_restart_clicked({
+        let ui = ui.as_weak();
+        move || {
+            if let Some(ui) = ui.upgrade() {
+                play_sound(&ui, Sound::Click);
+                ui.set_onboarding_completed(false);
+                ui.set_onboarding_step(0);
+                ui.set_onboarding_opacity(0.0);
+                ui.set_onboarding(true);
+                let animation_ui = ui.as_weak();
+                slint::Timer::single_shot(Duration::from_millis(30), move || {
+                    if let Some(ui) = animation_ui.upgrade() {
+                        ui.set_onboarding_opacity(1.0);
+                    }
+                });
+            }
         }
     });
 
@@ -2098,6 +2289,160 @@ fn apply_layout(ui: &AppWindow, layout: &crate::layout::LayoutConfig) {
     );
 }
 
+fn picker_recent_model(items: &[String]) -> ModelRc<slint::Color> {
+    let colors: Vec<slint::Color> = items
+        .iter()
+        .filter_map(|item| crate::theme::parse_color(item))
+        .collect();
+    ModelRc::new(VecModel::from(colors))
+}
+
+fn picker_set_rgb(ui: &AppWindow, rgb: crate::theme::Rgb) {
+    let (hue, saturation, value) = crate::theme::rgb_to_hsv(rgb);
+    ui.set_picker_hue(hue);
+    ui.set_picker_sat(saturation);
+    ui.set_picker_val(value);
+    ui.set_picker_selected_color(slint::Color::from_rgb_u8(rgb.0, rgb.1, rgb.2));
+    ui.set_picker_hue_color(slint::Color::from_rgb_u8(
+        crate::theme::hsv_to_rgb(hue, 1.0, 1.0).0,
+        crate::theme::hsv_to_rgb(hue, 1.0, 1.0).1,
+        crate::theme::hsv_to_rgb(hue, 1.0, 1.0).2,
+    ));
+    ui.set_picker_hex(format!("#{:02X}{:02X}{:02X}", rgb.0, rgb.1, rgb.2).into());
+}
+
+fn picker_update_from_hsv(ui: &AppWindow) {
+    let hue = ui.get_picker_hue();
+    let saturation = ui.get_picker_sat().clamp(0.0, 1.0);
+    let value = ui.get_picker_val().clamp(0.0, 1.0);
+    let hue_rgb = crate::theme::hsv_to_rgb(hue, 1.0, 1.0);
+    let selected = crate::theme::hsv_to_rgb(hue, saturation, value);
+
+    ui.set_picker_hue_color(slint::Color::from_rgb_u8(hue_rgb.0, hue_rgb.1, hue_rgb.2));
+    ui.set_picker_selected_color(slint::Color::from_rgb_u8(
+        selected.0, selected.1, selected.2,
+    ));
+    ui.set_picker_hex(format!("#{:02X}{:02X}{:02X}", selected.0, selected.1, selected.2).into());
+}
+
+fn picker_remember(ui: &AppWindow, hex: &str) {
+    PICKER_RECENT_HEX.with(|history| {
+        let mut history = history.borrow_mut();
+        history.retain(|item| !item.eq_ignore_ascii_case(hex));
+        history.insert(0, hex.to_string());
+        history.truncate(8);
+        let model: Vec<slint::Color> = history
+            .iter()
+            .filter_map(|item| crate::theme::parse_color(item))
+            .collect();
+        ui.set_picker_recent(ModelRc::new(VecModel::from(model)));
+    });
+}
+
+fn finish_onboarding(ui: &AppWindow, tx: &tokio::sync::mpsc::UnboundedSender<Command>) {
+    ui.set_onboarding_completed(true);
+    ui.set_onboarding(false);
+    ui.set_onboarding_step(0);
+
+    match settings_from_ui(ui) {
+        Ok(settings) => {
+            LAST_SAVED_SETTINGS.with(|saved| *saved.borrow_mut() = Some(settings.clone()));
+            ui.set_settings_status("Сохранено".into());
+            ui.set_settings_status_error(false);
+            let _ = tx.send(Command::SaveSettings(Box::new(settings)));
+        }
+        Err(message) => {
+            ui.set_settings_status(message.into());
+            ui.set_settings_status_error(true);
+        }
+    }
+}
+
+/// Builds and validates the settings currently shown in the UI. Autosave only
+/// persists a valid snapshot; invalid fields keep the previous saved value.
+fn settings_from_ui(ui: &AppWindow) -> Result<Settings, String> {
+    let width = ui
+        .get_set_width_text()
+        .trim()
+        .parse::<u32>()
+        .map_err(|_| "Некорректная ширина игры".to_string())?;
+    if !(640..=7680).contains(&width) {
+        return Err("Ширина игры: 640–7680".into());
+    }
+
+    let height = ui
+        .get_set_height_text()
+        .trim()
+        .parse::<u32>()
+        .map_err(|_| "Некорректная высота игры".to_string())?;
+    if !(480..=4320).contains(&height) {
+        return Err("Высота игры: 480–4320".into());
+    }
+
+    let max_ram = ui.get_max_ram().max(1024) as u64;
+    let safe_max = 32768.min((max_ram.saturating_sub(4096)).max(1024)) as u32;
+    let xmx = ui.get_set_xmx() as u32;
+    if !(1024..=safe_max).contains(&xmx) {
+        return Err(format!("Xmx должен быть 1024–{safe_max} МБ"));
+    }
+
+    let xms = ui.get_set_xms() as u32;
+    if !(512..=xmx).contains(&xms) {
+        return Err("Xms должен быть 512–Xmx МБ".into());
+    }
+
+    let install_dir = ui.get_set_install_dir().trim().to_string();
+    if install_dir.is_empty() {
+        return Err("Укажите папку установки".into());
+    }
+    let install_path = std::path::Path::new(&install_dir);
+    if !install_path.is_absolute() {
+        return Err("Путь установки должен быть абсолютным".into());
+    }
+
+    let custom_java = ui.get_set_custom_java().trim().to_string();
+    if !custom_java.is_empty() && !std::path::Path::new(&custom_java).is_file() {
+        return Err("Java не найдена по указанному пути".into());
+    }
+
+    let accent = ui.get_set_accent().trim().to_string();
+    if !accent.is_empty() && crate::theme::parse_hex_rgb(&accent).is_none() {
+        return Err("Accent: нужен формат #RRGGBB".into());
+    }
+
+    Ok(Settings {
+        game_width: width,
+        game_height: height,
+        fullscreen: ui.get_set_fullscreen(),
+        xms,
+        xmx,
+        custom_jvm: ui.get_set_custom_jvm().to_string(),
+        custom_java,
+        auto_login: ui.get_set_auto_login(),
+        send_hwid: ui.get_set_send_hwid(),
+        sounds: ui.get_set_sounds(),
+        hide_on_launch: ui.get_set_hide_on_launch(),
+        discord_rpc: ui.get_set_discord_rpc(),
+        telemetry_enabled: ui.get_set_telemetry(),
+        onboarding_completed: ui.get_onboarding_completed(),
+        background_effect: ui.get_set_background_effect().to_string(),
+        theme: ui.get_set_theme().to_string(),
+        theme_mode: ui.get_set_theme_mode().to_string(),
+        language: ui.get_set_language().to_string(),
+        glass_opacity: ui.get_set_glass_opacity(),
+        glass_blur: ui.get_set_glass_blur(),
+        accent,
+        accent_history: PICKER_RECENT_HEX.with(|history| history.borrow().clone()),
+        follow_windows_theme: ui.get_follow_windows_theme(),
+        light_theme: ui.get_light_theme().to_string(),
+        dark_theme: ui.get_dark_theme().to_string(),
+        layout: ui_layout(ui),
+        layouts: LAYOUT_PROFILES.with(|profiles| profiles.borrow().clone()),
+        layout_profile: ui.get_layout_profile().to_string(),
+        install_dir,
+    })
+}
+
 fn ui_layout(ui: &AppWindow) -> crate::layout::LayoutConfig {
     fn collect(model: &ModelRc<slint::SharedString>) -> Vec<String> {
         model.iter().map(|item| item.to_string()).collect()
@@ -2144,6 +2489,11 @@ fn apply_settings(ui: &AppWindow, settings: &Settings, max_ram: u64) {
     ui.set_set_sounds(settings.sounds);
     ui.set_set_hide_on_launch(settings.hide_on_launch);
     ui.set_set_discord_rpc(settings.discord_rpc);
+    ui.set_set_telemetry(settings.telemetry_enabled);
+    ui.set_onboarding_completed(settings.onboarding_completed);
+    PICKER_RECENT_HEX.with(|history| *history.borrow_mut() = settings.accent_history.clone());
+    ui.set_picker_recent(picker_recent_model(&settings.accent_history));
+    telemetry::configure(settings.telemetry_enabled);
     ui.set_set_theme(settings.theme.clone().into());
     ui.set_set_accent(settings.accent.clone().into());
     ui.set_follow_windows_theme(settings.follow_windows_theme);

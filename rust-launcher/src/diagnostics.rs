@@ -25,12 +25,14 @@ pub fn export(settings: &Settings) -> Result<PathBuf> {
         .unix_permissions(0o644);
 
     let readme = format!(
-        "Vestalis Launcher diagnostics\nversion: {}\nos: {}\narch: {}\ncreated: {}\n\n\
+        "Vestalis Launcher diagnostics\nversion: {}\nos: {}\narch: {}\ncreated: {}\n\
+         telemetry enabled: {}\n\n\
          Tokens, passwords and saved credentials are removed from state.json.\n",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         std::env::consts::ARCH,
-        chrono::Local::now().to_rfc3339()
+        chrono::Local::now().to_rfc3339(),
+        settings.telemetry_enabled
     );
     write_entry(&mut zip, "README.txt", readme.as_bytes(), options)?;
 

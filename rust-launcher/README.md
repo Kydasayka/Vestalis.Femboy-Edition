@@ -39,9 +39,11 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   agent in offline mode.
 - Settings: install folder, RAM, window size/fullscreen, JVM args, HWID
   sending, interface sounds, Discord Rich Presence toggle, language (RU/EN/UA),
-  background effect, Liquid Glass opacity/blur imitation, manual accent for
-  Material 3, an optional explicit Java executable (with the standard Windows
-  file picker), an auto-login toggle and a «Скопировать HWID» action.
+  background effect, Liquid Glass/Acrylic opacity/blur imitation, manual accent
+  for Material 3, an optional explicit Java executable (with the standard
+  Windows file picker), auto-login and telemetry toggles, and a «Скопировать
+  HWID» action. Settings save automatically (500 ms debounce for text fields)
+  with validation; there is no Save button.
 - Window size/position and the maximized state are remembered in `window.json`
   (written periodically and on close, clamped to the work area and the
   1080×620 minimum); the normal rectangle is kept separately, so restoring a
@@ -66,12 +68,15 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
 - Rounded UI typography: Nunito (Regular/SemiBold/Bold, Cyrillic included),
   embedded in the binary and used as the default font family.
 - Visual themes: built-in `dark`, `light`, `femboy`, `ocean`, `Apple`,
-  `Discord`, `Minecraft`, `Nord`, `Dracula`, `Gruvbox` and generated `Windows`
+  `Discord`, `Minecraft`, `Nord`, `Dracula`, `Gruvbox`,
+  `Catppuccin Mocha`/`Macchiato`/`Frappe`/`Latte` and generated `Windows`
   (from the sampled Windows accent), plus user themes in
   `%APPDATA%\Vestalis\rust-launcher\themes`
   (old `name.json` and new `name/theme.json` layouts). Three presentation
-  modes — `base`, `material3` and `liquid-glass` — switch instantly and apply to
-  every screen. Material 3 accent priority is manual hex → Windows accent →
+  modes — `base`, `material3`, `liquid-glass` and `acrylic` — switch instantly
+  and apply to every screen. Acrylic is an imitation: Slint 1.18 has no
+  backdrop blur, so it uses denser translucency, a bright rim, a deep shadow
+  and a deterministic grain overlay. It reuses the glass opacity/blur sliders. Material 3 accent priority is manual hex → Windows accent →
   theme accent. Settings can follow the Windows light/dark app mode with a
   separate theme for each, polled every 3 seconds without a restart. Theme
   changes cross-fade over ~280 ms. Liquid Glass uses translucent panels,
@@ -121,7 +126,16 @@ Native Rust implementation of the Vestalis launcher, kept in its own branch
   priority over the built-in translation within the allowlist.
 - Diagnostic export (Settings → «Экспорт диагностики»): ZIP with logs, version,
   themes and sanitized state. Tokens, passwords, saved credentials and secrets
-  are removed.
+  are removed. The README inside the ZIP states whether telemetry is enabled.
+- First-run onboarding after the splash: language, theme/mode, telemetry
+  consent, install folder/Java check. It is shown once, can be skipped, and
+  «Пройти обучение заново» in Settings resets it without a restart. Existing
+  `state.json` files are migrated to completed so an update does not show it
+  again.
+- Optional Sentry telemetry (off by default, `telemetryEnabled`): DSN comes from
+  `VESTALIS_SENTRY_DSN` or `SENTRY_DSN` and is never embedded. Events are
+  sanitized (no tokens, passwords, HWID, logins or user paths, short cleaned log
+  tail). No DSN means no client and no network traffic.
 - `state.json` is written atomically and rotated to `.bak`; a partially broken
   file recovers every valid field instead of resetting all settings. Avatar and
   theme-icon caches use a 30-day TTL and file-count caps with atomic writes.
@@ -199,11 +213,13 @@ so an existing C# installation does not re-hash its whole 16k-file client.
 ## Themes and modes
 
 Built-in palettes live in `src/theme.rs`: `dark`, `light`, `femboy`, `ocean`,
-`Apple`, `Discord`, `Minecraft`, `Nord`, `Dracula`, `Gruvbox` and `Windows`
-(generated from the current Windows accent). The palette is stored as `settings.theme` and the presentation
-mode as `settings.themeMode` in `state.json`. Settings → «Оформление» switches
-both live; «Сохранить настройки» persists the choice. A manual accent
-(`settings.accent`) overrides the Windows accent for Material 3.
+`Apple`, `Discord`, `Minecraft`, `Nord`, `Dracula`, `Gruvbox`,
+`Catppuccin Mocha`/`Macchiato`/`Frappe`/`Latte` and `Windows` (generated from
+the current Windows accent). The palette is stored as `settings.theme` and the
+presentation mode as `settings.themeMode` in `state.json`. Settings →
+«Оформление» switches both live and the choice is saved automatically. A manual
+accent (`settings.accent`) overrides the Windows accent for Material 3; it is
+chosen with the built-in HSV picker or the native screen eyedropper.
 
 Modes:
 
@@ -222,6 +238,9 @@ Modes:
   blur, so this is an approximation made of layered translucency, gradients
   and blurred colour fields; no network or GPU shader is involved. Opacity
   (25–90%) and imitation strength (0–100%) are configurable in Settings.
+- `acrylic` — denser translucent layers, a bright rim, a deeper shadow and a
+  deterministic grain overlay. Also an imitation: there is no backdrop blur in
+  Slint 1.18. It reuses the same opacity/blur controls.
 
 Modes are presentation layers over the selected palette. A user theme may set
 a default `mode`; selecting the theme switches to it, and the mode buttons can
