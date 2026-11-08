@@ -173,12 +173,18 @@ mod tests {
 
     #[test]
     fn scrubber_removes_credentials_and_user_paths() {
+        let user = std::env::var("USERNAME").unwrap_or_else(|_| "testuser".into());
+        let user = if user.len() >= 3 {
+            user
+        } else {
+            "testuser".to_string()
+        };
         let mut value = json!({
             "accessToken": "abc",
             "password": "secret",
             "hwid": "CPU-123",
-            "user": { "name": "kydasay" },
-            "message": "login failed for kydasay at C:\\Users\\kydasay\\AppData",
+            "user": { "name": user },
+            "message": format!("login failed for {user} at C:\\Users\\{user}\\AppData"),
             "nested": { "Authorization": "Bearer abc.def" }
         });
 
@@ -188,7 +194,7 @@ mod tests {
         assert!(!text.contains("abc"));
         assert!(!text.contains("secret"));
         assert!(!text.contains("CPU-123"));
-        assert!(!text.contains("kydasay"));
+        assert!(!text.contains(&user));
         assert!(text.contains("<user>"));
         assert!(text.contains("login failed"));
     }
